@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { availability } from './schedule-availability.mjs'
 /* 排班域(schedule-week 周网格 / schedule-day 台面日视图)—— 2026-08-30h 从 local-server.mjs 搬出。
    公约②边改边拆 + 棘轮抵扣批(把 +14/+17/+23 的账抵回来)。
@@ -251,8 +252,20 @@ export function createScheduleBoard(deps) {
       if (date !== today) throw apiError(400, 'BAD_REQUEST', '值日只能勾当天(历史日只读)。')
       const techId = String(body.technicianId || '')
       if (!db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(techId, tid)) throw apiError(404, 'NOT_FOUND', '技师不存在。')
-      if (body.on === false) db.prepare('DELETE FROM duty_marks WHERE tenant_id = ? AND date = ? AND technician_id = ?').run(tid, date, techId)
-      else db.prepare('INSERT OR IGNORE INTO duty_marks (tenant_id, date, technician_id, created_at) VALUES (?, ?, ?, ?)').run(tid, date, techId, iso(new Date()))
+      // Assignment and staff inbox are atomic. Replayed requests create no duplicate notice.
+      db.exec('SAVEPOINT duty_assignment')
+      try {
+        const stamp = iso(new Date()), type = 'duty:' + date
+        if (body.on === false) {
+          db.prepare('DELETE FROM duty_marks WHERE tenant_id = ? AND date = ? AND technician_id = ?').run(tid, date, techId)
+          db.prepare('UPDATE staff_nudges SET read_at=? WHERE tenant_id=? AND technician_id=? AND type=? AND read_at IS NULL').run(stamp,tid,techId,type)
+        } else {
+          const changed = db.prepare('INSERT OR IGNORE INTO duty_marks (tenant_id, date, technician_id, created_at) VALUES (?, ?, ?, ?)').run(tid, date, techId, stamp).changes
+          if (changed) db.prepare('INSERT INTO staff_nudges (id,tenant_id,technician_id,type,message,created_by,created_at) VALUES (?,?,?,?,?,?,?)')
+            .run('nudge_'+randomUUID(),tid,techId,type,`${date} 今天已安排你值日，请查看今日台面。`,ctx.adminSession?.email || 'owner',stamp)
+        }
+        db.exec('RELEASE duty_assignment')
+      } catch (err) { db.exec('ROLLBACK TO duty_assignment; RELEASE duty_assignment'); throw err }
       json(res, 200, { date, techIds: dutyOf(tid, date) })
       return true
     }

@@ -67,7 +67,7 @@ Page({
       { title: '店铺设置', rows: [E.services, E.store, E.me] }
     ] : [
       { title: '日常', rows: [E.attendanceStaff, E.scheduleView, E.myperf] },
-      { title: '账号', rows: [E.me] }
+      { title: '账号', rows: [{ ...E.me, d: '改密 · 外观 · 隐私' }] }
     ]
     this.setData({ isOwner: owner, name, shopName, groups })
   },

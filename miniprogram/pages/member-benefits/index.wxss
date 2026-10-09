@@ -5,7 +5,7 @@
 .benefit-hero {
   margin: -24rpx -24rpx 0;
   padding: 28rpx 0 42rpx;
-  background: #241f1d;
+  background: var(--hero);
 }
 
 .level-swiper {
@@ -21,24 +21,24 @@
   min-height: 310rpx;
   padding: 30rpx;
   border-radius: 18rpx;
-  background: linear-gradient(135deg, #7b675c 0%, #c6a27e 100%);
-  color: #fff;
+  background:linear-gradient(135deg,var(--hero),var(--hero2));
+  color: var(--heroink);
 }
 
 .level-card.silver {
-  background: linear-gradient(135deg, #7b7672 0%, #d8d0c7 100%);
+  background:linear-gradient(135deg,var(--hero),var(--hero2));
 }
 
 .level-card.gold {
-  background: linear-gradient(135deg, #7b675c 0%, #c6a27e 100%);
+  background:linear-gradient(135deg,var(--hero),var(--hero2));
 }
 
 .level-card.platinum {
-  background: linear-gradient(135deg, #4e4b4a 0%, #b8aaa0 100%);
+  background:linear-gradient(135deg,var(--hero),var(--hero2));
 }
 
 .level-card.diamond {
-  background: linear-gradient(135deg, #191817 0%, #6f645c 52%, #e5d2bd 100%);
+  background:linear-gradient(135deg,var(--hero),var(--hero2));
 }
 
 .level-tag {
@@ -66,13 +66,13 @@
   margin-top: 22rpx;
   overflow: hidden;
   border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.28);
+  background:var(--card);
 }
 
 .benefit-progress view {
   height: 100%;
   border-radius: 999rpx;
-  background: #fff;
+  background: var(--card);
 }
 
 .progress-copy {
@@ -88,7 +88,7 @@
 }
 
 .benefit-title {
-  color: #342b28;
+  color: var(--ink);
   font-size: 32rpx;
   font-weight: 850;
 }
@@ -115,14 +115,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f1e7df;
-  color: #8a684c;
+  background: var(--wall);
+  color: var(--brandd);
   font-size: 24rpx;
   font-weight: 850;
 }
 
 .benefit-item text {
-  color: #5e514b;
+  color: var(--sub);
   font-size: 21rpx;
   font-weight: 650;
   line-height: 1.3;
@@ -135,12 +135,12 @@
   grid-template-columns: 190rpx 1fr;
   align-items: center;
   gap: 18rpx;
-  border-color: #d3b189;
-  background: linear-gradient(90deg, #f0dcc6 0%, #fff 62%);
+  border-color: var(--brand);
+  background:linear-gradient(135deg,var(--hero),var(--hero2));
 }
 
 .gift-card view {
-  color: #8a684c;
+  color: var(--brandd);
   font-size: 26rpx;
   font-weight: 800;
 }
@@ -148,20 +148,20 @@
 .gift-card text {
   min-height: 66rpx;
   padding: 0 18rpx;
-  border: 1rpx solid #d3b189;
+  border: 1rpx solid var(--brand);
   border-radius: 999rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #7a5738;
+  color: var(--brandd);
   font-size: 25rpx;
   font-weight: 850;
   text-align: center;
 }
 
 /* 不分级店成为会员承接区 */
-.plain-join { margin: 24rpx; padding: 28rpx; border-radius: 16rpx; background: #fff; }
+.plain-join { margin: 24rpx; padding: 28rpx; border-radius: 16rpx; background: var(--card); }
 .pj-title { font-size: 34rpx; font-weight: 600; }
-.pj-line { font-size: 26rpx; color: #666; margin-top: 10rpx; }
+.pj-line { font-size: 26rpx; color: var(--sub); margin-top: 10rpx; }
 .pj-sub { font-size: 26rpx; font-weight: 600; margin-top: 20rpx; }
-.pj-perk { font-size: 26rpx; color: #444; line-height: 44rpx; }
+.pj-perk { font-size: 26rpx; color: var(--ink); line-height: 44rpx; }

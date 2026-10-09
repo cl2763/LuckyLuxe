@@ -21,6 +21,7 @@ Page({
     cats: EXPENSE_CATS,
     cat: EXPENSE_CATS[0],
     amount: '',
+    currency: '',
     channels: [],
     channelNames: [],
     entryNote: '',
@@ -46,6 +47,8 @@ Page({
     }
     if (!this.data.date) this.setData({ date: localToday() })
     try {
+      const clock = await api.adminGet('/admin/store-clock')
+      this.setData({currency:clock.currency || ''})
       const cfg = await api.adminGet('/admin/finance/entry-config')
       this.setData({ channels: cfg.channels || [], channelNames: (cfg.channels || []).map((c) => c.label), entryNote: cfg.note || '' })
     } catch (e) {

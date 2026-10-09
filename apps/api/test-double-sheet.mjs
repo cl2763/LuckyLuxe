@@ -346,7 +346,6 @@ async function checkMiniMappingLayer(asRow) {
   const apiSrc = rfApi(new URL('../../miniprogram/utils/api.js', import.meta.url), 'utf8')
   const FALLBACK_ALLOW = {
     request: '底座本身:catch 里做的是 401 重登与错误归一,不产出业务数据',
-    getPortfolioWall: '失败回**空**作品墙({works:[],categories:[]})—— 空态不是假数据,页面照常显示"暂无作品"',
     refreshMember: '未登录/取不到 auth 时 return null,调用方按"没登录"处理;不编造会员信息',
     refreshMerchantAi: '失败时回**上一次缓存过的**开通状态(不是编一个),只影响 AI 入口显不显示'
   }

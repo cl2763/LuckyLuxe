@@ -113,10 +113,11 @@ for (const [zh, sel] of BLOCKS) check(`⑦ 图 §三「${zh}」有稳定选择�
 
 check('⑧ 🔴 今日台面**原样嵌入**,不自画 —— 页面里没有台面的格子 HTML,只有 mountInto',
   home.includes('window.TodayBoard.mountInto') && !/dh-board[\s\S]{0,400}?(技师|时间轴|空档|PX_PER_HOUR)/.test(home))
-check('⑧b 🔴 折线**全 0 不画**(图 §六:无数据时不画折线,不是画一条贴地的线)',
-  /every\(\(x\) => x === 0\)\) return ''/.test(home))
-check('⑧c 折线点数 = spark 数组长度(不许自己抽稀)',
-  /pts\.map\(\(v, i\)/.test(home) && /circle/.test(home))
+// 10-07 用户新要求替代旧的「零值不画」：每个真实点都有日期和值，包括零。
+check('⑧b 零值仍显示趋势刻度，失败和财务锁不泄露数据',
+  !/every\(\(x\) => x === 0\)\) return ''/.test(home) && /metric\.locked/.test(home))
+check('⑧c 折线每个点都有日期和值，不抽稀',
+  /pts\.map\(\(v, i\)/.test(home) && /sparkLabels/.test(home) && /sparkDates/.test(home) && /<title>/.test(home))
 check('⑧d 比上期说人话:四个维度各有各的说法(比昨日/比上周/比上月/比去年)',
   ['比昨日', '比上周', '比上月', '比去年'].every((x) => home.includes(x)))
 check('⑧e 🔴 月目标那一行**不出** —— 门店还没有这个配置项,编一个百分比就是假数',
@@ -212,7 +213,7 @@ check('⑬f 英雄块是深色:底色 = --hero,大数字 = --heroink,细网格 =
   && /\.dh-now-cell \{[^}]*border: 1px solid var\(--herogrid\)/.test(css))
 check('⑬g 折线三件齐:渐变 .35→0 + 金色描边 + 末点圆环(少一件就不是图上那条线)',
   /<linearGradient/.test(home) && /stop-opacity=".35"/.test(home) && /stop-opacity="0"/.test(home)
-  && /stroke="var\(--herogold\)"/.test(home) && /<circle cx="\$\{last\[0\]\}"/.test(home))
+  && /stroke="var\(--herogold\)"/.test(home) && /<circle cx="\$\{x\}"/.test(home))
 check('⑬h 数字滚动 600ms + 系统「减少动态效果」直接跳(图 §一 第 1 条)',
   /ROLL_MS = 600/.test(home) && /prefers-reduced-motion: reduce/.test(home)
   && /requestAnimationFrame\(step\)/.test(home) && /if \(reduce \|\| from === undefined/.test(home))

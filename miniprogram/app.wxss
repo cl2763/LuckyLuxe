@@ -48,6 +48,10 @@ button::after {
   border: none;
 }
 
+/* WeChat view controls need an explicit hover class; buttons also respond
+   immediately while network requests display their own loading state. */
+.tap-feedback, button:active { opacity: .72; transform: scale(.985); transition: opacity .12s, transform .12s; }
+
 .page {
   width: 100%;
   min-height: 100vh;
@@ -235,3 +239,26 @@ button::after {
    规格:行高归 normal + 最小高度兜底 + border-box —— 类规则里显式 height 的框优先级更高,不受扰。 */
 input { line-height: normal; min-height: 76rpx; box-sizing: border-box; }
 textarea { line-height: 1.5; box-sizing: border-box; }
+
+/* 深色缺图装饰沿用深色令牌，避免服务详情出现整块浅色占位。 */
+.theme-dark .visual,
+.theme-dark .image-placeholder {
+  background: linear-gradient(135deg, var(--hero2), var(--wall));
+}
+.theme-dark .visual::before,
+.theme-dark .visual::after,
+.theme-dark .image-placeholder::before,
+.theme-dark .image-placeholder::after { background: rgba(255,255,255,.06); }
+@media (prefers-color-scheme: dark) {
+  .visual, .image-placeholder { background: linear-gradient(135deg, var(--hero2), var(--wall)); }
+  .visual::before, .visual::after, .image-placeholder::before, .image-placeholder::after { background: rgba(255,255,255,.06); }
+  .theme-light .visual { background: linear-gradient(135deg, #f4e6dc 0%, #fff8f0 48%, #d9b99c 100%); }
+  .theme-light .image-placeholder { background: linear-gradient(135deg, #fff8f1 0%, #f0dfd1 58%, #d7b792 100%); }
+  .theme-light .visual::before, .theme-light .visual::after { background: rgba(255,255,255,.55); }
+  .theme-light .image-placeholder::before, .theme-light .image-placeholder::after { background: rgba(255,255,255,.68); }
+}
+
+/* Shared inline request state: keep empty states hidden until data arrives. */
+.page-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24rpx; min-height:240rpx; padding:40rpx; color:var(--muted); }
+.loading-spinner { width:40rpx; height:40rpx; border:4rpx solid var(--line); border-top-color:var(--ink); border-radius:50%; animation:request-spin .8s linear infinite; }
+@keyframes request-spin { to { transform:rotate(360deg); } }

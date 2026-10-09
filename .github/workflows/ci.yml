@@ -22,6 +22,8 @@ jobs:
           node --experimental-sqlite apps/api/test-customer-facts-timezone.mjs
           node --experimental-sqlite apps/api/test-customer-facts-mutations.mjs
           node --experimental-sqlite tools/test-production-runtime.mjs
+          node tools/mp-formal-build-guard.mjs
+          node tools/verify-native-layout-evidence.mjs
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -60,6 +62,7 @@ jobs:
 
       - name: Run all regression suites
         env:
+          MP_UI_CONTROL: recorded-evidence
           SANDBOX_DATA_DIR: ${{ runner.temp }}/ll-ci-sandbox/sandbox-data
         run: |
           set +e

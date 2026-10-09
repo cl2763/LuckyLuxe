@@ -18,7 +18,7 @@
    3. 「改一句」必须真填了字才提交,空的按钮不发请求(后端也拦,前端拦只是体验)。 */
 
 (function aiReviewPanel() {
-  const API = (typeof window !== 'undefined' && window.LL_API_BASE) || ''
+  const API = (typeof window !== 'undefined' && window.LL_API_BASE) || window.WebScope?.prefix || ''
   /* 🔴 D144:钥匙只许有一把 —— 用 admin.js 的 `ownerBearer()`,**不自己读 localStorage**。
      案底(店主登录后第一眼就看见的 401):我前后猜了两次键名,`ll_admin_token`、`lucky-owner-token`,
      两次都不是登录态存的地方。真相是:

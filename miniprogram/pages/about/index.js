@@ -6,7 +6,12 @@ const { getHealth } = require('../../utils/api.js')
 
 Page({
   data: { build: '', commit: '', builtAt: '', loaded: false, failed: '' },
-  onLoad() { this.load() },
+  onLoad() {
+    let mini = {}
+    try { mini = wx.getAccountInfoSync().miniProgram || {} } catch (e) { /* SDK unavailable */ }
+    this.setData({ packageVersion: mini.version || '开发者工具', packageEnv: mini.envVersion || '未知', packageBuild: require('../../utils/package-build').build })
+    this.load()
+  },
   onPullDownRefresh() { this.load(() => wx.stopPullDownRefresh()) },
   load(done) {
     getHealth()

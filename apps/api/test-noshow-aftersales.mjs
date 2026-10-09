@@ -941,7 +941,7 @@ const main = async () => {
       check('㊲ 小程序服务页:「加项服务」静态分类数组已灭(规则①,剥注释扫)', !svcJsCode.includes('加项服务') && !svcJsCode.includes('NAIL_CATS'))
       check('㊲ 小程序服务页:「¥xxx 起」渲染在场', svcWxml.includes('priceFromLabelZh'))
       const custW = readFileSync(join(ROOT37, 'apps/web/customer.js'), 'utf8')
-      check('㊲ 网页切店入口在场(/shops 同源+整页 ?store= 清场)', custW.includes('openStoreSwitcher') && custW.includes("request('/shops')"))
+      check('㊲ 网页切店入口在场(/shops 同源+整页 ?store= 清场)', custW.includes('openStoreSwitcher') && custW.includes("request(window.WebScope?.shopsPath || '/shops')") && readFileSync(join(ROOT37,'apps/web/web-scope.js'),'utf8').includes("prefix ? '/shops?include=demo' : '/shops'"))
       check('㊲ 购物车按店分仓(切店零残留,组合矩阵抓获)', custW.includes('lucky-web-cart:${TENANT_ID}') && !/readJson\('lucky-web-cart'\)/.test(custW))
     }
 
@@ -2496,7 +2496,7 @@ const main = async () => {
       check('㋊ D67② 签署单卡小字无 Emoji(✍ 双端扫尽:mini+web 顾客端)', !odWx2.includes('✍') && !custWeb.includes('✍'))
       // D68② 再升级:原件入口=悬浮查看器(openViewer / data-snap-open),跳页式 goSheetSnapshot 已销案
       check('㋊→㋌ 逐张卡+原件入口双端 wiring(mini sheets 循环+openViewer;web sheets 循环+lightbox)', odWx2.includes('order.pay.sheets') && odWx2.includes('openViewer') && custWeb.includes('order.payment.sheets') && custWeb.includes('data-snap-open'))
-      check('㋊ D67① 全组签完回台面(relaunch workbench,非退一层)', readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/index.js'), 'utf8').includes("relaunch('/pages/merchant/workbench/index')"))
+      check('㋊ D67① 全组签完回订单台面(老板/员工共用,非退一层)', readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/index.js'), 'utf8').includes("relaunch('/pages/merchant/orders/index')"))
       check('㋊ D59 提示句双端 wiring(mini rechargeNote+web rechargeUnassignedText)', readFileSync(join(ROOT42, 'miniprogram/utils/dailyclose.js'), 'utf8').includes('rechargeUnassignedText') && readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8').includes('p.rechargeNote') && readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8').includes('p.rechargeUnassignedText'))
       // ㋋ 五裁 wiring:详情逐张卡双端+台面售后蓝徽标+到店计数三读方同一出口
       const srvAll = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
@@ -2505,7 +2505,7 @@ const main = async () => {
       check('㋋ wiring 裁A/E 三读方同一出口(visitDaysCount 三处调用)', (srvAll.match(/visitDaysCount\(/g) || []).length >= 4)
       /* ===== ㋌ D68 wiring:①替换式导航不压栈 ②悬浮查看器双端 ③用户可见文案零「组/张」内部话术 ===== */
       const signHtml68 = readFileSync(join(ROOT42, 'apps/web/sign.html'), 'utf8')
-      check('㋌ D68① 连签=替换式导航(location.replace;续签不再用压栈的 <a href>)', signHtml68.includes("location.replace(") && signHtml68.includes("nextSignUrl || '/sign/'") && !/<a href="\/sign\/\$\{encodeURIComponent\(s\.groupNextPendingCode\)/.test(signHtml68))
+      check('㋌ D68① 连签=替换式导航(location.replace;续签不再用压栈的 <a href>)', signHtml68.includes("location.replace(") && signHtml68.includes("nextSignUrl || signScopePath('/sign/'") && !/<a href="\/sign\/\$\{encodeURIComponent\(s\.groupNextPendingCode\)/.test(signHtml68))
       const odWx3 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
       const odJs3 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
       check('㋌→㋍ D68② 悬浮查看器(小程序:顾客端详情挂共用组件+openViewer;原件不再跳页压栈)', odWx3.includes('<snapshot-viewer') && odJs3.includes('openViewer') && !odWx3.includes('goSheetSnapshot'))
@@ -3449,7 +3449,7 @@ const main = async () => {
             if (!m) throw new Error(`抠不出小程序的 ${name}`)
             return m[0]
           }
-          const makeMini = (tenantId, store) => new Function('wx', 'AUTH_KEY', 'currentTenant', `
+          const makeMini = (tenantId, store) => new Function('wx', 'AUTH_KEY', 'currentTenant', 'API_BASE', `
             ${miniGrab('getAuth')}
             ${miniGrab('setAuth')}
             return { getAuth, setAuth }
@@ -3457,7 +3457,7 @@ const main = async () => {
             getStorageSync(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : '' },
             setStorageSync(k, v) { store[k] = v },
             removeStorageSync(k) { delete store[k] }
-          }, 'lucky_auth', () => tenantId)
+          }, 'lucky_auth', () => tenantId, 'https://isolated.example.test')
           const mstore = {}
           makeMini('shop-A', mstore).setAuth({ accessToken: 'A-token' })
           check('㋨⑧ 小程序同店:登录态保留', makeMini('shop-A', mstore).getAuth()?.accessToken === 'A-token')

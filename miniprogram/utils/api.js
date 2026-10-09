@@ -1,18 +1,15 @@
 
 // ===== 联调开关(店主用)=====
 // true  = 连你 Mac 本地沙盘(模拟数据,随便测,不影响线上;开发者工具模拟器用 127.0.0.1 即可)
-// false = 连线上生产(**境内代理** api.jingshengyouji.com → Railway,真实数据)
-// ⚠️ 正式上传/发布前,务必把这里改回 false!
-const USE_LOCAL_SANDBOX = false // 2026-10-03 体验版候选：连接境内生产 API；本机验收使用隔离项目副本
+// false = 连可从手机访问的 HTTPS API。正式提审构建连接正式服务。
+// 发布沿用正式持久化数据，体验演示数据不进入此构建。
+const USE_LOCAL_SANDBOX = false // 正式提审构建
 const { realValue } = require('./placeholder-words.js')   // 11j 判据 A:占位词表两端同源(见该文件抬头)
+const publicCatalogCache = require('./public-catalog-cache')
 const requestLoading = require('./request-loading')
 const beginRequestLoading = () => typeof requestLoading.begin === 'function' ? requestLoading.begin() : (() => {})
-/* 本地沙盘地址(真机调试联通件,店主 08-23 立):
-   - 开发者工具模拟器 = 跑在 Mac 上,127.0.0.1 就是 Mac,直连即可;
-   - **真机调试/预览 = 跑在手机上,127.0.0.1 指的是手机自己**,永远连不到 Mac ——
-     必须换成 Mac 的局域网 IP(手机与 Mac 同一 Wi-Fi)。
-   所以这里按运行环境自动切:平台是 devtools 用回环,真机用 utils/devhost.js 里的局域网 IP
-   (那个文件由根目录「更新真机调试地址.command」一键写入,换网络重跑一次即可,不用改代码)。 */
+// DevTools uses loopback; physical-device local preview uses the configured LAN host.
+
 const devhost = require('./devhost')
 const deploy = require('./deploy')
 const LOCAL_PORT = devhost.port || 4310
@@ -24,19 +21,14 @@ function isDevtools() {
   } catch (e) { return false }   // 拿不到就按真机走(真机连回环必死,回环连不上还能报错自证)
 }
 const LOCAL_API = isDevtools() ? LOCAL_LOOPBACK : `http://${devhost.lanHost}:${LOCAL_PORT}`
-/* 🔴 11f §二.4:正式环境改走**境内代理**,不再直连境外域名。
-   `api.jingshengyouji.com` → 北京那台轻量服务器的 nginx → Railway 后端。
-   验过的四条:官网没掉线 · /health 的 commit 与 Railway 一致(ed93184)· 真 Let's Encrypt 证书 ·
-   /platform 与 /sandbox 转不过去(404)。
-   🔴 还差一条我验不了的:**境内实访** —— 要店主或小婕用手机流量打开一次。
-   ⚠️ 这个域名同时是**小程序 request 合法域名**要填的那一个(微信后台一个月只能改 5 次,填前先确认通了)。 */
+
 const API_BASE = USE_LOCAL_SANDBOX ? LOCAL_API : 'https://api.jingshengyouji.com'
+// 云端体验与本机沙箱分开；此标志只控制演示门店可见性，不放宽微信身份验证。
+const EXPERIENCE = /\/experience$/.test(API_BASE)
+const EXPERIENCE_TENANTS = ['demo-ai', 'demo-basic', 'demo-empty']
 const DEMO_USER_ID = 'user-demo'
-/* 🔴 D19(店主 2026-08-11 拍板,《财务总逻辑》v1.5.1):storeId 必须来自当前门店上下文。
-   以前这里写死 `const STORE_ID = 'store-ontario-01'`(旗舰店)——非旗舰商家的顾客
-   技师列表永远为空、可约时段直接 404,**下单还会把预约写到旗舰店名下**(顾客端方向的
-   租户串味)。现在 storeId 由 /stores 随租户下发并按租户缓存;取不到就如实抛错(D17 路线),
-   不设兜底常量。 */
+// Store context is tenant-specific; a missing store never falls back to another tenant.
+
 function storeIdKey() { return `lucky_store_id::${currentTenant()}` }
 function cacheStoreId(stores) {
   const id = stores && stores[0] && stores[0].id
@@ -46,7 +38,7 @@ function cacheStoreId(stores) {
 async function activeStoreId() {
   const cached = wx.getStorageSync(storeIdKey())
   if (cached) return cached
-  const data = await request('/stores')
+  const data = await publicRead('/stores?lang=' + (wx.getStorageSync('lucky_lang') === 'en' ? 'en' : 'zh'))
   wx.setStorageSync('lucky_store_ai', data.aiEnabled === true)
   const id = cacheStoreId(data.stores)
   if (!id) throw new Error('取不到本店门店信息')
@@ -71,13 +63,17 @@ const localImageMap = {
   '/assets/images/member-profile.png': '/assets/images/member-profile.jpg'
 }
 
-/* 🔴 D17(店主 2026-08-11 拍板):顾客端接口失败**绝不回 mock**。
-   这是 08-04「假报价」的同类第二次 —— 接口一挂就回写死的演示数据,
-   顾客看到的是一整套不存在的服务/门店/技师/可约时段,还能照着约进去,
-   界面上没有任何"这是假的"痕迹。现在一律如实抛错,由页面渲染失败态。 */
+// Failed customer requests must remain errors; never substitute demo data.
+
 
 /* 🔴 归因2 的根(店主 02a 走查:同一批服务网页说「还没有图片」、小程序出一张环境照)——
    就是下面这一行。取不到不许编,返回空由渲染层出占位(与网页 img-placeholder 逐字同款)。 */
+// QR target follows the running mini-program version; API/database scope never changes.
+function miniCodeEnvironment() {
+  try { const v = wx.getAccountInfoSync().miniProgram.envVersion; return ['trial', 'develop'].includes(v) ? v : 'release' } catch (e) { return 'release' }
+}
+function miniCodeUrl(path) { return path ? API_BASE + path + '?envVersion=' + miniCodeEnvironment() : '' }
+
 function normalizeImage(url) {
   if (!url) return ''
   if (localImageMap[url]) return localImageMap[url]
@@ -85,16 +81,11 @@ function normalizeImage(url) {
   return url
 }
 
-/* 🔴 D77(店主 2026-08-25 走查抓出,双端同病):**换店不清登录态 = 屏幕上串号。**
-   网页端那边是 A 店登录过、点 B 店链接进来,页面拿上一家店的顾客缓存画了一屏。
-   小程序这边 lucky_member 快照早就带 _tenant 戳并在读时校验,**但会话本身没带** ——
-   onStoreSwitched 的注释还写着"auth 打了租户戳",其实没有:这就是注释与代码分了叉。
-   现在按 getAdminAuth 对 apiBase 那条同款做法:**读的时候校验,不符整份丢弃**,
-   不靠"换店时记得清"(那是靠调用方自觉,迟早有一处忘了)。 */
+
 function getAuth() {
   const auth = wx.getStorageSync(AUTH_KEY) || null
   if (!auth) return null
-  if (auth._tenant !== currentTenant()) {   // 没戳的老数据也走这一条:认不出属于哪家店 → 丢
+  if (auth._tenant !== currentTenant() || (auth.apiBase && auth.apiBase !== API_BASE)) {   // 没戳的老数据也走这一条:认不出属于哪家店 → 丢
     try { wx.removeStorageSync(AUTH_KEY) } catch (e) { /* 清不掉也别拿它当登录态 */ }
     return null
   }
@@ -102,7 +93,7 @@ function getAuth() {
 }
 
 function setAuth(auth) {
-  wx.setStorageSync(AUTH_KEY, Object.assign({}, auth, { _tenant: currentTenant() }))
+  wx.setStorageSync(AUTH_KEY, Object.assign({}, auth, { _tenant: currentTenant(), apiBase: API_BASE }))
   return auth
 }
 
@@ -144,6 +135,7 @@ function clearAdminAuth() {
 function currentTenant() {
   return wx.getStorageSync('lucky_tenant') || deploy.defaultTenantId || ''
 }
+const realWechatClaimKey = tenantId => `lucky_real_wechat_claim::${tenantId}`
 
 // 有没有门店上下文(没有就该去选店,而不是拿别人家的店顶上)
 function hasTenant() { return Boolean(currentTenant()) }
@@ -154,6 +146,7 @@ function hasTenant() { return Boolean(currentTenant()) }
    商家端会话(商家无换店流,跨店有 D35 闸)。auth 不在这清 —— 它自己带租户戳,
    getAuth 读的时候校验、不符即丢(D77;08-25 之前这句注释是空头支票,代码里并没有戳)。 */
 function onStoreSwitched() {
+  publicCatalogCache.clear()
   for (const k of ['lucky_member', 'lucky_store_currency', 'lucky_store_deposit', 'lucky_store_ai', 'lucky_cart', 'lucky_orders', 'lucky_style_preset']) {
     try { wx.removeStorageSync(k) } catch (e) { /* 单键清不掉不阻塞换店 */ }
   }
@@ -194,6 +187,13 @@ function goPickStore() {
    顾客不像商家有账号密码,静默 wx.login 就能换回身份:401 时自动重登一次并重放,顾客无感;
    仍失败才如实清会话让页面走登录引导。登录接口自身不参与重放(否则死循环)。
    网页顾客端同款能力早就有(refreshToken + 重放),这里是把两端拉齐(四之九)。 */
+const publicPaths = new Set(['/shops', '/health', '/stores', '/services', '/portfolio', '/add-ons', '/service-categories'])
+let renewingCustomer = null
+function contextChanged() { return Object.assign(new Error('门店已切换，请重试'), { code: 'STORE_CHANGED' }) }
+function publicRead(path) {
+  const tid = currentTenant()
+  return publicCatalogCache.read(API_BASE + '|' + tid + '|' + path, () => { if (tid !== currentTenant()) throw contextChanged(); return request(path) })
+}
 function request(path, method = 'GET', data, _retried) {
   return new Promise((resolve, reject) => {
     const tid = currentTenant()
@@ -204,22 +204,32 @@ function request(path, method = 'GET', data, _retried) {
     }
     const auth = getAuth()
     const header = { 'content-type': 'application/json', 'x-tenant-id': tid }
-    if (auth && auth.accessToken) header.authorization = `Bearer ${auth.accessToken}`
+    if (auth && auth.accessToken && !(method === 'GET' && publicPaths.has(path.split('?')[0]))) header.authorization = `Bearer ${auth.accessToken}`
     const finish = beginRequestLoading()
     wx.request({
       url: `${API_BASE}${path}`,
+      timeout: 15000,
       method,
       data,
       header,
       complete: finish,
       success(res) {
+        if (tid !== currentTenant()) return reject(contextChanged())
         if (res.statusCode >= 200 && res.statusCode < 300) return resolve(res.data)
-        const err = res.data && res.data.error ? res.data.error : new Error('API request failed')
+        const err = res.data && res.data.error ? res.data.error : new Error('请求失败，请重试')
+        err.statusCode = res.statusCode
+        err.requestPath = path.split('?')[0]
         // 顾客会话失效 → 静默重登一次再重放(只对"曾经登录过"的会话做,未登录照常报错走登录引导)
         if (res.statusCode === 401 && !_retried && path.indexOf('/auth/') !== 0 && getAuth() && getAuth().accessToken) {
-          loginForCurrentStore()
-            .then(() => resolve(request(path, method, data, true)))
+          if (!renewingCustomer || renewingCustomer.tenant !== tid) {
+            const renewal = { tenant: tid }
+            renewal.promise = loginForCurrentStore().finally(() => { if (renewingCustomer === renewal) renewingCustomer = null })
+            renewingCustomer = renewal
+          }
+          renewingCustomer.promise
+            .then(() => { if (tid !== currentTenant()) throw contextChanged(); return request(path, method, data, true) }).then(resolve)
             .catch(() => {
+              if (tid !== currentTenant()) return reject(contextChanged())
               clearAuth()
               try { wx.removeStorageSync('lucky_member') } catch (e) { /* 清不掉不阻塞报错 */ }
               reject(err)
@@ -228,7 +238,7 @@ function request(path, method = 'GET', data, _retried) {
         }
         reject(err)
       },
-      fail: reject
+      fail: (err) => reject(Object.assign({}, err, { code: /timeout/i.test(err.errMsg || '') ? 'REQUEST_TIMEOUT' : 'NETWORK_ERROR', requestPath: path.split('?')[0] }))
     })
   })
 }
@@ -243,6 +253,7 @@ function adminRequest(path, method = 'GET', data) {
     const finish = beginRequestLoading()
     wx.request({
       url: `${API_BASE}${path}`,
+      timeout: 15000,
       method,
       data,
       header,
@@ -425,7 +436,8 @@ function toMiniBooking(booking) {
     afterSalesStatus: booking.afterSalesStatus || '',
     afterSalesAction: booking.afterSalesAction || '',
     afterSalesActionText: booking.afterSalesActionText || '',
-    createdAt: booking.createdAt || Date.now()
+    createdAt: booking.createdAt || '',
+    updatedAt: booking.updatedAt || booking.createdAt || ''
   }
 }
 
@@ -453,19 +465,27 @@ function authRequiredError() {
    修法:auth 打租户戳;租户不匹配=对本店而言未登录 → wx.login 静默重登(顾客无感);
    重登失败如实清会话,绝不拿上家店身份凑数。 */
 async function loginForCurrentStore(options = {}) {
+  const tid = currentTenant()
   const code = await wxLoginCode()
+  if (tid !== currentTenant()) throw contextChanged()
+  // An experience profile is only a preview. After a real scan/phone claim,
+  // renew with the same WeChat identity instead of falling back to a demo user.
+  const previousRealWechatClaim = Boolean(getAuth()?._realWechat || wx.getStorageSync(realWechatClaimKey(currentTenant())))
   const data = await request('/auth/wechat/mini-login', 'POST', {
     code,
     // 本地沙盘:走服务器演示登录旁路(无需真实微信授权即可演示登录后页面)。
     // 上线前 USE_LOCAL_SANDBOX 置回 false 后此标记自动为 false,走真实微信登录。
-    demoLogin: USE_LOCAL_SANDBOX,
+    demoLogin: USE_LOCAL_SANDBOX && !previousRealWechatClaim,
     tenantId: currentTenant(),
     displayName: options.displayName || '',
     avatarUrl: options.avatarUrl || '',
     phoneCode: options.phoneCode || '',
     phone: options.phone || ''
   })
-  setAuth(Object.assign({}, data.auth, { user: data.user, tenantId: currentTenant() }))
+  if (tid !== currentTenant()) throw contextChanged()
+  const realWechatClaim = previousRealWechatClaim || data.wechatVerified === true
+  if (realWechatClaim) wx.setStorageSync(realWechatClaimKey(currentTenant()), true)
+  setAuth(Object.assign({}, data.auth, { user: data.user, tenantId: currentTenant(), _realWechat: realWechatClaim }))
   wx.setStorageSync('lucky_member', Object.assign(miniMember(data.user), { _tenant: currentTenant() }))
   return data.user
 }
@@ -504,13 +524,29 @@ async function ensureStoreScopedAuth() {
 }
 
 async function loginWithWechat(profile = {}) {
-  return ensureLogin({
+  const user = await ensureLogin({
     interactive: true,
     displayName: profile.nickname || profile.displayName || '',
-    avatarUrl: profile.avatarUrl || '',
+    avatarUrl: '',
     phoneCode: profile.phoneCode || '',
     phone: profile.phone || ''
   })
+  if (profile.nickname || profile.avatarUrl) return updateProfile(profile)
+  return user
+}
+async function updateProfile(profile) {
+  const tid = currentTenant()
+  const body = {}
+  if ((profile.nickname || '').trim()) body.displayName = profile.nickname.trim()
+  if (profile.avatarUrl && !/^https?:/.test(profile.avatarUrl)) body.avatarData = await require('./profile-avatar').avatarData(profile.avatarUrl)
+  if (tid !== currentTenant()) throw contextChanged()
+  if (!Object.keys(body).length) return (getAuth() || {}).user
+  const out = await request('/my/profile', 'PATCH', body)
+  const auth = getAuth()
+  if (!auth) throw authRequiredError()
+  setAuth(Object.assign({}, auth, { user: out.user }))
+  wx.setStorageSync('lucky_member', Object.assign(miniMember(out.user), { _tenant: tid }))
+  return out.user
 }
 
 function miniMember(user = {}) {
@@ -592,7 +628,7 @@ async function getServices(type, lang) {
 
 /* v1.4 大类改造:服务 Tab 一次拉全量+平台大类字典(左栏=大类,空类不显示,与网页同构)。 */
 async function getServiceCatalog(lang) {
-  const data = await request(`/services?lang=${lang}`)
+  const data = await publicRead(`/services?lang=${lang}`)
   return {
     services: (data.services || []).map(toMiniService),
     platformCategories: data.platformCategories || []
@@ -605,7 +641,7 @@ function getStoreAiEnabled() { return wx.getStorageSync('lucky_store_ai') === tr
 
 async function getStores() {
   try {
-    const data = await request('/stores')
+    const data = await publicRead('/stores?lang=' + (wx.getStorageSync('lucky_lang') === 'en' ? 'en' : 'zh'))
     wx.setStorageSync('lucky_store_ai', data.aiEnabled === true)
     /* 03u:样例内容(充值套餐示例 / 我的消息样例)只许在演示店出。
        照 aiEnabled 同一形制缓存,不另起一套(先搜复用,公约④)。 */
@@ -621,7 +657,7 @@ async function getStores() {
    币种当年正是踩了这个坑(见下面那段注释)。**不加 catch**:接口挂了就抛,顾客端宁可不出轮播,
    也不许回落到写死的图(那正是 D78 本身的病)。 */
 async function getHeroSlides(lang) {
-  const data = await request(`/stores?lang=${lang === 'en' ? 'en' : 'zh'}`)
+  const data = await publicRead(`/stores?lang=${lang === 'en' ? 'en' : 'zh'}`)
   return data.heroSlides || []
 }
 
@@ -631,7 +667,7 @@ async function getHeroSlides(lang) {
    顾客端 32 处 {{cur.p}}{{cur.s}} 全渲染成空币符(只有后端拼好的价格串才带得出币符)。
    这里单独把原始字段取回来,不经过 toMiniStore。 */
 async function getStoreCurrency() {
-  const data = await request('/stores')
+  const data = await publicRead('/stores?lang=' + (wx.getStorageSync('lucky_lang') === 'en' ? 'en' : 'zh'))
   // R5:定金配置跟币种同一趟取回来,顾客端不再自己编默认 50
   return { currency: data.currency || '', currencyDisplay: data.currencyDisplay || null, deposit: data.deposit || null }
 }
@@ -660,7 +696,7 @@ async function getPortfolioWall() {
       categories: data.categories || []
     }
   } catch (error) {
-    return { works: [], categories: [] }
+    throw error
   }
 }
 
@@ -685,7 +721,7 @@ async function getService(id, lang) {
      (id 以 lash 开头→lash,否则一律→nail)——护理类 id(care-service-*)被猜成 nail,
      去美甲列表里找,永远 null → 护理详情从来打不开。改:全量目录里直查,不猜类。
      D17 红线不变:真找不到返回 null,绝不回 mock。 */
-  const data = await request(`/services?lang=${lang}`)
+  const data = await publicRead(`/services?lang=${lang}`)
   return (data.services || []).map(toMiniService).find((item) => item._id === id) || null
 }
 
@@ -729,7 +765,7 @@ async function createBooking(cartItem, remark) {
   if (!technicianId) throw new Error('请先选择技师')
   const data = await request('/bookings', 'POST', {
     userId: user.id || DEMO_USER_ID,
-    storeId: await activeStoreId(),   // D19:预约归属当前门店,不写死旗舰店
+    storeId: cartItem.storeId || await activeStoreId(),   // D19:预约归属当前门店,不写死旗舰店
     serviceId: cartItem.serviceId,
     technicianId,
     date: appointment.date,
@@ -786,7 +822,7 @@ function submitMerchantLead(data) {
 
 // 公开门店列表(兜底进店)
 // includeDemo=true 时返回演示门店(店主在选店页开「演示模式」才会传;顾客永远看不到)
-function getShops(includeDemo) {
+function getShops(includeDemo = EXPERIENCE) {
   return request(includeDemo ? '/shops?include=demo' : '/shops')
 }
 
@@ -845,6 +881,9 @@ async function sandboxLoginAs(userId) {
   const data = await request('/auth/wechat/mini-login', 'POST', { demoLogin: true, tenantId: currentTenant(), asUserId: userId })
   // 演示身份切换会换顾客；全局订单缓存若沿用，会把上一人的订单显示给下一人。
   wx.removeStorageSync('lucky_orders')
+  // Explicitly choosing a demo profile leaves the real-WeChat session for this
+  // store. A later ordinary login may now use the preview identity again.
+  wx.removeStorageSync(realWechatClaimKey(currentTenant()))
   setAuth(Object.assign({}, data.auth, { user: data.user, tenantId: currentTenant() }))
   wx.setStorageSync('lucky_member', Object.assign(miniMember(data.user), { _tenant: currentTenant() }))
   return data.user
@@ -874,9 +913,9 @@ async function refreshMember() {
     const sameStore = prev._tenant === currentTenant()
     wx.setStorageSync('lucky_member', Object.assign({}, fresh, {
       _tenant: currentTenant(),
-      nickname: (sameStore && prev.nickname) || fresh.nickname,
-      avatarUrl: (sameStore && prev.avatarUrl) || fresh.avatarUrl,
-      profileComplete: (sameStore && prev.profileComplete) || fresh.profileComplete
+      nickname: fresh.nickname,
+      avatarUrl: fresh.avatarUrl,
+      profileComplete: fresh.profileComplete
     }))
     return fresh
   } catch (e) { return null }
@@ -1041,11 +1080,14 @@ function acceptCustomerSession(out) {
   if (!out?.tenantId || !out?.auth?.accessToken || !out?.user?.id) throw new Error('绑定会话不完整，请重试')
   if (currentTenant() !== out.tenantId) onStoreSwitched()
   wx.setStorageSync('lucky_tenant', out.tenantId)
-  setAuth(Object.assign({}, out.auth, {user:out.user, tenantId:out.tenantId}))
+  wx.setStorageSync(realWechatClaimKey(out.tenantId), true)
+  setAuth(Object.assign({}, out.auth, {user:out.user, tenantId:out.tenantId, _realWechat:true}))
   wx.setStorageSync('lucky_member', Object.assign(miniMember(out.user), {_tenant:out.tenantId}))
 }
 
 module.exports = {
+  miniCodeUrl, miniCodeEnvironment,
+  getBookingDraft: id => request(`/booking-drafts/${encodeURIComponent(id)}`),
   acceptCustomerSession,
   getSignLink,
   getDocumentLink: code => request('/my/settlements/'+encodeURIComponent(code)+'/document-link'),
@@ -1054,6 +1096,8 @@ module.exports = {
   API_BASE,
   DEMO_USER_ID,
   SANDBOX: USE_LOCAL_SANDBOX,
+  EXPERIENCE,
+  EXPERIENCE_TENANTS,
   onStoreSwitched,
   getSandboxRoster,
   sandboxLoginAs,
@@ -1061,6 +1105,7 @@ module.exports = {
   ensureLogin,
   bindWechatPhone,
   loginWithWechat,
+  updateProfile,
   isLoggedIn,
   getAuth,
   clearAuth,

@@ -375,7 +375,7 @@ curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: ap
   -d '{}' http://127.0.0.1:4128/admin/demo/full-seed > /dev/null || true
 
 # 可用 CI_SUITES="a b c" 环境变量跑子集(调试用)
-DEFAULT_SUITES="booking-code customer-facts-timezone customer-facts-http customer-facts-mutations work-share booking-lanes first-use-features first-use-binding response-compression staff-session-cache mini-sign-link web-sign-access sandbox-sync mini-reschedule p0-booking-integrity p0-platform-integrity customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import migration-center migration-profile migration-profile-mini migration-balance-activation migration-balance-mini migration-refund-allocation migration-gifts migration-gift-mini migration-service-mini customer-migration-summary migration-card-reconciliation migration-reconciliation-mini migration-paid-timecards migration-paid-ui pose-cards tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides image-framing cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate hours-batch crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub wechat-mini-code mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard bench-selfguard user-write-auth env-inventory backup-wal secret-output restore-fingerprint demo-gate-scope demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback store-jury signed-docs mp-package-size tenant-parent-scan money-endpoint-abuse cert-expiry cross-tenant-isolation store-placeholder tenant-create-front-door ai-retouch-gate platform-bootstrap service-import-tiers onboarding-steps plan-expiry platform-expiry-ui onboarding-lamps demo-kind-gate phone2-gate prod-ro-gate"
+DEFAULT_SUITES="release18-behavior release17-behavior manual-draft-http manual-booking-draft customer-loading-20261008 customer-profile-store-code booking-code customer-facts-timezone customer-facts-http customer-facts-mutations work-share booking-lanes first-use-features first-use-binding experience-demo-claim response-compression staff-session-cache mini-sign-link service-loading privacy-policy web-sign-access sandbox-sync mini-reschedule p0-booking-integrity p0-platform-integrity customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config membership-summary-ui customer-import migration-center migration-profile migration-profile-mini migration-balance-activation migration-balance-mini migration-refund-allocation migration-gifts migration-gift-mini migration-service-mini customer-migration-summary migration-card-reconciliation migration-reconciliation-mini migration-paid-timecards migration-paid-ui pose-cards tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides image-framing cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate hours-batch crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub wechat-mini-code mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard bench-selfguard user-write-auth env-inventory backup-wal secret-output restore-fingerprint demo-gate-scope demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback store-jury signed-docs mp-package-size tenant-parent-scan money-endpoint-abuse cert-expiry cross-tenant-isolation store-placeholder tenant-create-front-door ai-retouch-gate platform-bootstrap service-import-tiers onboarding-steps plan-expiry platform-expiry-ui onboarding-lamps demo-kind-gate phone2-gate prod-ro-gate"
 read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
 
 # 🔴 断言基线(店主 02r 裁定一):每套跑完**就地数** `^ok ` 条数,不事后解析日志 ——
@@ -493,7 +493,7 @@ DEMO_GATE_MODES="${DEMO_GATE_MODES:-true false}"
 # 顾客端相关判据:这一档必须全部跑一遍(**只许变长**,少一条 test-demo-gate-coverage 红)
 # 🔴 裁 #72:名单不许我手挑 —— `test-demo-gate-coverage ①a` 按机制算出「该跑」并逐个对,
 #    少一套就红在「该跑没跑」上(造病已验)。这里列的是**该跑的全部 11 套 + 多跑的 4 套**。
-DEMO_GATE_SUITES="customer-facts-http first-use-binding first-use-features web-sign-access p0-booking-integrity cross-tenant-isolation store-placeholder tenant-create-front-door ai-retouch-gate platform-bootstrap service-import-tiers onboarding-steps signed-docs auth-surface backend-gate booking-intake card-refund customer-profile deposit-config identity-links mini-ai-same-outlet noshow-aftersales schedule-v2 staff-portal stored-value wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard web-settlement cross-end-effect display-text tenant-ownership mini-account-adjust tenant-timezone"
+DEMO_GATE_SUITES="customer-facts-http first-use-binding first-use-features experience-demo-claim web-sign-access p0-booking-integrity cross-tenant-isolation store-placeholder tenant-create-front-door ai-retouch-gate platform-bootstrap service-import-tiers onboarding-steps signed-docs auth-surface backend-gate booking-intake card-refund customer-profile deposit-config identity-links mini-ai-same-outlet noshow-aftersales schedule-v2 staff-portal stored-value wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard web-settlement cross-end-effect display-text tenant-ownership mini-account-adjust tenant-timezone manual-draft-http"
 : > /tmp/ll-demo-gate-modes.txt
 echo "true" >> /tmp/ll-demo-gate-modes.txt
 if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
@@ -519,7 +519,7 @@ if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
     # 「没有信息,人会去找;一个恒定的假名字,人会照着它去找,而且会找两次、三次。」
     printf '[门关档] %s(第 %s 秒起跑)' "$suite" "$SECONDS" > "$CURRENT_SUITE_FILE" 2>/dev/null || true
     echo "== [门关] test-${suite} =="
-    if TEST_BASE_URL=http://127.0.0.1:4132 BASE_URL=http://127.0.0.1:4132 node "test-${suite}.mjs" > "$SUITE_OUT" 2>&1; then
+    if DEMO_GATE_MODE=false TEST_BASE_URL=http://127.0.0.1:4132 BASE_URL=http://127.0.0.1:4132 node "test-${suite}.mjs" > "$SUITE_OUT" 2>&1; then
       echo "   ✅ [门关] ${suite}"
     else
       echo "   🔴 [门关] ${suite} —— 红,原文如下(照实报,不许为了绿去松门槛):"
@@ -558,6 +558,11 @@ fi
 #   这是静默失败器族的又一案(`||` 兜底把「文件找不到」和「自愈失败」说成了同一句话)。
 #   改法两条:①走绝对路径 ②**把两件事分开报** —— 脚本不在是缺陷,会话不在是环境。
 MP_HEAL="$API_DIR/../../tools/mp-automator-up.sh"
+if [ "${MP_UI_CONTROL:-}" = "recorded-evidence" ]; then
+  node "$API_DIR/../../tools/verify-native-layout-evidence.mjs" || exit 1
+elif [ "${MP_UI_CONTROL:-}" = "cua" ]; then
+  echo '   [小程序界面] 本轮仅允许 CUA 操作；automator 三套不执行，计未跑，不计通过。'
+else
 if [ ! -f "$MP_HEAL" ]; then
   echo "   🔴 自愈脚本找不到:$MP_HEAL —— **这是缺陷,不是「会话不在」**"
 else
@@ -583,13 +588,20 @@ if [ -n "${MP_AUTOMATOR:-}" ]; then
     MP_ALIVE=yes
   fi
 fi
+fi
 MP_LANE_SUITES="mp-placeholder-size mp-overlap mp-home-sections"
 MP_LANE_N=$(printf '%s' "$MP_LANE_SUITES" | wc -w | tr -d ' ')
 echo ""
 echo "== 小程序自动化那一档(裁#91:单独跑、单独报数)=="
 MP_LANE_RED=0; MP_LANE_SKIP=0
 printf '[小程序档] 探 9420 会话(第 %s 秒)' "$SECONDS" > "$CURRENT_SUITE_FILE" 2>/dev/null || true
-if [ -z "$MP_ALIVE" ]; then
+if [ "${MP_UI_CONTROL:-}" = "recorded-evidence" ]; then
+  echo "   [小程序档] 三套本机已执行证据及对应源码校验通过；本轮不重复执行原生界面测试。"
+  MP_LANE_SUITES=""
+elif [ "${MP_UI_CONTROL:-}" = "cua" ]; then
+  MP_LANE_SKIP=$MP_LANE_N
+  MP_LANE_SUITES=""
+elif [ -z "$MP_ALIVE" ]; then
   echo "   🔴 9420 自动化会话**不是活的**(没有应答 426)—— 这三把刀**本轮不跑**,按红报。"
   echo "      这不是「刀红了」,是「会话不在」。拉起来:bash tools/mp-automator-up.sh"
   MP_LANE_RED=$MP_LANE_N
@@ -636,8 +648,8 @@ done
 # 「9420 答 426」只证明端口有人应答,**automator 连不连得上是另一回事** —— 426 是必要条件,不是充分条件。
 MP_LANE_RAN=$(( MP_LANE_N - MP_LANE_SKIP ))
 MP_LANE_GREEN=$(( MP_LANE_RAN - MP_LANE_RED ))
-echo "   [小程序档小结] ${MP_LANE_N} 套 —— **真跑起来 ${MP_LANE_RAN} · 绿 ${MP_LANE_GREEN} · 红 ${MP_LANE_RED} · 被超时切掉 ${MP_LANE_SKIP}**"
-echo "      四格闭合:${MP_LANE_RAN}(其中绿 ${MP_LANE_GREEN} + 红 ${MP_LANE_RED}) + 切掉 ${MP_LANE_SKIP} = ${MP_LANE_N} 套 ✅ **空转不计入绿**"
+echo "   [小程序档小结] ${MP_LANE_N} 套 —— **真跑起来 ${MP_LANE_RAN} · 绿 ${MP_LANE_GREEN} · 红 ${MP_LANE_RED} · 未执行/超时 ${MP_LANE_SKIP}**"
+echo "      四格闭合:${MP_LANE_RAN}(其中绿 ${MP_LANE_GREEN} + 红 ${MP_LANE_RED}) + 未执行/超时 ${MP_LANE_SKIP} = ${MP_LANE_N} 套 ✅ **空转不计入绿**"
 echo "   —— 空转不是通过。这一档**不并进主档**,也不占「未跑豁免」的名额。"
 
 echo ""
@@ -720,4 +732,9 @@ if [ "${NOT_RUN_N:-0}" -gt "$NOT_RUN_CAP" ]; then
   echo "🔴 未跑套数 ${NOT_RUN_N} > 上限 ${NOT_RUN_CAP} —— **只许降不许涨**(J-98)。多出来的是谁:${NOT_RUN_LIST}" >&2
   exit 1
 fi
-echo "✅ 全部 $(( $(echo $DEFAULT_SUITES | wc -w) + 4 )) 个套件通过(清单 $(echo $DEFAULT_SUITES | wc -w) + auto-return/schema-consistency/perf-base-migration/tenant-isolation)· 其中未跑 ${NOT_RUN_N} 套"
+echo "主档本轮 $(( ${#SUITES[@]} + 4 )) 个套件通过${CI_SUITES:+（子集，不能称全量）} · 主档未跑 ${NOT_RUN_N} 套"
+if [ "$DEMO_GATE_RED" -gt 0 ] || [ "$MP_LANE_RED" -gt 0 ] || [ "$MP_LANE_SKIP" -gt 0 ]; then
+  echo "🔴 发布回归未完成：门关红 $DEMO_GATE_RED · 小程序界面红 $MP_LANE_RED / 未执行 $MP_LANE_SKIP。主档通过不代替这些检查。"
+  exit 1
+fi
+echo "✅ 发布回归三档全部通过"

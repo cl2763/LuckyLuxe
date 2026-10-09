@@ -18,6 +18,7 @@
       </view>
     </view>
     <scroll-view scroll-y class="spbody">
+      <view class="spsub">结算经手账号：{{card.operatorText}}</view>
       <view class="spgrp" wx:for="{{card.groups}}" wx:for-item="g" wx:key="title">
         <view class="spgt">{{g.title}}</view>
         <view class="spline" wx:for="{{g.lines}}" wx:for-item="l" wx:key="no">

@@ -8,21 +8,21 @@ page{background:var(--paper)}
 .bind{font-size:22rpx;color:var(--sub);margin-left:auto}
 .pi{font-size:22rpx;color:var(--sub);background:var(--wall);border:1rpx solid var(--line);border-radius:40rpx;padding:4rpx 14rpx}
 .viewdoc{font-size:22rpx;color:var(--brand);margin-left:auto}
-.ptag{font-size:21rpx;color:#a34c48;background:#f3e1df;border-radius:40rpx;padding:4rpx 14rpx}
+.ptag{font-size:21rpx;color:var(--bad);background:var(--badbg);border-radius:40rpx;padding:4rpx 14rpx}
 .pnote{font-size:21rpx;color:var(--sub)}
 .tag{font-size:21rpx;border-radius:40rpx;padding:4rpx 14rpx}
-.tag.g{background:#f1e7df;color:#9b7655}
-.tag.d{background:#f3e1df;color:#a34c48}
-.tag.s{background:#e3eee8;color:#47735f}
+.tag.g{background:var(--wall);color:var(--brandd)}
+.tag.d{background:var(--badbg);color:var(--bad)}
+.tag.s{background:var(--goodbg);color:var(--good)}
 .thread{flex:1;padding:20rpx 24rpx;box-sizing:border-box}
 .row{display:flex;margin-bottom:16rpx}
 .row.c{justify-content:flex-start}
 .row.a,.row.staff{justify-content:flex-end}
 .bub{max-width:76%;padding:16rpx 20rpx;border-radius:18rpx;font-size:26rpx;line-height:1.5}
 .bub.c{background:var(--card);border:1rpx solid var(--line);border-top-left-radius:6rpx;color:var(--ink)}
-.bub.a{background:#f1e7df;color:#5c4630;border-top-right-radius:6rpx}
-.bub.staff{background:#e3eee8;color:#2f5245;border-top-right-radius:6rpx}
-.needbanner{text-align:center;font-size:22rpx;color:#a34c48;background:#f3e1df;border-radius:40rpx;padding:8rpx 0;margin:8rpx auto;width:60%}
+.bub.a{background:var(--wall);color:var(--brandd);border-top-right-radius:6rpx}
+.bub.staff{background:var(--goodbg);color:var(--good);border-top-right-radius:6rpx}
+.needbanner{text-align:center;font-size:22rpx;color:var(--bad);background:var(--badbg);border-radius:40rpx;padding:8rpx 0;margin:8rpx auto;width:60%}
 .bottom{flex:0 0 auto;background:var(--card);border-top:1rpx solid var(--line);padding:14rpx 20rpx calc(14rpx + env(safe-area-inset-bottom))}
 .acts{display:flex;gap:14rpx;margin-bottom:12rpx}.abtn {flex:1;text-align:center;height:66rpx;line-height:66rpx;border-radius:999rpx;font-size:26rpx;font-weight:500}
 .abtn.p{background:var(--brand);color:var(--hero)}
@@ -35,6 +35,6 @@ page{background:var(--paper)}
 
 /* 31p 报价状态横幅(三色;句后端出) */
 .qs-banner { margin: 16rpx 0; padding: 14rpx 20rpx; border-radius: 12rpx; font-size: 24rpx; line-height: 1.6; }
-.qs-banner.quoted { background: #eef4f2; color: #0a5a50; }
-.qs-banner.expired { background: #fdf3e7; color: #b45309; }
-.qs-banner.reference { background: #f1efe9; color: #6b6f66; }
+.qs-banner.quoted { background: var(--goodbg); color: var(--ink); }
+.qs-banner.expired { background: var(--paper); color: var(--brandd); }
+.qs-banner.reference { background: var(--wall); color: var(--sub); }

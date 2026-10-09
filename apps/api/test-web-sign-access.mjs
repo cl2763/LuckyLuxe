@@ -4,9 +4,11 @@ import {randomBytes} from 'node:crypto'
 import {spawn} from 'node:child_process'
 import {fileURLToPath} from 'node:url'
 import {DatabaseSync} from 'node:sqlite'
+import {sceneForToken} from './wechat-mini-code.mjs'
 import {createSettlementReadAccess} from './settlement-read-access.mjs'
 import {createSettlementAccess} from './settlement-access.mjs'
 const dir=mkdtempSync('/tmp/ll-ci-data.web-sign-'),port=Number(process.env.WEB_SIGN_TEST_PORT||4342),base=`http://127.0.0.1:${port}`,owner='web-sign-test-only',fd=openSync(dir+'/server.log','w')
+const noAi=process.env.WEB_SIGN_NO_AI==='1'
 const server=spawn(process.execPath,[...process.execArgv.filter(arg=>arg==='--experimental-sqlite'),'local-server.mjs'],{cwd:fileURLToPath(new URL('.',import.meta.url)),env:{PATH:process.env.PATH,HOME:process.env.HOME,DATA_DIR:dir,PORT:String(port),HOST:'127.0.0.1',OWNER_TOKEN:owner,WECHAT_MINI_TOKEN_SECRET:'web-sign-mini-test-only',WECHAT_APP_SECRET:process.env.WEB_SIGN_NO_SECRET==='1'?'':'configured-test-placeholder',ALLOW_DEMO_ADMIN_LOGIN:'false',NOTIFY_TICK:'off'},stdio:['ignore',fd,fd]})
 let db,n=0;const fail=[]
 const check=(label,ok,detail='')=>{n++;console.log(`${ok?'ok':'not ok'} ${n} - ${label}${ok?'':' :: '+detail}`);if(!ok)fail.push(label)}
@@ -15,7 +17,13 @@ const signBody={signerConfirmed:true,disclaimerAccepted:true,signature:'隔离�
 try{
  for(let i=0;i<100;i++){try{if((await fetch(base+'/health')).ok)break}catch{}await new Promise(r=>setTimeout(r,100))}
  db=new DatabaseSync(dir+'/lucky-luxe.sqlite',{readOnly:true})
- for(const tid of ['web-sign-a','web-sign-b']){const r=await req('/platform/tenants',{tid,body:{id:tid,name:tid,plan:'chain',currency:'CNY',timezone:'Asia/Shanghai'}});check('建立隔离店 '+tid,r.status===201)}
+ for(const tid of ['web-sign-a','web-sign-b']){const r=await req('/platform/tenants',{tid,body:{id:tid,name:tid,plan:noAi?'single':'chain',currency:'CNY',timezone:'Asia/Shanghai'}});check('建立隔离店 '+tid,r.status===201)}
+ if(noAi){
+   const ent=(await req('/admin/tenant/entitlements')).data.entitlements
+   check('无 AI 店确为单店套餐且未开通 AI',ent?.plan==='single'&&!ent?.features?.ai_customer_service?.enabled)
+   const dailyAi=await req('/admin/ai/daily-brief',{body:{}})
+   check('无 AI 日报明确拒绝而不请求模型',dailyAi.status===403&&dailyAi.data.error?.code==='AI_ADDON_REQUIRED',JSON.stringify(dailyAi.data))
+ }
  const store=(await req('/platform/tenants/web-sign-a/store')).data.store
  await req('/platform/tenants/web-sign-a/business-hours',{method:'PUT',body:{hours:Array.from({length:7},(_,weekday)=>({weekday,openTime:'08:00',closeTime:'22:00',isClosed:false}))}})
  const tech=(await req('/platform/tenants/web-sign-a/technicians',{body:{name:'签署技师'}})).data.technician
@@ -81,6 +89,10 @@ try{
  check('顾客可换取自己的已签只读链接',(await req(`/my/settlements/${owned.sheet.code}/document-link`,{token:customer.auth.accessToken})).status===200)
  check('顾客不能换取他人的只读链接',(await req(`/my/settlements/${route}/document-link`,{token:customer.auth.accessToken})).status===404)
  const staffOwn=await make(null,tech2.id);check('员工可以为自己参与的服务单出链接',(await req(`/admin/settlements/${staffOwn.sheet.id}/sign-token`,{token:first.auth.accessToken,body:{}})).status===200)
+ check('员工可以预览自己参与的结算单',(await req(`/admin/settlements/${staffOwn.sheet.id}/preview-card`,{token:first.auth.accessToken})).status===200)
+ check('员工不能预览其他技师的结算单',(await req(`/admin/settlements/${two.sheet.id}/preview-card`,{token:first.auth.accessToken})).status===403)
+ check('员工不能通过单号预览其他技师的结算单',(await req(`/admin/settlements/${two.sheet.code}/preview-card`,{token:first.auth.accessToken})).status===403)
+ check('跨店不能预览结算单',(await req(`/admin/settlements/${staffOwn.sheet.id}/preview-card`,{tid:'web-sign-b',body:undefined})).status===404)
  check('员工通过单号也可生成自己服务的签署链接',(await req(`/admin/settlements/${staffOwn.sheet.code}/sign-token`,{token:first.auth.accessToken,body:{}})).status===200)
  check('员工可以读取自己服务的单据',(await req(`/settlements/${staffOwn.sheet.code}`,{token:first.auth.accessToken})).status===200)
  const noteCount=()=>db.prepare('SELECT COUNT(*) n FROM service_notes').get().n
@@ -102,5 +114,96 @@ try{
  check('第一单凭据只续到同顾客同组下一单',next.code===sheets[1].code)
  check('连续签署下一单成功',(await req(`/settlements/${next.code}/sign`,{token:null,signToken:nextToken,body:signBody})).status===200)
  check('全部签完不再给后续链接',!(await req('/settlements/by-token/'+nextToken,{token:null})).data.nextSignUrl)
+
+ // 员工真实账号 + 不同顾客身份：走 API 正门而非直写身份/权益表。
+ const staffToken=first.auth.accessToken
+ const today=(await req('/admin/dashboard/now')).data.today
+ const day= today || new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date())
+ let staffSlot=8
+ const signedIds=[]
+ for(const scenario of [
+   {key:'new',label:'新客无档案',bound:false,member:false},
+   {key:'old',label:'老客非会员未绑微信',bound:false,member:false},
+   {key:'old-bound',label:'老客非会员已绑微信',bound:true,member:false},
+   {key:'member',label:'迁移会员未绑微信',bound:false,member:true},
+   {key:'member-bound',label:'迁移会员已绑微信',bound:true,member:true}
+ ]) {
+   let uid='',customerToken='';const identity='staff-closure-'+scenario.key
+   if(scenario.key!=='new'){
+     const source='staff-closure-'+scenario.key
+     const pkg={packageType:'youji-customer-migration-v1',schemaVersion:1,sourceSystem:source,sourceExportedAt:'2020-01-01T00:00:00Z',dataCutoffAt:'2020-01-01T00:00:00Z',sourceTimezone:'Asia/Shanghai',merchantConfirmedAt:'2020-01-02T00:00:00Z',mode:'initial',records:[{sourceRecordId:source,mapped:{name:scenario.label,phone:'1385555000'+staffSlot,balanceCents:scenario.member?50000:0},source:{},details:{cards:[],gifts:[],transactions:[],serviceNotes:[],attachments:[]},review:{}}]}
+     const path='/platform/tenants/web-sign-a/migrations'
+     const preview=await req(path+'/preview',{body:{package:pkg}})
+     const imported=await req(path+'/execute',{body:{package:pkg,confirmPendingOnly:true,confirmPackageHash:preview.data.report?.packageHash,confirmOpeningBalanceCents:scenario.member?50000:0,confirmImportCount:1,confirmExcludedCount:0}})
+     if(imported.status!==200)throw Error('迁移夹具失败 '+JSON.stringify(imported.data))
+     uid=db.prepare('SELECT user_id FROM customer_migration_links WHERE source_system=? AND source_record_id=?').get(source,source).user_id
+     if(scenario.member){
+       const pending=db.prepare('SELECT id FROM migration_pending_balances WHERE user_id=?').get(uid)
+       const review=await req(`/admin/customers/${uid}/migration-balances/${pending.id}`)
+       const active=await req(`/admin/customers/${uid}/migration-balances/${pending.id}/activate`,{body:{requestId:source,confirmVersion:review.data.version,paidCents:50000,bonusCents:0,currency:review.data.currency,mode:'unrestricted_aggregate',noReliableCardBreakdown:true,unrestricted:true,noExpiry:true,sourceUseStopped:true,cutoverAt:'2020-01-02T00:00:00Z',evidence:'隔离测试商家已核对权益',differenceReason:''}})
+       check(scenario.label+'：确认迁移余额后才启用',active.status===200,JSON.stringify(active.data))
+     }
+     if(scenario.bound){
+       const bind=(await req(`/admin/customers/${uid}/bind-token`,{body:{}})).data
+       const claim=await req(`/bind-tokens/${bind.token}/confirm`,{token:null,body:{code:'stub:'+identity}})
+       if(claim.status!==200)throw Error('绑定夹具失败 '+JSON.stringify(claim.data))
+       customerToken=claim.data.auth?.accessToken
+     }
+   }
+   const booked=await req('/admin/bookings/direct',{token:staffToken,body:{...(uid?{userId:uid}:{newCustomerName:scenario.label}),storeId:store.id,serviceId:svc.id,technicianId:tech2.id,date:day,time:String(staffSlot++).padStart(2,'0')+':00'}})
+   check(scenario.label+'：员工本人开单成功',booked.status===201,JSON.stringify(booked.data))
+   const b=booked.data.booking;if(!b)throw Error('员工预约未创建');uid=b.user.id
+   const made=await req('/admin/settlements',{token:staffToken,body:{createdBy:'forged-owner',operatorText:'伪造经手人',cardOwnerUserId:uid,settlements:[{bookingId:b.id,tierKey:'list',payIntent:scenario.member?'balance_plus_offline':'offline_full',items:[{serviceId:svc.id}],technicians:[{technicianId:tech2.id,share:100}]}]}})
+   check(scenario.label+'：员工创建结算单成功',made.status===201||made.status===200,JSON.stringify(made.data))
+   const sheet=made.data.settlements?.[0];if(!sheet)throw Error('员工结算未创建')
+   check(scenario.label+'：经手账号来自员工会话，忽略前端伪造',sheet.operatorText===account.username&&db.prepare('SELECT created_by FROM settlements WHERE id=?').get(sheet.id).created_by===account.username,JSON.stringify(sheet.operatorText))
+   const card=(await req(`/admin/settlements/${sheet.id}/preview-card`)).data.card
+   check(scenario.label+'：老板查看预览仍显示原员工经手账号',card?.operatorText===account.username)
+   const q=(await req(`/admin/settlements/${sheet.id}/sign-token`,{token:staffToken,body:{}})).data
+   const scene=sceneForToken(q.token)
+   const scan=await req('/scan/'+scene,{token:customerToken||null})
+   check(scenario.label+'：已绑会话跳过本人确认，未绑需要认领',scan.status===200&&scan.data.alreadyBound===scenario.bound,JSON.stringify(scan.data).slice(0,200))
+   const claim=await req('/scan/'+scene+'/claim',{token:null,body:{code:'stub:'+identity}})
+   check(scenario.label+'：扫码绑定同一原档案并签发会话',claim.status===200&&claim.data.user?.id===uid&&!!claim.data.auth?.accessToken,JSON.stringify(claim.data).slice(0,200))
+   customerToken=claim.data.auth?.accessToken
+   const revisited=await req('/scan/'+scene,{token:customerToken})
+   check(scenario.label+'：重扫不重复绑定',revisited.data.alreadyBound===true&&db.prepare("SELECT COUNT(*) n FROM user_identities WHERE user_id=? AND provider='wechat_miniprogram'").get(uid).n===1)
+   const before=db.prepare('SELECT COUNT(*) n FROM finance_transactions WHERE tenant_id=?').get('web-sign-a').n
+   const signed=await req(`/settlements/${sheet.code}/sign`,{token:customerToken,signToken:q.token,body:signBody})
+   check(scenario.label+'：顾客签字成功',signed.status===200,JSON.stringify(signed.data))
+   const state=await req(`/admin/settlements/${sheet.id}/sign-state`,{token:staffToken})
+   check(scenario.label+'：员工轮询看到已签状态',state.status===200&&state.data.state==='signed',JSON.stringify(state.data))
+   const snaps=await req(`/admin/settlements/${sheet.id}/snapshots`,{token:staffToken})
+   check(scenario.label+'：员工能查看真实签署留档',snaps.status===200&&snaps.data.sheets?.some(x=>x.code===sheet.code&&x.snapshotUrl),JSON.stringify(snaps.data).slice(0,200))
+   const docs=await req(`/my/settlements/${sheet.code}/document-link`,{token:customerToken})
+   check(scenario.label+'：顾客本人能取凭证并读取',docs.status===200&&(await fetch(base+docs.data.url+'&format=svg')).status===200,JSON.stringify(docs.data))
+   check(scenario.label+'：预约完成且线下收入或耗卡记录准确',db.prepare('SELECT status FROM bookings WHERE id=?').get(b.id).status==='COMPLETED' && (scenario.member ? db.prepare("SELECT SUM(amount_cents) n FROM stored_value_transactions WHERE user_id=? AND type='consume'").get(uid).n===-19800 : db.prepare('SELECT COUNT(*) n FROM finance_transactions WHERE tenant_id=?').get('web-sign-a').n>before))
+   const ledgerCount=db.prepare('SELECT COUNT(*) n FROM finance_transactions').get().n, consumeCount=db.prepare("SELECT COUNT(*) n FROM stored_value_transactions WHERE type='consume'").get().n
+   check(scenario.label+'：重复签署不重复记收款或扣卡',(await req(`/settlements/${sheet.code}/sign`,{token:customerToken,signToken:q.token,body:signBody})).status===400&&db.prepare('SELECT COUNT(*) n FROM finance_transactions').get().n===ledgerCount&&db.prepare("SELECT COUNT(*) n FROM stored_value_transactions WHERE type='consume'").get().n===consumeCount)
+   const completed=(await req('/admin/bookings')).data.bookings?.find(x=>x.id===b.id)
+   check(scenario.label+'：已签详情与逐份签署单的经手账号一致',completed?.payment?.operatorText===account.username&&completed.payment.sheets.every(x=>x.operatorText===account.username))
+   if(scenario.key==='old-bound'){
+     const snapshotBefore=db.prepare('SELECT snapshot_inline FROM settlements WHERE id=?').get(sheet.id).snapshot_inline
+     const start=await req(`/my/bookings/${b.id}/after-sales`,{token:customerToken,body:{description:'隔离测试：顾客发起售后'}})
+     check('普通顾客已签订单可以发起售后',start.status===201,JSON.stringify(start.data))
+     const pending=(await req('/admin/bookings',{token:staffToken})).data.bookings?.find(x=>x.id===b.id)
+     check('员工售后列表的数据有同一结束售后动作',pending?.afterSalesStatus==='pending'&&pending.allowedActions?.some(x=>x.key==='endAfterSales'))
+     check('跨店不能处理本店售后',(await req(`/admin/bookings/${b.id}/status`,{tid:'web-sign-b',method:'PATCH',body:{action:'endAfterSales',note:'越权'}})).status===404)
+     check('其他员工不能处理非本人售后',(await req(`/admin/bookings/${one.booking.id}/status`,{token:staffToken,method:'PATCH',body:{action:'endAfterSales',note:'越权'}})).status===403)
+     check('处理结果为空被拒，保留待处理状态',(await req(`/admin/bookings/${b.id}/status`,{token:staffToken,method:'PATCH',body:{action:'endAfterSales',note:''}})).status===400)
+     const finish=await req(`/admin/bookings/${b.id}/status`,{token:staffToken,method:'PATCH',body:{action:'endAfterSales',note:'已线下返修，顾客确认'}})
+     check('参与员工可通过同一订单入口结束售后',finish.status===200,JSON.stringify(finish.data))
+     const mine=(await req('/bookings',{token:customerToken})).data.bookings?.find(x=>x.id===b.id)
+     check('顾客能看到售后结果且原已签快照与资金记录不改写',mine?.afterSalesStatus==='resolved'&&db.prepare('SELECT snapshot_inline FROM settlements WHERE id=?').get(sheet.id).snapshot_inline===snapshotBefore&&db.prepare('SELECT COUNT(*) n FROM finance_transactions').get().n===ledgerCount&&db.prepare("SELECT COUNT(*) n FROM stored_value_transactions WHERE type='consume'").get().n===consumeCount)
+   }
+   signedIds.push(sheet.id)
+ }
+ check('员工没有日结确认权限',(await req('/admin/daily-close',{token:staffToken,body:{date:day}})).status===403)
+ const ready=await req('/admin/daily-close?date='+day)
+ check('老板日结能看到五笔员工已签服务',ready.status===200&&ready.data.dailyClose?.settlements?.filter(x=>signedIds.includes(x.settlementId)).length===5,JSON.stringify(ready.data).slice(0,300))
+ check('员工服务全部签完后日结可确认',ready.data.dailyClose?.canConfirm===true,JSON.stringify(ready.data.dailyClose?.blockers))
+ const close=await req('/admin/daily-close',{body:{date:day}})
+ check('老板确认包含员工服务的日结并保存快照',close.status===200&&db.prepare('SELECT status,revenue_cents FROM daily_closes WHERE tenant_id=? AND date=?').get('web-sign-a',day)?.status==='confirmed',JSON.stringify(close.data).slice(0,200))
+
 }catch(e){check('流程完成',false,e.stack)}finally{db?.close();server.kill();if(server.exitCode===null)await new Promise(r=>server.once('exit',r));closeSync(fd);if(!fail.length)rmSync(dir,{recursive:true,force:true});else console.log('失败现场 '+dir)}
 console.log(`${n} checks; ${fail.length} failures`);process.exitCode=fail.length?1:0

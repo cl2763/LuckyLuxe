@@ -1,7 +1,8 @@
 const bookingLanes = require('../../../utils/booking-lanes')
 const customerIntake = require('../../../utils/customer-intake')
 const api = require('../../../utils/api')
-const rescheduleMixin = require('../../../utils/order-actions')
+const { memberCodeFromScan } = require('../../../utils/scan-code')
+const rescheduleMixin = require('../order-actions')
 const { storeToday, refreshStoreClock, storeMoney } = require('../../../utils/storeclock')
 // 屏 1:日结就长在今日台面下面(设计图把它画在技师网格正下方),渲染与逻辑走同一份 mixin
 const { dailyCloseData, dailyCloseMixin } = require('../../../utils/dailyclose')
@@ -36,7 +37,7 @@ const WK = ['日', '一', '二', '三', '四', '五', '六']
 const PX_PER_HOUR = 120
 function toMin(t) { const p = String(t || '0:0').split(':'); return Number(p[0]) * 60 + Number(p[1] || 0) }
 function m2t(m) { return `${pad(Math.floor(m / 60))}:${pad(m % 60)}` }
-function typeCls(t) { const u = String(t || '').toUpperCase(); return u === 'NAIL' ? 'hand' : u === 'LASH' ? 'lash' : 'care' }
+function typeCls(t) { const u = String(t || '').toUpperCase(); return u === 'NAIL' ? 'hand' : u === 'FOOT' ? 'foot' : u === 'LASH' ? 'lash' : 'care' }
 
 function vm(b) {
   /* 🔴 D70 合同⑤(店主 08-24):售后是挂在已完成单上的**并行轨道**,不改写主状态。
@@ -78,6 +79,7 @@ function vm(b) {
 }
 
 Page(Object.assign({
+  createManualDraft() { require('../../../utils/nav').to('/pages/merchant/booking-draft/index') },
   data: {
     mode: 'today', // today 今日台面 | all 全部订单 | aftersales 售后订单
     role: 'owner',
@@ -92,6 +94,8 @@ Page(Object.assign({
     // 今日台面(技师维度日视图)
     selDate: '',
     dv: null,
+    dvLoading: false,
+    directSaving: false,
     // 直接排单
     directSheet: false, directTech: '', directTechName: '', directTime: '', directEndTime: '', directDurH: 0, directServices: [], directServiceId: '', directDurationMin: 120, directDeposit: false,
     directCats: [], directCatId: '',   // D24:排单选择器两级(大类→小类),同源结算主项目目录
@@ -201,6 +205,16 @@ Page(Object.assign({
         opts: opts.map((o, i) => ({ i, label: o.label }))
       }
     })
+  },
+  async afterSalesOrderActions() {
+    const booking = (this.data.raw || []).find((x) => x.id === this.data.asPanel?.bookingId)
+    if (!booking) { wx.showToast({ title: '订单已更新，请刷新列表', icon: 'none' }); return }
+    const item = vm(booking)
+    this.setData({ asPanel: null })
+    await this.orderActions({ currentTarget: { dataset: {
+      id: item.id, status: item.status, userid: item.userId, customer: item.customer,
+      service: item.serviceName, serviceid: item.serviceId, tech: item.tech
+    } } })
   },
   closeActPanel() { this.setData({ actPanel: null }) },
   tapAct(e) {
@@ -438,6 +452,8 @@ Page(Object.assign({
 
   // ===== 今日台面:技师维度日视图(自排班原样搬来) =====
   async loadDayView(date) {
+    const loadId = this._dayLoadId = (this._dayLoadId || 0) + 1
+    this.setData({dvLoading:true})
     try {
       // 三份互不依赖，真机请求并行；待写小记失败不阻断台面。
       const [me, r, notes] = await Promise.all([
@@ -490,9 +506,10 @@ Page(Object.assign({
            今天的空档起点截到 storeNow(后端门店时区句)这一分钟,不再对齐半点(随点随排),
            不裸 new Date 推 */
           const frees=(t.freeSlots||[]).map(f=>{const start=toMin(f.startTime),end=toMin(f.endTime);freeTotal+=end-start;return Object.assign({},f,{top:Math.round((start-openMin)/60*PX_PER_HOUR),height:Math.round((end-start)/60*PX_PER_HOUR)})})
-        return { id: t.id, name: t.name, role: t.title || '', busy: t.bookingCount > 0, count: t.bookingCount, width, blocks, frees }
+        return { id: t.id, name: t.name, isDuty: Boolean(r.duty && (r.duty.techIds || []).includes(t.id)), role: t.title || '', busy: t.bookingCount > 0, count: t.bookingCount, width, blocks, frees }
       })
       const d = new Date(`${date}T00:00:00`)
+      if (loadId !== this._dayLoadId) return
       this.setData({
         role: me.role || 'owner', selDate: date, myTechId: me.technicianId || '',
         dv: {
@@ -509,7 +526,8 @@ Page(Object.assign({
         }
       })
       this.syncClose(date) // 网格下方那块日结跟着看同一天
-    } catch (e) { wx.showToast({ title: '加载今日台面失败', icon: 'none' }) }
+    } catch (e) { if (loadId === this._dayLoadId) wx.showToast({ title: '加载今日台面失败', icon: 'none' }) }
+    finally { if (loadId === this._dayLoadId) this.setData({dvLoading:false}) }
   },
   // 日结板块跟着台面看同一天;只有老板看得到(员工端接口就是 403)
   syncClose(date) {
@@ -671,16 +689,7 @@ Page(Object.assign({
     })
   },
 
-  async tapDuty(e) {
-    const d = this.data.dv && this.data.dv.duty
-    if (!d || !d.canEdit) return
-    const techId = e.currentTarget.dataset.id
-    const on = !(d.techIds || []).includes(techId)
-    try {
-      await api.adminPost('/admin/duty/mark', { date: this.data.selDate, technicianId: techId, on })
-      this.loadDayView(this.data.selDate)  // D94:此前误写 this.load(页上没有这个方法)→ 点击即炸
-    } catch (err) { wx.showToast({ title: (err && err.message) || '值日保存失败', icon: 'none' }) }
-  },
+  tapDuty(e) { return require('../duty-action')(this, e, api) },
 
   /* ===== 屏 S1 现场/电话排单(2026-08-09 图 + 规则①②)=====
      不是新页面 —— 就是这张既有面板的增强。手机号只用来**找档案**,
@@ -701,19 +710,23 @@ Page(Object.assign({
   scanMemberCode() {
     wx.scanCode({
       onlyFromCamera: false,
-      success: (r) => this.applyMemberCode(String((r && r.result) || '').trim()),
+      success: (r) => this.applyMemberCode(r),
       fail: () => { /* 顾客端没开摄像头 / 取消,不提示 */ }
     })
   },
   // 扫码 success 的唯一处理器(拆出来是为了可测:wx.scanCode 本体自动化驱动不了)
   async applyMemberCode(raw) {
-    const mc = (String(raw || '').match(/LL-[A-Za-z0-9]{8}/) || [])[0] || String(raw || '')
+    const mc = memberCodeFromScan(raw)
+    if (!mc) { wx.showModal({title:'未识别会员码',content:'请扫描顾客「我的」页面展示的会员二维码，或按姓名查找本店档案。',showCancel:false,fail:(e)=>console.warn('[showModal fail]',e)}); return }
+    wx.showNavigationBarLoading({fail:()=>{}})
     try {
-      const hit = (await api.adminGet(`/admin/customers/lookup?memberCode=${encodeURIComponent(mc)}`)).hit
-      if (!hit) { wx.showToast({ title: '这个会员码查不到本店档案', icon: 'none' }); return }
+      const result = await api.adminGet(`/admin/customers/lookup?memberCode=${encodeURIComponent(mc)}`)
+      const hit = result.hit
+      if (!hit) { wx.showModal({title:'本店未找到档案',content:result.reason || '请核对顾客当前选择的门店及会员码。',showCancel:false,fail:(e)=>console.warn('[showModal fail]',e)}); return }
       this.setData({ selectedCustId: hit.id, selectedCustPhoneMasked:hit.phoneMasked||'', directContact:'', selectedCustName: hit.displayName, custQuery: hit.displayName, custMatches: [], pendingNewName: '', pendingNewPhone: '' })
       wx.showToast({ title: `已带出 ${hit.displayName}`, icon: 'none' })
     } catch (e) { wx.showToast({ title: '会员码解析失败', icon: 'none' }) }
+    finally { wx.hideNavigationBarLoading({fail:()=>{}}) }
   },
   // 「现在开始」:即时单,时间取门店当下(店主定的产品原则:散客也先建一条即时预约)
   dsNow() {
@@ -786,6 +799,7 @@ Page(Object.assign({
     if (!/^\d{2}:\d{2}$/.test(d.directTime)) { wx.showToast({ title: '选个时段', icon: 'none' }); return }
     if (this._directBusy) return   // D88:双击双 POST 拦(第一发在途第二发不出手)
     this._directBusy = true
+    this.setData({directSaving:true})
     try {
       const made = await api.adminPost('/admin/bookings/direct', body)
       /* 勾了「已收定金」= 走**标记已收定金同一个后端动作**(规则②),
@@ -794,10 +808,10 @@ Page(Object.assign({
         try { await api.adminPost(`/admin/bookings/${encodeURIComponent(made.booking.id)}/deposit-receipt`, {}) }
         catch (err) { wx.showToast({ title: `单已建,定金没标上:${(err && err.message) || ''}`, icon: 'none' }) }
       }
-      this._directBusy = false
       wx.showToast({ title: '已排单', icon: 'success' })
       this.setData({ directSheet: false })
       this.loadDayView(this.data.selDate)
-    } catch (err) { this._directBusy = false; wx.showToast({ title: (err && err.message) || '排单失败', icon: 'none' }) }
+    } catch (err) { wx.showToast({ title: (err && err.message) || '排单失败', icon: 'none' }) }
+    finally { this._directBusy = false; this.setData({directSaving:false}) }
   }
 }, dailyCloseMixin, rescheduleMixin))

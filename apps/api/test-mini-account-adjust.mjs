@@ -61,8 +61,12 @@ const mini = (p) => stripJs(readFileSync(new URL(`../../miniprogram/${p}`, impor
     return out
   }
   const onDisk = walkPages('pages/')
-  const unregistered = onDisk.filter((pg) => !registered.includes(pg))
-  check(`⓪ 反向:磁盘上 ${onDisk.length} 个页面目录全部在 app.json 里(建了页忘注册=入口点了白屏)`,
+  // Explicitly excluded development pages are not part of either upload project.
+  const configs = ['../../project.config.json', '../../miniprogram/project.config.json'].map(p => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8')))
+  const excluded = pg => configs.every(c => (c.packOptions?.ignore || []).some(x => x.type === 'folder' && pg.startsWith(x.value.replace(/\/$/, '') + '/')))
+  const shipped = onDisk.filter(pg => !excluded(pg))
+  const unregistered = shipped.filter((pg) => !registered.includes(pg))
+  check(`⓪ 反向:上传包中 ${shipped.length} 个页面目录全部在 app.json 里(显式排除的开发页不上传)`,
     unregistered.length === 0, unregistered.join(' | '))
   check('⓪ app.json 以换行收尾(json.dump 会吃掉它 —— 本次退回件里的真 diff)',
     readFileSync(new URL('app.json', root), 'utf8').endsWith('\n'))

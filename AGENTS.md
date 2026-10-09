@@ -9,3 +9,7 @@ This is a live merchant system. The user explicitly requires every future bug/UI
 - Require passing regression checks before publishing. Verify the live version and retained records after publishing; reconcile legitimate concurrent business activity.
 - Never reset production, inject demo data, rewrite historical financial/signed records, or replace the live database with a stale backup. Prefer rolling back code while retaining the persistent volume.
 - Keep private backups, credentials and raw merchant records out of Git and public reports. Report what was actually deployed and verified.
+
+# Web and mini-program parity
+
+For every functional or UI change, inspect the corresponding web and mini-program screens before editing. Compare their entry points, data source, states, actions, feedback, and visual layout; update both surfaces where the same capability exists. Preserve each platform's approved layout and permissions. Run regression checks for both surfaces, and record any deliberate platform-specific difference or unverified real-device behavior before handing a version to the user.

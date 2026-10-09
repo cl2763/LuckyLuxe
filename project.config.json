@@ -32,7 +32,16 @@
   "libVersion": "3.15.2",
   "simulatorPluginLibVersion": {},
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "type": "file",
+        "value": "assets/images/brand-logo.png"
+      },
+      {
+        "type": "folder",
+        "value": "pages/pose/retouch"
+      }
+    ],
     "include": []
   },
   "editorSetting": {}

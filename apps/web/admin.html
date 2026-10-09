@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
+    <script src="/web/web-scope.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
@@ -9,7 +10,7 @@
          生产在墙内可能慢,那时换 ② 而不是换字体。**这一行与合同图第 2 行是同一行。** -->
     <!-- 境内网络不能让外部字体阻塞业务；字体未就绪时使用既有本机字体回退。 -->
     <link rel="stylesheet" media="print" onload="this.media='all'" onerror="this.remove()" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
-    <link rel="stylesheet" href="/web/styles.css?v=20261004-loading-navigation-logo">
+    <link rel="stylesheet" href="/web/styles.css?v=20261009-feedback21">
     <!-- 设计令牌排在 styles.css **之后**:令牌是唯一真相,谁在后面谁说了算。
          `--ink/--line/--paper/--card` 四个原来在 styles.css 里也有一份(值略有出入),
          已从那边删掉 —— 一个令牌只许有一处定义。 -->
@@ -310,11 +311,11 @@
       .sp-mode b{display:block;font-size:14px;color:var(--ink)}
       .sp-mode span{display:block;font-size:11.5px;color:var(--ink);margin-top:3px}
       .sp-mode.on{border-color:#b5885d;background:var(--card);box-shadow:0 2px 8px rgba(181,136,93,.15)}
-      .sp-compare{background:var(--hero);color:var(--sub);border-radius:12px;padding:11px 14px;margin:12px 0;font-size:12.5px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-      .sp-cmp-lab{color:var(--ink)}
+      .sp-compare{background:var(--hero);color:var(--herosub);border-radius:12px;padding:11px 14px;margin:12px 0;font-size:12.5px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+      .sp-cmp-lab{color:var(--heroink)}
       .sp-cmp{background:rgba(255,255,255,.08);border-radius:999px;padding:4px 12px}
-      .sp-cmp.on{background:#e8c88f;color:var(--ink);font-weight:800}
-      .sp-cmp-diff{width:100%;color:var(--brandd);font-size:11.5px}
+      .sp-cmp.on{background:var(--brand);color:var(--hero);font-weight:800}
+      .sp-cmp-diff{width:100%;color:var(--herogold);font-size:11.5px}
       .sp-h{font-size:13.5px;margin:16px 0 8px;display:flex;gap:8px;align-items:baseline}
       .sp-switch-row{display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
       .sp-switch-row .sp-sw{display:flex;align-items:center;gap:6px;font-size:13px;min-width:170px}
@@ -324,6 +325,8 @@
       .cpn-grant-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px}
       .cpn-field{display:flex;flex-direction:column;gap:6px}
       .cpn-field.wide{grid-column:1/-1}
+      .cpn-field .seg-toggle button{color:var(--ink)}
+      #couponGrantForm > button:disabled{opacity:.75}
       .cpn-field>span{font-size:12px;color:var(--ink);font-weight:700}
       .cpn-field input,.cpn-field select{border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:14px;color:var(--ink);background:var(--card)}
       .cpn-results{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto}
@@ -348,6 +351,7 @@
           </span>
         </a>
         <nav class="top-actions">
+          <a class="ghost-link" href="/web/privacy.html">隐私与个人信息</a>
           <div class="admin-lang-toggle" aria-label="Language">
             <button class="toggle active" id="adminLangZh" type="button">中文</button>
             <button class="toggle" id="adminLangEn" type="button">EN</button>
@@ -441,6 +445,7 @@
             </div>
             <!-- 裁决①(2026-08-09):网页日结保留在财务页,订单页只放一条直达条 -->
             <div class="dc-jump hidden" id="dcJumpBar"></div>
+            <div id="manualDraftToolbar" class="manual-draft-toolbar hidden"><button class="ghost" id="manualDraftOrderEntry" type="button"><span aria-hidden="true">＋</span><span data-draft-label>预约草稿</span></button><span class="subtle" data-draft-hint>分享给顾客确认</span></div>
             <div class="admin-tabs booking-tabs-row">
               <button class="admin-tab active" id="todayTab" data-admin-view="today" type="button">Today</button>
               <button class="admin-tab" id="calendarTab" data-admin-view="calendar" type="button">Calendar</button>
@@ -650,7 +655,7 @@
               <button class="pricing-tab" data-member-tab="times" type="button">② 次卡</button>
               <button class="pricing-tab" data-member-tab="coupon" type="button">③ 优惠券</button>
               <button class="pricing-tab" data-member-tab="mall" type="button">④ 积分商城</button>
-              <button class="pricing-tab" data-member-tab="tiers" type="button">⑤ 会员体系（S9）</button>
+              <button class="pricing-tab" data-member-tab="tiers" type="button">⑤ 会员体系</button>
             </div>
             <section class="admin-card" id="mtabRecharge">
               <div class="section-row compact-row">
@@ -709,7 +714,7 @@
             </div>
             <section class="admin-card hidden" id="mtabTiers">
               <h2>会员体系</h2>
-              <p class="subtle" style="margin:8px 0">等级/权益/成长值配置界面归 S9 波次,出图后开放。当前口径:不分级店「充值即会员」;分级店(Lucky Luxe)等级由累计消费自动判定。</p>
+              <p class="subtle" role="status">正在读取会员规则…</p>
             </section>
           </section>
 
@@ -930,7 +935,7 @@
                   <span class="settings-item-title" id="storeProfileTitle">门店信息（名称 / 地址 / 电话）</span>
                   <span class="settings-item-value" id="storeProfileSummary"></span>
                 </summary>
-                <div class="settings-item-body" id="storeProfileBody"></div>
+                <div class="settings-item-body" id="storeProfileBody"></div><div class="settings-item-body" id="storeMiniCode"></div>
               </details>
               <details class="settings-item">
                 <summary>
@@ -1073,14 +1078,15 @@
     <script src="/web/duty-setting.js?v=20260901t-obs01"></script>
     <script src="/web/quote-settings.js?v=20260901t-obs01"></script>
     <script src="/web/today-board.js?v=20260926-first-use"></script>
-    <script src="/web/settlement-web.js?v=20261003-migration-visual"></script>
+    <script src="/web/settlement-web.js?v=20261008-settlement-operator"></script>
     <script src="/web/finance-entry-form.js?v=20260829a-ch"></script>
     <script src="/web/placeholder-words.js?v=20260922a-ph"></script>
     <script src="/web/store-content.js?v=20260924-images"></script>
     <script src="/web/ai-desk.js?v=20260825e-w2"></script>
     <script src="/web/finance-trend.js?v=20260928-review2"></script>
     <script src="/web/service-catalog.js?v=20260825e-w2"></script>
-    <script src="/web/order-state.js?v=20260924-p0-reschedule"></script>
+    <script src="/web/staff-nudges.js"></script>
+  <script src="/web/order-state.js?v=20260924-p0-reschedule"></script>
     <script src="/web/money-input.js?v=20260926-first-use"></script>
     <script src="/web/my-customers.js?v=20260928-review2"></script>
     <script src="/web/customer-tags.js?v=20260827a-n5v12"></script>
@@ -1102,6 +1108,9 @@
     <script src="/web/customer-migration-ui.js?v=20261003-migration-visual"></script>
     <script src="/web/request-indicator.js?v=20261004-loading"></script>
     <script src="/web/perf-ranking.js?v=20261004-ranking"></script>
-    <script src="/web/admin.js?v=20261004-loading-navigation-logo"></script>
+    <script src="/web/store-code.js"></script>
+<script src="/web/manual-booking-draft.js?v=20261009-feedback20"></script>
+<script src="/web/membership-summary.js?v=20261009-feedback21"></script>
+<script src="/web/admin.js?v=20261009-feedback21"></script>
   </body>
 </html>

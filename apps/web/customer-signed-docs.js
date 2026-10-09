@@ -41,7 +41,7 @@
     if (!tid) return null
     const auth = customerAuth(tid)
     if (!auth?.accessToken) return null
-    const r = await fetch('/my/signed-docs', {
+    const r = await fetch(window.WebScope?.path('/my/signed-docs') || '/my/signed-docs', {
       headers: { 'content-type': 'application/json', 'x-tenant-id': tid, authorization: `Bearer ${auth.accessToken}` },
     })
     if (!r.ok) return null

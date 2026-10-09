@@ -22,6 +22,7 @@
 
   <button class="btn" loading="{{loading}}" bindtap="login">登录</button>
   <view class="hint" bindtap="toForgot">忘记密码</view>
+  <navigator class="hint" url="/pages/privacy/index">隐私与个人信息</navigator>
 
   <view class="applybar">
     <text class="applytx">还不是入驻商家?</text>

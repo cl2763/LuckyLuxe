@@ -25,7 +25,7 @@ Page({
     payableAmount: 0,
     remark: '',
     policy: null,        // GET /deposit-policy 原样下发,前端不加工
-    payActionText: ''    // 线上支付未接通时按钮说「到店支付定金」,接通后自动变「支付定金」
+    payActionText: ''    // 预约定金在线下支付；此处仅显示提交预约和到店付款提示
   },
 
   onLoad(options) {
@@ -89,7 +89,7 @@ Page({
     const serviceDeposit = depositWaived ? 0 : depositRequired
     // D33 单源:抵扣估显用实时余额(this._liveBalanceYuan 由 onShow 拉),缓存仅兜底
     const memberBalance = this._liveBalanceYuan !== undefined ? this._liveBalanceYuan : (Number(member.balance) || 0)
-    // 储值余额抵扣定金:开关打开时,从余额里扣(最多扣到定金金额);余额充足则无需微信支付
+    // 储值余额抵扣定金:开关打开时,从余额里扣(最多扣到定金金额);余额充足则无需另在线下补付定金
     const balanceDeduction = this.data.useBalance ? Math.min(memberBalance, serviceDeposit) : 0
     const payableAmount = Math.max(0, serviceDeposit - balanceDeduction)
     this.setData({
@@ -203,7 +203,7 @@ Page({
     }
     storage.addOrder(order)
     storage.removeCartItems(this.data.items.map((item) => item._id))
-    // 裁定B(店主 08-23):路径名不留 payment-success ——线上支付未接通,这页是「预约提交成功」不是付款成功
+    // 裁定B(店主 08-23):路径名不留 payment-success ——本平台只记录线下收款，这页是「预约提交成功」不是付款成功
     wx.navigateTo({ url: `/pages/booking-done/index?orderNo=${order.orderNo}` })
   }
 })

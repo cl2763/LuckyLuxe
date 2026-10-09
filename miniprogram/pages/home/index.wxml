@@ -1,18 +1,18 @@
 <view class="page home-page {{themeClass}}">
   <text class="store-name-measure" aria-hidden="true">{{storeNameMeasure}}</text>
-  <!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图)。
-       ⚠️ 与正文**互斥**(wx:else),不是叠在正文上方 —— 2026-08-11 停服实测发现:
-       只加 wx:if 不排除正文,失败态下面还渲染出一整个残缺骨架(缓存门店名 +
-       空地址/空营业时间/空电话),等于一边说"加载失败"一边继续摆半张假门店卡。 -->
-  <view wx:if="{{loadFailed}}" class="d17fail">
-    <view class="d17msg">加载失败，请检查网络后重试</view>
-    <view class="d17btn" bindtap="refreshLanguage">重试</view>
+  <!-- 加载、失败、正文互斥，避免把未加载当成空门店。 -->
+  <view wx:if="{{loading}}" class="page-loading" role="status"><view class="loading-spinner"></view><text>{{lang === 'en' ? 'Loading store…' : '正在加载门店…'}}</text></view>
+  <view wx:elif="{{loadFailed}}" class="d17fail">
+    <view class="d17msg">{{loadError}}</view>
+    <view class="d17btn" bindtap="refreshLanguage" hover-class="tap-feedback">{{lang === 'en' ? 'Retry' : '重试'}}</view>
+    <view class="d17btn" bindtap="switchShop" hover-class="tap-feedback">{{lang === 'en' ? 'Choose store' : '重新选择门店'}}</view>
+    <view class="d17msg">{{diagnostic}}</view>
   </view>
 
   <view wx:else class="home-landing">
     <view class="top-row">
       <view class="brand-lockup">
-        <!-- 临时 logo(按店主提供设计稿绘制的近似版);正式源文件到位后直接替换此 png -->
+        
         <image class="brand-logo brand-logo-img" src="/assets/images/youji-logo.png" mode="aspectFit"></image>
         <view>
           <view class="brand-name">有迹</view>
@@ -99,10 +99,10 @@
        1 张卡占半幅、右半空着,店主会觉得坏了;占满整行又比 2 卡态大一倍,两个分区一大一小更怪。
        而「人气美甲」这个标题本身承诺"有得挑",只有一个项目时这个承诺是假的。
        归族「不该有=整块不出现」+ 店主 02y 新律「不可用即不呈现」。完整目录在「服务」页,不丢东西。 -->
-  <view wx:if="{{!loadFailed && recommendedNail.length >= 2}}" class="section home-section-container">
+  <view wx:if="{{!loading && !loadFailed && recommendedNail.length >= 2}}" class="section home-section-container">
     <view class="section-head">
       <view class="section-title">{{t.popularNail}}</view>
-      <view class="section-note">Popular nail</view>
+
     </view>
     <view class="recommend-grid">
       <block wx:for="{{recommendedNail}}" wx:key="_id">
@@ -118,10 +118,10 @@
     </view>
   </view>
 
-  <view wx:if="{{!loadFailed && recommendedLash.length >= 2}}" class="section home-section-container">
+  <view wx:if="{{!loading && !loadFailed && recommendedLash.length >= 2}}" class="section home-section-container">
     <view class="section-head">
       <view class="section-title">{{t.popularLash}}</view>
-      <view class="section-note">Popular lash</view>
+
     </view>
     <view class="recommend-grid">
       <block wx:for="{{recommendedLash}}" wx:key="_id">
@@ -140,7 +140,7 @@
   <!-- 🔴 兜底(店主 02z):两个「人气」分区都够不到 2 张时,首页会只剩店卡 + 一个空作品入口。
        新店第一天开张必然经过这一天。这里用**中性标题**列服务目录前几项 —— 不承诺"人气",顾客真能点进去。
        服务一个都没有时:**不给入口卡**(那是把空推给下一页),如实说一句。 -->
-  <view wx:if="{{!loadFailed && recommendedNail.length < 2 && recommendedLash.length < 2}}" class="section home-section-container">
+  <view wx:if="{{!loading && !loadFailed && recommendedNail.length < 2 && recommendedLash.length < 2}}" class="section home-section-container">
     <view class="section-head">
       <view class="section-title">{{t.ourServices}}</view>
       <view class="section-note" wx:if="{{fallbackServices.length}}" bindtap="goServices">{{t.allServices}}</view>

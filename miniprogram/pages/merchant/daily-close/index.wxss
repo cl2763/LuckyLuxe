@@ -1,98 +1,98 @@
-.pg{padding:16rpx 24rpx 60rpx;background:#fbf8f5;min-height:100vh}
+.pg{padding:16rpx 24rpx 60rpx;background:var(--paper);min-height:100vh}
 .datebar{display:flex;align-items:center;gap:14rpx;padding:8rpx 0 16rpx}
-.datebar .nav{width:52rpx;height:52rpx;border-radius:50%;background:#f3ece2;color:#5c4630;font-size:28rpx;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
-.datebar .d{font-size:32rpx;font-weight:800;color:#241f1d}
-.datebar .today{margin-left:auto;font-size:23rpx;color:#9b7655;border:1rpx solid #e7d3b8;border-radius:999rpx;padding:8rpx 22rpx}
-.empty{padding:80rpx 0;text-align:center;color:#9a8c7c;font-size:26rpx}
-.okbar{background:#e3eee8;border:1rpx solid #bcdccd;color:#2f7d5c;border-radius:12rpx;padding:14rpx 16rpx;font-size:23rpx;margin-bottom:14rpx}
+.datebar .nav{width:52rpx;height:52rpx;border-radius:50%;background:var(--wall);color:var(--brandd);font-size:28rpx;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.datebar .d{font-size:32rpx;font-weight:800;color:var(--ink)}
+.datebar .today{margin-left:auto;font-size:23rpx;color:var(--brandd);border:1rpx solid var(--line);border-radius:999rpx;padding:8rpx 22rpx}
+.empty{padding:80rpx 0;text-align:center;color:var(--sub);font-size:26rpx}
+.okbar{background:var(--goodbg);border:1rpx solid var(--line);color:var(--good);border-radius:12rpx;padding:14rpx 16rpx;font-size:23rpx;margin-bottom:14rpx}
 .pills{display:flex;gap:12rpx;flex-wrap:wrap;margin-bottom:14rpx}
-.pill{font-size:23rpx;background:#fff;border:1rpx solid #ece3da;border-radius:999rpx;padding:8rpx 20rpx;color:#5c4630}
-.pill.hot{background:#fdf3ec;border-color:#f0d9c4;color:#a8551f}
-.pill .b{font-weight:800;color:#241f1d}
-.card{background:#fff;border-radius:18rpx;padding:24rpx 22rpx;margin-bottom:18rpx;box-shadow:0 3rpx 10rpx rgba(92,70,48,.06)}
-.ah{display:flex;justify-content:space-between;align-items:center;font-size:25rpx;font-weight:700;color:#241f1d}
-.ah .arr{font-size:21rpx;color:#8c8279;font-weight:400;margin-left:8rpx}
+.pill{font-size:23rpx;background:var(--card);border:1rpx solid var(--line);border-radius:999rpx;padding:8rpx 20rpx;color:var(--brandd)}
+.pill.hot{background:var(--paper);border-color:var(--line);color:var(--brandd)}
+.pill .b{font-weight:800;color:var(--ink)}
+.card{background:var(--card);border-radius:18rpx;padding:24rpx 22rpx;margin-bottom:18rpx;box-shadow:0 3rpx 10rpx rgba(92,70,48,.06)}
+.ah{display:flex;justify-content:space-between;align-items:center;font-size:25rpx;font-weight:700;color:var(--ink)}
+.ah .arr{font-size:21rpx;color:var(--sub);font-weight:400;margin-left:8rpx}
 .ah .amt{font-weight:800}
-.aline{display:flex;align-items:center;gap:14rpx;padding:18rpx 0;border-bottom:1rpx solid #f4ede6}
-.aline .nm{width:132rpx;flex:none;font-size:25rpx;font-weight:700;color:#241f1d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.aline .wn{flex:1;font-size:21rpx;color:#8c8279}
-.aline .pct{width:100rpx;text-align:right;font-size:26rpx;font-weight:700;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:10rpx;padding:8rpx 12rpx}
-.aline .pcts{font-size:23rpx;color:#8c8279}
+.aline{display:flex;align-items:center;gap:14rpx;padding:18rpx 0;border-bottom:1rpx solid var(--line)}
+.aline .nm{width:132rpx;flex:none;font-size:25rpx;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aline .wn{flex:1;font-size:21rpx;color:var(--sub)}
+.aline .pct{width:100rpx;text-align:right;font-size:26rpx;font-weight:700;background:var(--paper);border:1rpx solid var(--line);border-radius:10rpx;padding:8rpx 12rpx}
+.aline .pcts{font-size:23rpx;color:var(--sub)}
 .links{display:flex;align-items:center;gap:18rpx;margin-top:14rpx;flex-wrap:wrap}
-.lnk{font-size:22rpx;color:#9b7655;font-weight:700}
-.lnk.back{margin-left:auto}.savebtn {margin-left:auto;background:#2d2826;color:#fff;border-radius:999rpx;padding:12rpx 26rpx;font-size:23rpx;font-weight:700}
+.lnk{font-size:22rpx;color:var(--brandd);font-weight:700}
+.lnk.back{margin-left:auto}.savebtn {margin-left:auto;background:var(--hero);color:var(--heroink);border-radius:999rpx;padding:12rpx 26rpx;font-size:23rpx;font-weight:700}
 .th,.tr{display:flex;align-items:center;padding:16rpx 0;font-size:22rpx}
-.th{color:#8c8279;font-weight:700;border-bottom:1rpx solid #ece3da}
-.tr{border-bottom:1rpx solid #f4ede6;color:#241f1d}
+.th{color:var(--sub);font-weight:700;border-bottom:1rpx solid var(--line)}
+.tr{border-bottom:1rpx solid var(--line);color:var(--ink)}
 .tr:last-child{border-bottom:none}
 .c1{width:140rpx;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.c2{width:64rpx;flex:none}.c3{flex:1;text-align:right}.c4{width:130rpx;flex:none;text-align:right}
 .tr .nm{font-weight:700}
-.c4.ok{color:#2f7d5c;font-weight:700}
-.anom{font-size:22rpx;color:#4a3c2c;line-height:2}
-.anom .sub{display:block;color:#8c8279;font-size:21rpx}
-.badge{font-size:20rpx;background:#f1e7df;color:#8c8279;border-radius:999rpx;padding:2rpx 14rpx;margin-left:8rpx}
-.badge.warn{background:#fdecec;color:#c0392b}
-.warn{background:#fdf3ec;border:1rpx solid #f0d9c4;border-radius:12rpx;padding:14rpx 16rpx;font-size:23rpx;color:#a8551f;margin-bottom:12rpx}.cta {margin-top:8rpx;background:#2d2826;color:#fff;text-align:center;padding:28rpx;border-radius:999rpx;font-size:29rpx;font-weight:800}
-.cta.dis{background:#c8bfb6}
-.ch{font-size:29rpx;font-weight:800;color:#241f1d;display:flex;align-items:center;padding:8rpx 0 16rpx}
-.ro{background:#faf6f1;border:1rpx dashed #e0d3c4;border-radius:14rpx;padding:16rpx;font-size:22rpx;line-height:1.9;color:#4a3c2c;margin-bottom:14rpx}
-.ro .rot{display:flex;justify-content:space-between;font-weight:800;color:#241f1d;margin-bottom:8rpx}
-.ro .lock{font-size:20rpx;color:#8c8279;font-weight:400}
-.ro .b{font-weight:800;color:#241f1d}
-.fh{font-size:25rpx;font-weight:800;color:#241f1d;margin-bottom:12rpx}
+.c4.ok{color:var(--good);font-weight:700}
+.anom{font-size:22rpx;color:var(--brandd);line-height:2}
+.anom .sub{display:block;color:var(--sub);font-size:21rpx}
+.badge{font-size:20rpx;background:var(--wall);color:var(--sub);border-radius:999rpx;padding:2rpx 14rpx;margin-left:8rpx}
+.badge.warn{background:var(--badbg);color:var(--bad)}
+.warn{background:var(--paper);border:1rpx solid var(--line);border-radius:12rpx;padding:14rpx 16rpx;font-size:23rpx;color:var(--brandd);margin-bottom:12rpx}.cta {margin-top:8rpx;background:var(--hero);color:var(--heroink);text-align:center;padding:28rpx;border-radius:999rpx;font-size:29rpx;font-weight:800}
+.cta.dis{background:var(--line)}
+.ch{font-size:29rpx;font-weight:800;color:var(--ink);display:flex;align-items:center;padding:8rpx 0 16rpx}
+.ro{background:var(--paper);border:1rpx dashed var(--line);border-radius:14rpx;padding:16rpx;font-size:22rpx;line-height:1.9;color:var(--brandd);margin-bottom:14rpx}
+.ro .rot{display:flex;justify-content:space-between;font-weight:800;color:var(--ink);margin-bottom:8rpx}
+.ro .lock{font-size:20rpx;color:var(--sub);font-weight:400}
+.ro .b{font-weight:800;color:var(--ink)}
+.fh{font-size:25rpx;font-weight:800;color:var(--ink);margin-bottom:12rpx}
 .fd{display:flex;align-items:center;justify-content:space-between;gap:14rpx;padding:12rpx 0}
-.fd .lab{font-size:25rpx;color:#5c4630}
+.fd .lab{font-size:25rpx;color:var(--brandd)}
 /* 2026-08-10 核验:input 只给了 padding 没给高度,wx input 的文字按自身基线落 ——
    「更正后合计」的数字压在框底被切掉一半(屏 1b 并排对图时抓到)。给死高度+行高居中。 */
-.fd .in{flex:1;max-width:280rpx;text-align:right;font-size:28rpx;font-weight:800;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:0 16rpx;height:64rpx;line-height:64rpx;box-sizing:border-box}
-.ta{width:100%;min-height:140rpx;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:14rpx;font-size:24rpx;color:#241f1d;margin-top:8rpx}
-.note{font-size:21rpx;color:#9a8c7c;line-height:1.8;margin:12rpx 0}
+.fd .in{flex:1;max-width:280rpx;text-align:right;font-size:28rpx;font-weight:800;background:var(--paper);border:1rpx solid var(--line);border-radius:12rpx;padding:0 16rpx;height:64rpx;line-height:64rpx;box-sizing:border-box}
+.ta{width:100%;min-height:140rpx;background:var(--paper);border:1rpx solid var(--line);border-radius:12rpx;padding:14rpx;font-size:24rpx;color:var(--ink);margin-top:8rpx}
+.note{font-size:21rpx;color:var(--sub);line-height:1.8;margin:12rpx 0}
 
 /* 无需分配但要店长点确认的单(F1) */
 .awaitcard .ah{border-bottom:none}
-.awaitcard .arr{color:#9a8c7c;font-size:21rpx;margin-left:8rpx}
+.awaitcard .arr{color:var(--sub);font-size:21rpx;margin-left:8rpx}
 
 /* 日结行主标识:时间打头(店主 2026-08-09 修订 v6);单号退到签署单弹窗/详情里 */
-.ah .code .tm{font-weight:800;color:#241f1d;margin-right:12rpx;font-variant-numeric:tabular-nums}
+.ah .code .tm{font-weight:800;color:var(--ink);margin-right:12rpx;font-variant-numeric:tabular-nums}
 
 /* 跨零点单的自解释标注:昨天做的、今晨签的,记在今天的账上 */
-.ah .code .xday{margin-left:12rpx;font-size:20rpx;font-weight:600;color:#a8551f;background:#fdf3ec;border-radius:8rpx;padding:2rpx 10rpx}
+.ah .code .xday{margin-left:12rpx;font-size:20rpx;font-weight:600;color:var(--brandd);background:var(--paper);border-radius:8rpx;padding:2rpx 10rpx}
 
 /* 售后业绩扣回显式行(裁③) */
-.deduct-tag{display:block;font-size:20rpx;color:#b3423a;margin-top:2rpx}
-.deduct-card{background:#fbf4f3;border:1rpx solid #ecd5d2}
-.deduct-title{font-size:24rpx;font-weight:700;color:#8a3a33;margin-bottom:8rpx}
+.deduct-tag{display:block;font-size:20rpx;color:var(--bad);margin-top:2rpx}
+.deduct-card{background:var(--badbg);border:1rpx solid var(--line)}
+.deduct-title{font-size:24rpx;font-weight:700;color:var(--bad);margin-bottom:8rpx}
 .deduct-row{display:flex;justify-content:space-between;font-size:24rpx;padding:4rpx 0}
-.deduct-row .neg{color:#b3423a;font-weight:700}
+.deduct-row .neg{color:var(--bad);font-weight:700}
 
 /* D57 未签行可点态 */
 .deduct-row.tap{padding:10rpx 0}
 
 /* N-5 v1.2 ②:应有数收据卡(与网页同构) */
-.due{background:#fff;border:1rpx solid #e6dfd4;border-radius:12rpx;padding:22rpx 24rpx;margin:16rpx 0 0}
-.due-lab{display:block;font-size:20rpx;letter-spacing:2rpx;color:#8c8478;font-weight:700}
+.due{background:var(--card);border:1rpx solid var(--line);border-radius:12rpx;padding:22rpx 24rpx;margin:16rpx 0 0}
+.due-lab{display:block;font-size:20rpx;letter-spacing:2rpx;color:var(--sub);font-weight:700}
 .due-big{display:block;font-size:52rpx;font-weight:700;margin-top:4rpx}
 .due-calc{margin-top:16rpx;font-size:24rpx}
-.due-row{display:flex;justify-content:space-between;padding:4rpx 0;color:#3a342c}
-.due-row.neg{color:#95332a}
-.due-row.tot{border-top:1rpx solid #dcd2c2;margin-top:8rpx;padding-top:10rpx;font-weight:700;color:#1b1815}
-.due-aside{display:block;margin-top:14rpx;font-size:22rpx;color:#8c8478;border-top:1rpx dashed #e6dfd4;padding-top:12rpx}
+.due-row{display:flex;justify-content:space-between;padding:4rpx 0;color:var(--ink)}
+.due-row.neg{color:var(--bad)}
+.due-row.tot{border-top:1rpx solid var(--line);margin-top:8rpx;padding-top:10rpx;font-weight:700;color:var(--ink)}
+.due-aside{display:block;margin-top:14rpx;font-size:22rpx;color:var(--sub);border-top:1rpx dashed var(--line);padding-top:12rpx}
 
 /* D79 现金手记(2026-08-28):沿用本页 due-* 的用色与间距,不另起一套视觉 */
-.notes { margin-top: 20rpx; padding: 20rpx; border: 1rpx solid #ece7e1; border-radius: 12rpx; }
+.notes { margin-top: 20rpx; padding: 20rpx; border: 1rpx solid var(--line); border-radius: 12rpx; }
 .notes-head { display: flex; flex-direction: column; margin-bottom: 12rpx; }
 .notes-lab { font-size: 28rpx; font-weight: 600; }
-.notes-hint { font-size: 22rpx; color: #9a938c; margin-top: 4rpx; }
+.notes-hint { font-size: 22rpx; color: var(--sub); margin-top: 4rpx; }
 .notes-row { display: flex; align-items: center; gap: 12rpx; font-size: 26rpx; padding: 8rpx 0; }
 .notes-row.rev { opacity: .6; }
-.notes-row .k { color: #9a938c; }
+.notes-row .k { color: var(--sub); }
 .notes-row .n { flex: 1; }
 .notes-row .a { font-weight: 600; }
-.notes-row .rv { color: #b08d57; }
-.notes-empty { font-size: 24rpx; color: #9a938c; }
+.notes-row .rv { color: var(--brandd); }
+.notes-empty { font-size: 24rpx; color: var(--sub); }
 .notes-form { display: flex; flex-wrap: wrap; gap: 12rpx; align-items: center; margin-top: 12rpx; }
-.notes-form .pk { padding: 10rpx 16rpx; border: 1rpx solid #ece7e1; border-radius: 8rpx; font-size: 24rpx; }
-.notes-form .ipt { padding: 10rpx 16rpx; border: 1rpx solid #ece7e1; border-radius: 8rpx; font-size: 24rpx; min-width: 160rpx; }
-.notes-form .ipt.wide { flex: 1; min-width: 300rpx; }.notes-form .btn { padding: 10rpx 24rpx; background: #b08d57; color: #fff; border-radius: 999rpx; font-size: 24rpx; }
-.notes-split { font-size: 22rpx; color: #7a736c; margin-top: 6rpx; padding-left: 12rpx; border-left: 2rpx solid #ece7e1; }
-.deposit-alert { display: block; margin-top: 16rpx; padding: 12rpx 20rpx; border-left: 4rpx solid #c0392b; color: #c0392b; background: rgba(192,57,43,.06); font-size: 24rpx; }
+.notes-form .pk { padding: 10rpx 16rpx; border: 1rpx solid var(--line); border-radius: 8rpx; font-size: 24rpx; }
+.notes-form .ipt { padding: 10rpx 16rpx; border: 1rpx solid var(--line); border-radius: 8rpx; font-size: 24rpx; min-width: 160rpx; }
+.notes-form .ipt.wide { flex: 1; min-width: 300rpx; }.notes-form .btn { padding: 10rpx 24rpx; background: var(--brand); color: var(--hero); border-radius: 999rpx; font-size: 24rpx; }
+.notes-split { font-size: 22rpx; color: var(--sub); margin-top: 6rpx; padding-left: 12rpx; border-left: 2rpx solid var(--line); }
+.deposit-alert { display: block; margin-top: 16rpx; padding: 12rpx 20rpx; border-left: 4rpx solid var(--bad); color: var(--bad); background: rgba(192,57,43,.06); font-size: 24rpx; }

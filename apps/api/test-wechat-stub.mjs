@@ -107,7 +107,7 @@ try {
     const tok = freshBody?.auth?.accessToken || ''
     check('① 替身给一个**全新 openid** → 正门照常签发,但**不许认成任何既有档案**'
       + '(严格认人四条:本店 + 号完全一致 + 没绑过微信 + 唯一一条)⇒ 证明认人真跑了',
-    fresh.status === 200 && /^mini\./.test(tok) && !freshBody?.user?.phone,
+    fresh.status === 200 && /^mini\./.test(tok) && !freshBody?.user?.phone && freshBody?.wechatVerified === false,
     `${fresh.status} tok=${tok.slice(0, 12)} phone=${freshBody?.user?.phone || '(空)'}`)
 
     /* ①b 🔴 撞车局(裁 #80① 的真造病,也是段四的地基):

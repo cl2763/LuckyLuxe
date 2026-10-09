@@ -17,7 +17,7 @@
 
 .store-desc {
   margin-top: 14rpx;
-  color: #8a7f78;
+  color: var(--sub);
   line-height: 1.55;
 }
 
@@ -26,7 +26,7 @@
   justify-content: space-between;
   gap: 24rpx;
   padding: 22rpx 0;
-  border-bottom: 1rpx solid #f0e8e1;
+  border-bottom: 1rpx solid var(--line);
 }
 
 .info-row:last-child {
@@ -34,7 +34,7 @@
 }
 
 .info-row text:first-child {
-  color: #8a7f78;
+  color: var(--sub);
 }
 
 .info-row text:last-child {
@@ -57,10 +57,10 @@
   gap: 14rpx;
   align-items: center;
   justify-content: center;
-  color: #3a2e2a;
+  color: var(--ink);
 }
 
 /* D17 失败态(与 home / booking / services 同一套) */
 .d17fail{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20rpx;padding:140rpx 40rpx}
-.d17msg{color:#8c8279;font-size:27rpx}
-.d17btn{border:1rpx solid #d8cec4;border-radius:999rpx;padding:14rpx 48rpx;font-size:27rpx;color:#9b7655}
+.d17msg{color:var(--sub);font-size:27rpx}
+.d17btn{border:1rpx solid var(--line);border-radius:999rpx;padding:14rpx 48rpx;font-size:27rpx;color:var(--brandd)}

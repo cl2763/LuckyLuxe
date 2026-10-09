@@ -1,9 +1,8 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261004-loading-navigation-logo'
+const ADMIN_BUILD = '20261009-feedback21'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
-
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
 // 2026-08-07 多租户清账:时区改为从 /admin/business-hours 下发的门店字段读(拿到之前用默认值兜底)。
 // 注意:后端 process.env.TZ 目前仍是单一时区,跨时区门店的服务端日期口径见审计报告 B-1。
@@ -14,7 +13,6 @@ function storeTimezone() {
 function storeToday() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: storeTimezone(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 }
-
 function readStoredAuth() {
   try {
     return readJson('lucky-owner-auth') || JSON.parse(sessionStorage.getItem('lucky-owner-auth') || 'null')
@@ -22,7 +20,6 @@ function readStoredAuth() {
     return readJson('lucky-owner-auth')
   }
 }
-
 const owner = {
   token: '',
   storeName: '',   // D156:当前店名,只由 /admin/auth/me 写,退出登录必须清空
@@ -67,7 +64,6 @@ const owner = {
   financeLedger: { month: '', data: null, rules: [], ledger: null, filterType: 'all', filterCategory: 'all', lockConfigured: undefined, lockEnabled: undefined, tab: 'trend' }, // D50-c③:进财务页第一眼=趋势
   financeKey: sessionStorage.getItem('lucky-finance-key') || ''
 }
-
 const els = {
   adminBrandTitle: document.querySelector('#adminBrandTitle'),
   adminBrandSubtitle: document.querySelector('#adminBrandSubtitle'),
@@ -244,25 +240,20 @@ const els = {
   scheduleEnd: document.querySelector('#scheduleEnd'),
   toast: document.querySelector('#toast')
 }
-
 /* 文案表已搬去 `admin-copy.js`(公约②边改边拆:D156 要往顶栏加逻辑,巨型文件只许搬出)。
    两端语义不变:`t(key)` 照旧从这张表取;加文案去那个文件加,zh / en 都要有。 */
 const copy = window.AdminCopy
-
 function t(key) {
   return copy[owner.lang][key] || key
 }
-
 els.tokenInput.value = owner.token
 els.filterDate.value = storeToday()
-
 function formatDate(date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
-
 // 金额一律按本店币种显示。以前写死 CAD,境内店(CNY)整个老板端都在显示加币。
 // 取值:门店 currency → AI 事实 currency → CAD(旗舰店就是 CAD,显示结果一字不变)
 function storeCurrency() {
@@ -278,13 +269,11 @@ function storeDisplayName() {
 const CURRENCY_DISPLAY = window.MoneyFormat.CURRENCY_DISPLAY   // 映射表唯一一份,住在 money-format.js
 const money = (cents, decimals = 0) => { const p = moneyParts(cents, decimals); return `${p.prefix}${p.symbol}${p.amount}` }
 const moneyParts = (cents, decimals = 0) => window.MoneyFormat.parts(cents, decimals, storeCurrency())
-
 // 本店是否开通 AI 智能包。2026-08-04 店主定:全部 AI 能力归智能包,前端据此隐藏纯 AI 入口。
 // 数据来自启动时拉的 /admin/tenant/entitlements(owner.tenantPlan),与后端 requireAi() 同一个判断依据。
 function hasAi() {
   return Boolean(owner.tenantPlan?.features?.ai_customer_service?.enabled)
 }
-
 // 套餐与续费状态(渲染在「门店设置 → 当前套餐」里);声明放这里,防 renderTenantPlan 早于文件尾执行时踩死区
 const subState = { data: null, period: 'year', paying: false }
 const SUB_STATUS = {
@@ -294,7 +283,6 @@ const SUB_STATUS = {
   suspended: { tag: '已停用', cls: 'warn' },
   unlimited: { tag: '长期授权', cls: 'ok' }
 }
-
 function cents(value) {
   return Number(value / 100).toFixed(0)
 }
@@ -351,7 +339,7 @@ async function request(path, options = {}) {
   const doFetch = (token) => {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 30000)
-    return fetch(path, {
+    return fetch(window.WebScope?.path(path) || path, {
       ...options,
       signal: controller.signal,
       headers: {
@@ -804,6 +792,8 @@ function render() {
 }
 
 function renderMetrics() {
+  if (isOwnerRole()) window.StaffNudges.clear()
+  else window.StaffNudges.mount(els.metricGrid,{scope:owner.auth?.accessToken,request,escapeHtml,toast})
   if (!isOwnerRole()) {
     const todayCount = owner.bookings.filter((item) => isToday(item.appointmentDate)).length
     const activeCount = owner.bookings.filter((item) => activeStatuses().includes(item.status)).length
@@ -1707,7 +1697,7 @@ function renderDailyClose() {
     ${(v.unsignedList || []).length ? `
     <div class="dc-warnbar unsigned" style="background:var(--badbg);border-color:var(--line)">
       <strong>${zh ? `未签署 ${v.unsignedList.length} 单(不计入本日账,点开签署页可重推)` : `${v.unsignedList.length} unsigned`}</strong>
-      ${v.unsignedList.map((u) => `<div style="margin-top:4px"><a href="/sign/${encodeURIComponent(u.code)}?actor=merchant" target="_blank">${escapeHtml(`${u.timeText} ${u.customerName} · ${u.code}`)} ›</a></div>`).join('')}
+      ${v.unsignedList.map((u) => `<div style="margin-top:4px"><a href="${window.WebScope?.prefix || ''}/sign/${encodeURIComponent(u.code)}?actor=merchant" target="_blank">${escapeHtml(`${u.timeText} ${u.customerName} · ${u.code}`)} ›</a></div>`).join('')}
     </div>` : ''}
     ${(v.blockers || []).map((b) => `<div class="dc-warnbar">${escapeHtml(b.message)}</div>`).join('')}
     ${confirmed ? '' : `<button class="primary full" id="dcConfirm" type="button" ${v.canConfirm ? '' : 'disabled'}>
@@ -2925,6 +2915,7 @@ async function submitFinanceEntry() {
 // 门店信息三件(renderStoreInfo / renderStoreProfile / saveStoreProfile)已搬出到 /web/store-content.js(D78 批,边改边拆)
 
 function renderStoreSettings() {
+  window.LLStoreCode.mount(request, owner.lang)
   if (!els.businessHoursEditor) return
   renderMembershipSettings()
   renderDepositSettings()
@@ -3183,7 +3174,7 @@ function renderManualBookingDraftPanel(conversationId = '') {
       <div class="workflow-summary">
         <span class="pill muted">${owner.lang === 'zh' ? '人工入口' : 'Manual'}</span>
         <strong>${owner.lang === 'zh' ? '人工创建预约草稿' : 'Create Booking Draft Manually'}</strong>
-        <small>${owner.lang === 'zh' ? '用于客服或店主直接给顾客生成可支付草稿链接。' : 'Create a checkout-ready draft link for the customer.'}</small>
+        <small>${owner.lang === 'zh' ? '按顾客要求生成待确认草稿，顾客确认后才生成预约，收款线下完成。' : 'Create a draft for customer confirmation. Payments are collected offline.'}</small>
       </div>
       <div class="manual-draft-grid">
         <label>
@@ -3478,6 +3469,7 @@ function renderTechnicianMini(tech) {
 }
 
 function renderBookings() {
+  window.ManualBookingDraft.setup({request,escapeHtml,lang:owner.lang,view:owner.adminView,storeToday,apiBase:location.pathname.startsWith('/experience/')?'/experience':''})
   els.adminTabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.adminView === owner.adminView))
   els.bookingFilters.classList.toggle('hidden', owner.adminView === 'today')
   els.calendarControls.classList.toggle('hidden', owner.adminView !== 'calendar')
@@ -3630,6 +3622,7 @@ function renderBookingDetail(booking) {
   const pay = booking.payment
   const sheetRows = (sh) => `
     <p class="sig-row"><span><strong>${escapeHtml(sh.label || '')}</strong></span><span class="subtle">${escapeHtml(String(sh.signedAt || '').slice(0, 16).replace('T', ' '))}</span></p>
+    <p class="subtle">结算经手账号：${escapeHtml(sh.operatorText || '历史未记录')}</p>
     ${((sh.flow && sh.flow.lines) || []).map((fl) => `<p class="sig-row"><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
     <p class="sig-row total"><span><strong>${escapeHtml((sh.flow && sh.flow.heroLabel) || '')}</strong></span><strong>${escapeHtml((sh.flow && sh.flow.cashDueText) || '')}</strong></p>
     <p class="sig-row">${sh.snapshotUrl
@@ -3645,6 +3638,7 @@ function renderBookingDetail(booking) {
         ? `<p class="sig-row total"><span><strong>${escapeHtml(pay.groupCashLabel || '')}</strong></span><strong>${escapeHtml(pay.groupCashDueText || '')}</strong></p>
            ${pay.sheets.map(sheetRows).join('')}`
         : (pay.flow ? `
+           <p class="subtle">结算经手账号：${escapeHtml(pay.operatorText || '历史未记录')}</p>
            ${(pay.flow.lines || []).map((fl) => `<p class="sig-row"><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
            <p class="sig-row total"><span><strong>${escapeHtml(pay.flow.heroLabel || '')}</strong></span><strong>${escapeHtml(pay.flow.cashDueText || '')}</strong></p>
            <p class="sig-row"><a href="#" data-dc-snapshot="${escapeHtml(pay.code || '')}">查看签署原件 ›</a></p>` : '')}
@@ -4578,7 +4572,7 @@ function resolveSocialCopy(booking, index, platform) {
 }
 
 function shareUrlFor(bookingId, index, platform) {
-  return `${window.location.origin}/web/share.html?bookingId=${encodeURIComponent(bookingId)}&image=${encodeURIComponent(index)}&platform=${encodeURIComponent(platform)}&store=${encodeURIComponent(owner.auth?.admin?.tenantId || '')}&audience=staff`
+  return `${window.location.origin}${window.WebScope?.prefix || ''}/web/share.html?bookingId=${encodeURIComponent(bookingId)}&image=${encodeURIComponent(index)}&platform=${encodeURIComponent(platform)}&store=${encodeURIComponent(owner.auth?.admin?.tenantId || '')}&audience=staff`
 }
 
 function renderSocialCopy(copy, key = '') {
@@ -4901,7 +4895,7 @@ els.adminLayout.addEventListener('click', (event) => {
   /* D71-b 已裁(店主 08-24 裁 B):「售后处理」三步弹层(写进展/标记已解决/关闭)整段删除 ——
      合同④ 售后中唯一动作是「结束售后」,留痕改挂在那个出口上(点结束必填处理结果 + 写 after_sales_events)。
      后端那三条路由与商家小程序的三颗按钮同批下线,三处一起收,不留半条路。 */
-  if (window.SettlementWeb.handleClick(event, { bookings: owner.bookings, request, escapeHtml, toast, money, onClose: () => renderBookings() })) return   // 去结算整条链在 /web/settlement-web.js
+  if (window.SettlementWeb.handleClick(event, { bookings: owner.bookings, request, escapeHtml, toast, money, onClose: async () => { try { owner.bookings = (await request('/admin/bookings')).bookings || owner.bookings } catch { toast('订单刷新失败，请手动刷新') } owner.adminPage = 'bookings'; owner.adminView = 'today'; render() } })) return   // 去结算整条链在 /web/settlement-web.js
   const bookingDetailButton = event.target.closest('[data-view-booking]')
   if (bookingDetailButton) {
     jumpToBooking(bookingDetailButton.dataset.viewBooking)
@@ -5256,16 +5250,17 @@ async function createManualBookingDraft(conversationId = '') {
   const date = document.querySelector('#manualDraftDate')?.value || ''
   const time = document.querySelector('#manualDraftTime')?.value || ''
   const notes = document.querySelector('#manualDraftNotes')?.value.trim() || ''
-  if (!serviceId) {
-    toast(owner.lang === 'zh' ? '请先选择服务' : 'Please select a service')
+  if (!serviceId || !date || !time) {
+    toast(owner.lang === 'zh' ? '请先选择服务、日期和时间' : 'Please select a service')
     return
   }
   const data = await request('/admin/booking-drafts', {
     method: 'POST',
     body: JSON.stringify({
       conversationId,
+      storeId: (owner.businessHoursStores || [])[0]?.id || '',
       serviceId,
-      technicianId,
+      technicianId: technicianId || (owner.technicians || [])[0]?.id || '',
       date,
       time,
       notes,
@@ -5276,7 +5271,7 @@ async function createManualBookingDraft(conversationId = '') {
   await refreshWechatConversations()
   if (conversationId) owner.wechatMockSessionId = `live:${conversationId}`
   renderWechatMock()
-  toast(owner.lang === 'zh' ? '已生成可支付预约草稿链接' : 'Booking draft link created')
+  toast(owner.lang === 'zh' ? '预约草稿已生成，收款线下完成' : 'Booking draft link created')
 }
 
 async function respondBackendQuote(id) {
@@ -6358,7 +6353,7 @@ function renderMemberTabs() {
   document.querySelector('#mtabTimes')?.classList.toggle('hidden', tab !== 'times')
   const cpn = document.querySelector('#mtabCoupon')
   if (cpn) cpn.style.display = tab === 'coupon' ? '' : 'none'
-  // v1.2 五页签:积分商城独立第④签(店主拍板 08-18)
+  window.LLMembershipSummary.show({ host: document.querySelector('#mtabTiers'), request, escapeHtml, visible: tab === 'tiers' })
   const mall = document.querySelector('#mtabMall')
   if (mall) mall.style.display = tab === 'mall' ? '' : 'none'
   document.querySelector('#mtabTiers')?.classList.toggle('hidden', tab !== 'tiers')
@@ -6429,8 +6424,8 @@ function renderMallSwitch() {
   const st = membershipData.mall || { enabled: false, locked: true }
   row.innerHTML = `
     <div class="service-admin-item" style="background:var(--card);margin-top:10px">
-      <div><strong>线上自助购买</strong>
-        <div class="subtle">${st.locked ? '微信支付通道未接通,此开关锁定——商城仅展示+「到店购买」提示(批⑤接通后解锁)' : '通道已接通,可开放顾客线上自助购买'}</div>
+      <div><strong>在线支付</strong>
+        <div class="subtle">本平台不提供在线支付；顾客可查看套餐，到店线下购买，门店记录收款与权益。</div>
       </div>
       <label class="service-active-toggle"><input type="checkbox" data-mall-switch ${st.enabled ? 'checked' : ''} ${st.locked ? 'disabled' : ''}><span class="subtle">${st.enabled ? '开' : '关'}</span></label>
     </div>`
@@ -6798,7 +6793,7 @@ function subscriptionMarkup() {
             </div>
           </div>
           <button class="primary sub-pay" type="button" data-sub-renew>立即续费 ${subMoney(payCents)}</button>
-          <p class="sub-note" style="margin-top:10px">${d.mockPay ? '当前为本地沙盘模式，可模拟支付联调。' : '支付通道开通前，下单后由平台确认收款并顺延到期日。'}</p>
+          <p class="sub-note" style="margin-top:10px">${d.mockPay ? '当前为本地沙盘模式，可模拟支付联调。' : '下单后请联系平台完成线下付款，确认收款后顺延到期日。本平台不发起线上支付。'}</p>
         </div>` : `
         <div class="sub-card">
           <h3>续费</h3>
@@ -6829,7 +6824,7 @@ function subscriptionMarkup() {
       <div style="display:flex;flex-direction:column;gap:16px">
         <div class="sub-card">
           <div class="sub-row">
-            <div><h3>自动续费</h3><p class="sub-note">开启后到期前自动生成续费单并提醒；不会在未确认的情况下扣款。</p></div>
+            <div><h3>续费提醒</h3><p class="sub-note">开启后到期前自动生成续费单并提醒；不发起支付或自动扣款。</p></div>
             <button class="sub-switch" type="button" data-sub-auto aria-checked="${d.autoRenew ? 'true' : 'false'}"><i></i></button>
           </div>
         </div>
@@ -6948,7 +6943,7 @@ if (els.storeSettingsPage) {
 // 下单后的收尾:沙盘模式可模拟支付;生产未接支付则提示走平台确认收款
 async function settleSubOrder(r, kind) {
   if (r.payment === 'mock') {
-    if (await window.UIDialog.confirm(`模拟支付 ${subMoney(r.order.amountCents)}${kind === 'ai' ? ' 开通 AI 智能包' : ' 并顺延到期日'}？\n（本地沙盘，生产环境此处为微信支付）`)) {
+    if (await window.UIDialog.confirm(`模拟支付 ${subMoney(r.order.amountCents)}${kind === 'ai' ? ' 开通 AI 智能包' : ' 并顺延到期日'}？\n（本地沙盘，正式环境只记录订单并核对线下收款）`)) {
       const p = await request(`/admin/subscription/orders/${r.order.id}/mock-pay`, { method: 'POST', body: '{}' })
       toast(kind === 'ai' ? `已开通至 ${subDate(p.aiExpiresAt)}` : `续费成功，有效期至 ${subDate(p.expiresAt)}`)
     }
@@ -7528,9 +7523,7 @@ function renderDepositSettings() {
         </div>
 
         <button class="primary slim" id="dpSave" type="button">${zh ? '保存并生效' : 'Save'}</button>
-        <p class="subtle">${depositSettings.onlinePaymentReady
-          ? (zh ? '线上支付通道已接通。' : 'Online payment is live.')
-          : (zh ? '线上支付通道未接通,文案里不会出现「在线支付定金」;接通后自动切换。' : 'Online payment is not live yet.')}</p>
+        <p class="subtle">${zh ? '所有收款和充值均在线下完成，本平台仅记录门店业务。' : 'All collection and top-ups happen offline. This platform records store activity only.'}</p>
       </div>
 
       <div class="dep-preview">

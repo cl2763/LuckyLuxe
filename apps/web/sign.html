@@ -1,18 +1,24 @@
 <!DOCTYPE html>
-<html lang="zh" data-theme="light">
+<html lang="zh">
 <head>
 <meta name="referrer" content="no-referrer">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>服务确认单</title>
-<!-- 06g §四① 店主裁:金色统一到合同图令牌 —— 这一页从此不再自带一套金。
-     ⚠️ `data-theme="light"` —— **这是一颗钉子,不是设计**(上闸见 test-color-usage ⑧:全仓只许 2 颗)。
-       · **为什么钉**:本页整页仍是浅色版式(白卡、写死的浅底一大片),这一批只把金接到令牌上。
-         不钉的话,深色档下**金会跟着翻成浅金,而面色不翻** —— 浅金压浅底 = 看不见,比不接还糟。
-       · **谁来拆**:**D188「整页双档化」**那一条 —— 把本页的写死浅底/白卡一起令牌化之后,
-         这一行连同本段注释一起删掉。欠账已登记在 handoff/P0-P2开检反馈总表.md 的 D188 条目下。
-       · **不许再钉第三页**:店主 06h 裁 #36 原话 ——「钉浅色是躲深色最便宜的一条路,不上闸它会长」。 -->
-<link rel="stylesheet" href="/web/design-tokens.css?v=20260910f-gold">
+<script>
+// The trial is served under /experience on the public proxy. Every request
+// from this page, including images and signed documents, must remain there.
+// The mini-program supplies its effective theme. Browser entry uses its saved theme.
+const signTheme = new URLSearchParams(location.search).get('theme')
+let savedTheme = ''
+try { savedTheme = localStorage.getItem('ll-admin-theme') || '' } catch {}
+const selectedTheme = ['light','dark'].includes(signTheme) ? signTheme : savedTheme
+if (['light','dark'].includes(selectedTheme)) document.documentElement.dataset.theme = selectedTheme
+window.signScopePrefix = location.pathname.startsWith('/experience/') ? '/experience' : ''
+window.signScopePath = path => window.signScopePrefix + (path.startsWith('/') ? path : '/' + path)
+document.write('<base href="' + (window.signScopePrefix || '') + '/">')
+</script>
+<link rel="stylesheet" href="web/design-tokens.css?v=20260910f-gold">
 <style>
   /* 金额红线:本页**不做任何金额计算**,所有数字直接显示 /settlements/:code 的返回值。
      页面里找不到任何加减乘除 —— 这是结构性保证,不是靠自觉。 */
@@ -23,22 +29,22 @@
      现已删掉这三条,由令牌供值。
      ⚠️ 剩下的 --soft / --muted / --success / --danger / --warn / --ok **不是令牌名**,先留着,
         已逐条登记进 D188(整页双档化时要么并进令牌、要么写明留作页面局部色)。 */
-  :root{--soft:#f1e7df;--muted:#8c8279;--danger:#a34c48;--ok:#2f7d5c}
+  :root{--soft:var(--wall);--muted:var(--sub);--danger:var(--bad);--ok:var(--good)}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{background:var(--soft);color:var(--ink);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;font-size:15px;line-height:1.55}
   .wrap{max-width:460px;margin:0 auto;padding:14px 14px 120px}
   .topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 4px 10px}
   .topbar h1{font-size:16px;font-weight:750}
-  .pill{font-size:12px;border-radius:999px;padding:3px 11px;background:#fff;border:1px solid var(--line);color:var(--muted)}
-  .pill.warn{background:#fff5ec;border-color:#f0d8bf;color:#8a5a2b}
-  .doc{background:#fff;border-radius:16px;padding:18px 16px;box-shadow:0 2px 14px rgba(45,40,38,.06);position:relative}
+  .pill{font-size:12px;border-radius:999px;padding:3px 11px;background:var(--card);border:1px solid var(--line);color:var(--muted)}
+  .pill.warn{background:var(--tagmbg);border-color:var(--line);color:var(--tagm)}
+  .doc{background:var(--card);border-radius:16px;padding:18px 16px;box-shadow:0 2px 14px rgba(45,40,38,.06);position:relative}
   .doc-head{border-bottom:1px dashed var(--line);padding-bottom:12px;margin-bottom:12px}
   .store{font-size:17px;font-weight:800}
   .meta{font-size:12px;color:var(--muted);margin-top:4px}
   .sign-slot{position:absolute;top:16px;right:16px;text-align:center;width:104px}
   .sign-slot .lab{font-size:11px;color:var(--muted)}
   .sign-slot .val{font-family:"Kaiti SC","STKaiti",serif;font-size:22px;color:var(--ink);border-bottom:1px solid var(--line);min-height:30px;padding:2px 0}
-  .sign-slot .val.empty{color:#cfc5ba;font-size:12px;font-family:inherit;padding-top:9px}
+  .sign-slot .val.empty{color:var(--sub);font-size:12px;font-family:inherit;padding-top:9px}
   .sec{margin-top:16px}
   .sec h2{font-size:12.5px;color:var(--muted);font-weight:700;margin-bottom:8px}
   .row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-size:14px}
@@ -46,74 +52,78 @@
   .row .amt{white-space:nowrap}
   .strike{color:var(--muted);text-decoration:line-through;font-size:12.5px;margin-right:6px}
   .free{color:var(--ok);font-weight:700;font-size:13px}
-  .badge{display:inline-block;font-size:11px;background:#fff5ec;color:#8a5a2b;border:1px solid #f0d8bf;border-radius:8px;padding:1px 7px;margin-left:6px}
-  .proxy-line{background:#fff5ec;border:1px solid #f0d8bf;border-radius:9px;padding:7px 10px;font-size:12.5px;color:#8a5a2b;margin-bottom:8px}
+  .badge{display:inline-block;font-size:11px;background:var(--tagmbg);color:var(--tagm);border:1px solid var(--line);border-radius:8px;padding:1px 7px;margin-left:6px}
+  .proxy-line{background:var(--tagmbg);border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:12.5px;color:var(--tagm);margin-bottom:8px}
   .totals{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
   .totals .row{font-size:13.5px;color:var(--muted)}
   .totals .row b{color:var(--ink)}
   .totals .grand{font-size:19px;font-weight:850;color:var(--ink);padding-top:8px}
   .totals .grand span:last-child{color:var(--brandd)}
+  .confirmation-checks{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+  .confirmation-checks .disc{margin-top:0}
   .disc{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:16px;font-size:13px;display:flex;gap:9px;align-items:flex-start}
   .disc input{width:17px;height:17px;margin-top:2px;flex:none}
+  .return-me{display:block;width:100%;margin-top:16px;padding:14px;border:0;border-radius:12px;background:var(--hero);color:var(--heroink);font-size:15px;font-weight:800}
   .pad{margin-top:14px}
   .pad canvas{width:100%;height:150px;background:#fff;border:1px dashed var(--line);border-radius:12px;touch-action:none;display:block}
   .pad .hint{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px}
   .pad .hint button{border:none;background:none;color:var(--brandd);font-size:12px;text-decoration:underline;cursor:pointer}
-  .cta{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 14px calc(12px + env(safe-area-inset-bottom))}
+  .cta{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:12px 14px calc(12px + env(safe-area-inset-bottom))}
   .cta .inner{max-width:460px;margin:0 auto}
-  .cta button{width:100%;border:none;border-radius:12px;background:var(--ink);color:#fff;font-size:16px;font-weight:800;padding:14px;cursor:pointer}
-  .cta button:disabled{background:#d6cdc4;color:#fff}
+  .cta button{width:100%;border:none;border-radius:12px;background:var(--hero);color:var(--heroink);font-size:16px;font-weight:800;padding:14px;cursor:pointer}
+  .cta button:disabled{background:var(--line);color:var(--sub)}
   /* 还差一步时:按钮不死灰(点得动、点了给提示),只是淡一档 + 上方常驻一行说明 */
-  .cta button.waiting{background:#a8a099}
-  .cta .need{font-size:12.5px;color:#a8551f;background:#fdf3ec;border-radius:9px;padding:7px 10px;margin-bottom:8px;text-align:center}
+  .cta button.waiting{background:var(--hero2)}
+  .cta .need{font-size:12.5px;color:var(--tagm);background:var(--tagmbg);border-radius:9px;padding:7px 10px;margin-bottom:8px;text-align:center}
   .disc.flash{outline:2px solid var(--brandd);outline-offset:2px;border-radius:12px}
   /* 屏 D1/D1b 更正记录卡:独立追加在快照下方,原单区一字不改 */
-  .pill.amend{background:#fdf3ec;color:#a8551f;border-color:#f0d9c4}
-  .amend-card{background:#fff;border-radius:16px;padding:14px 16px;margin-top:12px;box-shadow:0 2px 14px rgba(45,40,38,.06)}
+  .pill.amend{background:var(--tagmbg);color:var(--tagm);border-color:var(--line)}
+  .amend-card{background:var(--card);border-radius:16px;padding:14px 16px;margin-top:12px;box-shadow:0 2px 14px rgba(45,40,38,.06)}
   .amend-card .hd{font-size:15px;font-weight:800;color:var(--ink);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
   .amend-card .hd .sub{font-size:11.5px;font-weight:400;color:var(--muted)}
   .amend-card .row{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px dashed var(--line)}
   .amend-card .row .dir{font-size:13.5px;font-weight:700;color:var(--ink)}
   .amend-card .row .why{font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:3px}
-  .amend-card .row .ts{font-size:11.5px;color:#a99d92;margin-top:3px}
+  .amend-card .row .ts{font-size:11.5px;color:var(--sub);margin-top:3px}
   .amend-card .row .d{font-size:16px;font-weight:800;white-space:nowrap}
   .amend-card .row .d.refund{color:var(--ok)}
-  .amend-card .row .d.charge{color:#a8551f}
+  .amend-card .row .d.charge{color:var(--tagm)}
   .amend-card .actual{display:flex;justify-content:space-between;align-items:baseline;padding-top:12px;font-size:15px;font-weight:800;color:var(--ink)}
   .amend-card .actual b{font-size:20px;color:var(--brandd)}
   .amend-card .foot{margin-top:8px;font-size:11.5px;color:var(--muted);line-height:1.6}
   /* 已签单右上角的真实笔迹:嵌快照本体,裁到签名那一块 */
   .sign-slot .val{overflow:hidden}
-  .sign-slot .val .ink{display:block;width:100%;height:48px;object-fit:contain;object-position:left center;mix-blend-mode:multiply}
+  .sign-slot .val .ink{display:block;width:100%;height:48px;object-fit:contain;object-position:left center;background:#fff;border-radius:6px}
   .sign-slot .val .ink-note{display:block;font-size:10.5px;color:var(--muted);font-weight:400;margin-top:2px}
   .cta .foot{text-align:center;font-size:11.5px;color:var(--muted);margin-top:8px}
-  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;background:var(--ink);color:#fff;font-size:13px;border-radius:10px;padding:10px 18px;opacity:0;transition:.25s;z-index:99;max-width:88vw;text-align:center}
+  .cta .foot a{color:var(--brandd);text-decoration:underline;text-underline-offset:3px}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;background:var(--hero);color:var(--heroink);font-size:13px;border-radius:10px;padding:10px 18px;opacity:0;transition:.25s;z-index:99;max-width:88vw;text-align:center}
   .toast.show{opacity:1}
   .done{text-align:center;padding:30px 10px;color:var(--ok);font-weight:800}
-  .err{background:#fff;border-radius:16px;padding:28px 18px;text-align:center;color:var(--danger)}
+  .err{background:var(--card);border-radius:16px;padding:28px 18px;text-align:center;color:var(--danger)}
   /* 屏 S4 本人确认绑定:只对未绑定顾客显示的签字前置卡 */
-  .claim{background:#fff;border-radius:16px;padding:18px 16px;margin-bottom:14px;box-shadow:0 2px 14px rgba(45,40,38,.06)}
+  .claim{background:var(--card);border-radius:16px;padding:18px 16px;margin-bottom:14px;box-shadow:0 2px 14px rgba(45,40,38,.06)}
   .claim h2{font-size:19px;font-weight:800;color:var(--ink);margin:0 0 4px;display:flex;align-items:center;gap:8px}
-  .claim .badge{font-size:11px;font-weight:700;background:#fdecec;color:var(--danger);border-radius:8px;padding:2px 8px}
+  .claim .badge{font-size:11px;font-weight:700;background:var(--badbg);color:var(--danger);border-radius:8px;padding:2px 8px}
   .claim p{font-size:13px;color:var(--muted);line-height:1.7;margin:8px 0 14px}
-  .claim button.main{width:100%;border:none;border-radius:12px;background:var(--ink);color:#fff;font-size:15.5px;font-weight:800;padding:14px;cursor:pointer}
+  .claim button.main{width:100%;border:none;border-radius:12px;background:var(--hero);color:var(--heroink);font-size:15.5px;font-weight:800;padding:14px;cursor:pointer}
   .claim .alt{margin-top:12px;font-size:12px;color:var(--muted);line-height:1.7;text-align:center}
   .claim .alt a{color:var(--brandd)}
   .claim .phone-auth{margin-top:10px;text-align:center}
   .claim .phone-auth button{border:1px solid var(--line);background:var(--paper);color:var(--brandd);border-radius:10px;padding:9px 16px;font-size:12.5px;cursor:pointer}
   .claim .note{margin-top:10px;font-size:12px;border-radius:10px;padding:9px 11px;line-height:1.6}
-  .claim .note.ok{background:#e7f0ea;color:var(--ok)}
-  .claim .note.warn{background:#fdf3ec;color:#a8551f}
+  .claim .note.ok{background:var(--goodbg);color:var(--ok)}
+  .claim .note.warn{background:var(--tagmbg);color:var(--tagm)}
   .locked{opacity:.45;pointer-events:none}
   /* 屏 C2 优惠券:签字前可选/更换,签后整页锁定。无可用券时整行不渲染(不占位)。 */
-  .cpn-card{background:#fff;border-radius:14px;padding:12px 14px;margin-top:12px;box-shadow:0 2px 14px rgba(45,40,38,.06);display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .cpn-card{background:var(--card);border-radius:14px;padding:12px 14px;margin-top:12px;box-shadow:0 2px 14px rgba(45,40,38,.06);display:flex;justify-content:space-between;align-items:center;gap:10px}
   .cpn-card .lab{font-size:13px;color:var(--muted)}
-  .cpn-card .tag{display:inline-block;font-size:11px;background:#e7f0ea;color:var(--ok);border-radius:8px;padding:1px 7px;margin-left:6px;font-weight:700}
+  .cpn-card .tag{display:inline-block;font-size:11px;background:var(--goodbg);color:var(--ok);border-radius:8px;padding:1px 7px;margin-left:6px;font-weight:700}
   .cpn-card .val{font-weight:700;color:var(--ok);font-size:14px}
   .cpn-card .val.none{color:var(--muted);font-weight:500}
   .cpn-card .arr{color:#c8c0b2;font-size:13px;margin-left:6px}
   .cpn-mask{position:fixed;inset:0;background:rgba(35,30,28,.42);z-index:120;display:flex;align-items:flex-end}
-  .cpn-sheet{width:100%;max-width:460px;margin:0 auto;background:#fff;border-radius:18px 18px 0 0;padding:16px 14px calc(16px + env(safe-area-inset-bottom));max-height:82vh;overflow:auto}
+  .cpn-sheet{width:100%;max-width:460px;margin:0 auto;background:var(--card);border-radius:18px 18px 0 0;padding:16px 14px calc(16px + env(safe-area-inset-bottom));max-height:82vh;overflow:auto}
   .cpn-sheet h3{font-size:14px;margin-bottom:10px}
   .cpn-opt{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:9px;cursor:pointer}
   .cpn-opt.on{border-color:var(--ok);background:#eef5f1}
@@ -123,7 +133,7 @@
   .cpn-opt .s{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
   .cpn-opt.dis .s{color:var(--danger)}
   .cpn-opt .d{font-weight:800;color:var(--ok);font-size:13.5px}
-  .cpn-sheet .close{width:100%;border:none;border-radius:12px;background:var(--ink);color:#fff;font-size:15px;font-weight:800;padding:12px;margin-top:4px;cursor:pointer}
+  .cpn-sheet .close{width:100%;border:none;border-radius:12px;background:var(--hero);color:var(--heroink);font-size:15px;font-weight:800;padding:12px;margin-top:4px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -137,7 +147,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="/web/sign-entry.js"></script>
+<script src="https://res.wx.qq.com/open/js/jweixin-1.6.0.js"></script>
+<script>document.write('<script src="' + window.signScopePath('/web/sign-entry.js') + '"><\/script>')</script>
 <script>
 // 金额一律取后端返回值。这里只有一个 money() 负责「分 → 显示」,没有任何业务计算。
 // 金额格式由后端下发的 currencyDisplay 决定(CNY→¥358,CAD→CAD $50.00),前端不做任何换算
@@ -149,6 +160,10 @@ function money(cents) {
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])) }
 function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2600) }
+function returnToMe() {
+  if (window.wx && wx.miniProgram && wx.miniProgram.switchTab) wx.miniProgram.switchTab({url:'/pages/me/index',fail:()=>toast('暂时无法返回，请点左上角返回后进入「我的」。')})
+  else { location.assign(signScopePath('/?tab=me')) }
+}
 
 /* 进这一页有两个门(规则⑧ 双入口等效):
      ① 顾客在自己小程序里点通知 → /sign?code=XXX
@@ -158,29 +173,34 @@ const qs = new URLSearchParams(location.search)
 const signToken = qs.get('t') || ''
 const signHeaders = () => ({'content-type':'application/json',...(signToken?{'x-settlement-token':signToken}:{})})
 let nextSignUrl = ''
-let code = decodeURIComponent(location.pathname.replace(/^\/sign\/?/, '') || qs.get('code') || '')
+let code = decodeURIComponent(location.pathname.replace(/^\/experience(?=\/sign)/, '').replace(/^\/sign\/?/, '') || qs.get('code') || '')
 let data = null
 let claimDone = false      // 屏 S4:本人确认绑定完成没有
 let authPhone = ''         // 可选手机号授权拿到的号(只做一致性校验,不改档案)
 let hasInk = false
 let strokes = []   // 笔迹点阵,按签名板坐标系;签署时随请求提交,由服务端渲进快照 SVG
 
+function themedSignUrl(raw) {
+  const url = new URL(raw, location.href)
+  if (['light','dark'].includes(document.documentElement.dataset.theme)) url.searchParams.set('theme', document.documentElement.dataset.theme)
+  return url.href
+}
 async function load() {
   if(!signToken&&code){
-    try{location.replace(await window.resolveSignEntry(code,qs.get('actor')==='merchant'))}
+    try{location.replace(themedSignUrl(await window.resolveSignEntry(code,qs.get('actor')==='merchant')))}
     catch(e){document.getElementById('boot').textContent=e.message}
     return
   }
   if (signToken) {
     // 扫码进来:凭一次性签署码换单号;换到的同时后端会把状态行推成「顾客核对中」
-    const r = await fetch(`/settlements/by-token/${encodeURIComponent(signToken)}`)
+    const r = await fetch(signScopePath(`/settlements/by-token/${encodeURIComponent(signToken)}`))
     const b = await r.json()
     if (!r.ok) { document.getElementById('boot').textContent = b?.error?.message || '这个签署码无效'; return }
     code = b.code
-    nextSignUrl = b.nextSignUrl || ''
+    nextSignUrl = b.nextSignUrl ? themedSignUrl(b.nextSignUrl) : ''
   }
   if (!code) { document.getElementById('boot').textContent = '缺少服务单号'; return }
-  const res = await fetch(`/settlements/${encodeURIComponent(code)}`,{headers:signHeaders()})
+  const res = await fetch(signScopePath(`/settlements/${encodeURIComponent(code)}`),{headers:signHeaders()})
   const body = await res.json()
   if (!res.ok) { document.getElementById('boot').textContent = body?.error?.message || '找不到这张服务单'; return }
   data = body
@@ -197,7 +217,7 @@ function signSlotHtml(s) {
   if (s.status !== 'signed') return '（签署后显示于此）'
   if (s.snapshot && s.snapshotHasInk) {
     // 真机 SVG 空白件同刀:笔迹图也走 PNG(三端同一格式,不留两套)
-    return `<img class="ink" src="${esc(s.signatureUrl)}" alt="顾客签名" loading="lazy">`
+    return `<img class="ink" src="${esc(s.signatureUrl?.startsWith('/') ? signScopePath(s.signatureUrl) : s.signatureUrl)}" alt="顾客签名" loading="lazy">`
   }
   return `${esc(s.signatureName || '（已签）')}<span class="ink-note">早期单 · 仅存文本</span>`
 }
@@ -211,7 +231,7 @@ function render() {
   /* 屏 S4:只对**未绑定**顾客显示的签字前置卡(规则⑤)。
      绑定 = openid 绑到这张单挂着的档案 —— 单挂谁,建单时就定死,与微信注册手机号无关。
      已绑定顾客直接看到账单,这张卡整块不渲染。 */
-  const needClaim = !signToken && !signed && s.customerBound === false && !claimDone
+  const needClaim = !signScopePrefix && !signToken && !signed && s.customerBound === false && !claimDone
   document.getElementById('wrap').innerHTML = `
     <div class="topbar">
       <h1>服务确认单</h1>
@@ -221,13 +241,12 @@ function render() {
     ${needClaim ? `
     <div class="claim">
       <h2>你是${esc(s.cardOwnerName || '本人')}吗？<span class="badge">${esc(s.bindBadgeText || '未绑定')}</span></h2>
-      <p>确认后本次账单与电子票据自动存入你的小程序「我的 → 消费记录」，同时生成你的专属会员码。</p>
+      <p>确认后本次账单与电子票据自动存入你的小程序「我的 → 消费记录」，同时生成你的专属顾客码。绑定档案不会自动改变会员资格。</p>
       <button class="main" id="claimBtn">是我本人，绑定并继续</button>
       <div class="phone-auth"><button id="phoneAuthBtn">可选：手机号一键授权校验</button></div>
       <div id="claimNote"></div>
       <div class="alt">不是本人（代付/代签不适用，须本人签字）→ 店员设备当面手签</div>
     </div>` : ''}
-    ${!signed && signToken ? `<label class="disc"><input id="signerConfirmed" type="checkbox"><span>我是${esc(s.cardOwnerName || '本单顾客')}，已核对这是本人的服务单。签字不会自动绑定微信。</span></label>` : ''}
     <div class="doc">
       <div class="sign-slot">
         <div class="lab">顾客签名：</div>
@@ -274,19 +293,20 @@ function render() {
         ${s.recharge.groupForecastText ? `<div class="meta">${esc(s.recharge.groupForecastText)}</div>` : ''}
         ${(s.recharge.giftItems || []).length ? `<div style="margin-top:16px;border-top:1px solid var(--line,#e7ddd4);padding-top:12px"><b>赠送物品</b>${s.recharge.giftItems.map((g) => `<div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px"><span style="overflow-wrap:anywhere">${esc(g.name)} × ${Number(g.quantity)}</span><span class="meta">单件价值 ${esc(money(g.unitValueCents))}</span></div>`).join('')}<div class="meta" style="margin-top:10px">物品领取请联系门店，此清单不代表已领取。价值不计入储值余额。</div></div>` : ''}
       </div>` : ''}
-      ${s.storedUnusedNotice ? `<div class="sec"><div class="meta" style="color:#8a3a33">${esc(s.storedUnusedNotice)}</div></div>` : ''}
+      ${s.storedUnusedNotice ? `<div class="sec"><div class="meta" style="color:var(--bad)">${esc(s.storedUnusedNotice)}</div></div>` : ''}
     </div>
     ${amendCardHtml(s)}
     ${couponCardHtml()}
 
-    ${signed ? `<div class="done">✓ 本单已于 ${esc(s.signedAtText || '')} 签署完成${s.snapshot ? `<div style="margin-top:10px;font-weight:500"><a href="${esc(s.snapshot.url)}" target="_blank">查看签署单</a></div>` : ''}${s.groupPendingCount > 0 ? `
-      <div style="margin-top:16px;color:#8a5a2b;font-weight:600">还有 ${s.groupPendingCount} 份服务确认单待签</div>
+    ${signed ? `<div class="done">✓ 本单已于 ${esc(s.signedAtText || '')} 签署完成${s.snapshot ? `<div style="margin-top:10px;font-weight:500"><a href="${esc(s.snapshot.url?.startsWith('/') ? signScopePath(s.snapshot.url) : s.snapshot.url)}" target="_blank">查看签署单</a></div>` : ''}${s.groupPendingCount > 0 ? `
+      <div style="margin-top:16px;color:var(--tagm);font-weight:600">还有 ${s.groupPendingCount} 份服务确认单待签</div>
       <!-- D68①(店主 08-23):连签用**替换式导航**——location.replace 不压栈,签完 N 份不用按 N 次返回 -->
-      <button type="button" onclick="location.replace('${esc(nextSignUrl || '/sign/'+encodeURIComponent(s.groupNextPendingCode))}')" style="display:block;width:100%;margin-top:10px;background:#2d2826;color:#fff;border:0;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px">继续签下一份 →</button>` : ''}</div>` : `
+      <button type="button" onclick="location.replace('${esc(nextSignUrl || signScopePath('/sign/'+encodeURIComponent(s.groupNextPendingCode)))}')" style="display:block;width:100%;margin-top:10px;background:var(--hero);color:var(--heroink);border:0;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px">继续签下一份 →</button>` : (signToken ? `<button type="button" id="returnToMe" class="return-me">返回「我的」查看订单</button>` : '')}</div>` : `
+    <div class="confirmation-checks" aria-label="账单确认声明">${signToken ? `<label class="disc"><input id="signerConfirmed" type="checkbox"><span>我是${esc(s.cardOwnerName || '本单顾客')}，已核对这是本人的服务单。签字不会自动绑定微信。</span></label>` : ''}
     <label class="disc">
       <input type="checkbox" id="disc">
       <span>${esc(data.disclaimer)}</span>
-    </label>
+    </label></div>
     <div class="pad">
       <canvas id="pad"></canvas>
       <div class="hint"><span>请在框内签名</span><button type="button" id="clearPad">重签</button></div>
@@ -296,11 +316,12 @@ function render() {
   const storedLeg = s.payments.filter((p) => p.leg === 'stored_value' || p.leg === 'migrate_stored').reduce((n, p) => n + p.amountCents, 0)
   // B3-1:随单充值的签署后果要说全——签字=充值入账+储值扣除,两件事一次签
   document.getElementById('ctaFoot').innerHTML = s.recharge && s.recharge.lines
-    ? `签署后充值即时入账${storedLeg ? `,储值卡随即扣除 ${money(storedLeg)}` : ''} · 有问题？<a href="#" id="afterSales">联系客服</a>`
+    ? `线下收款记录随签署入账${storedLeg ? `,储值卡随即扣除 ${money(storedLeg)}` : ''} · 有问题？<a href="#" id="afterSales">联系客服</a>`
     : (storedLeg
       ? `签署后储值卡将即时扣除 ${money(storedLeg)} · 有问题？<a href="#" id="afterSales">联系客服</a>`
       : '有问题？<a href="#" id="afterSales">联系客服</a>')
   if (!signed) initPad()
+  document.getElementById('returnToMe')?.addEventListener('click', returnToMe)
   const opener = document.getElementById('cpnOpen')
   if (opener) opener.addEventListener('click', openCouponSheet)
   /* 屏 S4:没确认本人之前,账单以下整块置灰不可点、CTA 也锁住 ——
@@ -411,7 +432,7 @@ function openCouponSheet() {
 // 改券后全部金额由后端重算刷新 —— 本页一处加减都没有
 async function applyCoupon(grantId) {
   try {
-    const res = await fetch(`/settlements/${encodeURIComponent(code)}/coupon`, {
+    const res = await fetch(signScopePath(`/settlements/${encodeURIComponent(code)}/coupon`), {
       method: 'POST',
       headers: signHeaders(),
       body: JSON.stringify({ grantId })
@@ -505,10 +526,10 @@ function missingStep() {
   /* 🔴 R3 之二:没确认本人时,整块是锁着的(S4),可提示语却写「请勾选上方的确认声明」——
      而那个勾选框**本身也是禁用的**。店主照着提示去点,点不动,按钮也点不动,
      于是就是「确认签字用不了」。缺哪一步就说哪一步:锁着的时候先说"确认本人"。 */
-  if(signToken&&!document.getElementById('signerConfirmed')?.checked)return {key:'signerConfirmed',text:'请先核对并确认这是本人的服务单。'}
   if (document.getElementById('claimBtn')) {
     return { key: 'claim', text: '还差一步:请先点上方的「是我本人，绑定并继续」' }
   }
+  if(signToken&&!document.getElementById('signerConfirmed')?.checked)return {key:'signerConfirmed',text:'请先核对并确认这是本人的服务单。'}
   const disc = document.getElementById('disc')
   if (!disc || !disc.checked) return { key: 'disc', text: '还差一步:请勾选上方的确认声明' }
   if (!hasInk) return { key: 'ink', text: '还差一步:请在签名框里手写签名' }
@@ -534,7 +555,7 @@ async function doClaim() {
   if (!btn) return
   btn.disabled = true; btn.textContent = '绑定中…'
   try {
-    const res = await fetch(`/settlements/${encodeURIComponent(code)}/claim`, {
+    const res = await fetch(signScopePath(`/settlements/${encodeURIComponent(code)}/claim`), {
       method: 'POST', headers: signHeaders(),
       body: JSON.stringify(authPhone ? { phone: authPhone } : {})
     })
@@ -576,7 +597,7 @@ document.getElementById('signBtn').addEventListener('click', async () => {
   }
   btn.disabled = true; btn.textContent = '提交中…'
   try {
-    const res = await fetch(`/settlements/${encodeURIComponent(code)}/sign`, {
+    const res = await fetch(signScopePath(`/settlements/${encodeURIComponent(code)}/sign`), {
       method: 'POST',
       headers: signHeaders(),
       body: JSON.stringify({
@@ -592,6 +613,7 @@ document.getElementById('signBtn').addEventListener('click', async () => {
     if (!res.ok) throw new Error(body?.error?.message || '签署失败')
     toast(body.storedDeductedCents ? `已签署,储值卡扣除 ${money(body.storedDeductedCents)}` : '已签署')
     await load()
+    if (signToken && data?.settlement?.status === 'signed' && !data.settlement.groupPendingCount) setTimeout(returnToMe, 1400)
   } catch (error) {
     toast(error.message)
     btn.disabled = false; btn.textContent = '确认签字'

@@ -153,12 +153,12 @@ window.TodayBoard = (function () {
         <button class="primary slim" data-tb-setup type="button">去设置营业时间</button>
       </div>` : dv.isClosed ? `<div class="tb-closed">本日休息${dv.specialNote ? ' · ' + escapeHtml(dv.specialNote) : ''}</div>` : `
       <div class="tb-summary">
-        <span class="tb-pill">今日 <b>${dv.total}</b> 单</span>
-        ${dv.activeCount ? `<span class="tb-pill live">在做 <b>${dv.activeCount}</b> 人</span>` : ''}
-        <span class="tb-pill">在岗 <b>${dv.working}</b> 人</span>
-        <span class="tb-pill">空档 <b>${dv.freeHours}</b> h</span>
-        ${pendingCloseCount ? `<button class="tb-pill hot" data-tb-close type="button">待日结 <b>${pendingCloseCount}</b></button>` : ''}
-        ${(stateT.pendingNotes || []).length ? `<button class="tb-pill warn" data-tb-notes type="button">待写小记 <b>${stateT.pendingNotes.length}</b></button>` : ''}
+        <span class="tb-pill"><span>今日订单</span><b>${dv.total} 单</b></span>
+        ${dv.activeCount ? `<span class="tb-pill live"><span>在做</span><b>${dv.activeCount} 人</b></span>` : ''}
+        <span class="tb-pill"><span>在岗</span><b>${dv.working} 人</b></span>
+        <span class="tb-pill"><span>空档</span><b>${dv.freeHours} h</b></span>
+        ${pendingCloseCount ? `<button class="tb-pill hot" data-tb-close type="button"><span>待日结</span><b>${pendingCloseCount}</b></button>` : ''}
+        ${(stateT.pendingNotes || []).length ? `<button class="tb-pill warn" data-tb-notes type="button"><span>待写小记</span><b>${stateT.pendingNotes.length}</b></button>` : ''}
       </div>
       ${dv.cols.length ? `
       <div class="tb-grid">
@@ -173,7 +173,7 @@ window.TodayBoard = (function () {
           <div class="tb-more" data-tb-more hidden><span>右边还有 ›</span></div>
           <div class="tb-rin" data-tb-rin>
             <div class="tb-heads">
-              ${dv.cols.map((c) => `<div class="tb-th" style="width:${c.width}px"><div class="tb-nm">${escapeHtml(c.name)}</div><div class="tb-rl">${escapeHtml(c.role)}</div><div class="tb-st ${c.busy ? 'busy' : 'free'}">${c.busy ? '忙' : '空'}</div></div>`).join('')}
+              ${dv.cols.map((c) => `<div class="tb-th" style="width:${c.width}px"><div class="tb-nm">${escapeHtml(c.name)}${dv.duty?.techIds.includes(c.id) ? ' · 值日' : ''}</div><div class="tb-rl">${escapeHtml(c.role)}</div><div class="tb-st ${c.busy ? 'busy' : 'free'}">${c.busy ? '忙' : '空'}</div></div>`).join('')}
             </div>
             <div class="tb-cols" style="height:${dv.gridH}px">
               ${dv.cols.map((col) => `
@@ -308,11 +308,15 @@ window.TodayBoard = (function () {
     })
     mount.querySelectorAll('[data-duty-tech]:not([disabled])').forEach(function (el) {
       el.addEventListener('click', async function () {
+        if (el.disabled) return
         const on = !el.classList.contains('on')
+        el.disabled = true
         try {
           await deps.request('/admin/duty/mark', { method: 'POST', body: JSON.stringify({ date: stateT.date, technicianId: el.dataset.dutyTech, on }) })
-          load(stateT.date, deps)
+          await load(stateT.date, deps)
+          deps.toast(on ? '已安排值日并发送站内提醒' : '已取消值日')
         } catch (e2) { deps.toast((e2 && e2.message) || '值日保存失败') }
+        finally { el.disabled = false }
       })
     })
     mount.querySelectorAll('[data-tb-free]').forEach(function (el) {

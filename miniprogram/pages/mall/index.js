@@ -13,17 +13,24 @@ Page({
   onShow() { this.load() },
 
   async load() {
+    this.setData({ loading: true, error: '' })
     try {
-      await refreshStoreCurrency().catch(() => {})
-      const r = await api.getMall()
+      const [r] = await Promise.all([api.getMall(), refreshStoreCurrency()])
       r.items = (r.items || []).map((it) => ({ ...it, giftItems: (it.giftItems || []).map((g) => ({ ...g, unitValueText: money(g.unitValueCents, 2) })) }))
-      this.setData({ loading: false, mall: r, error: '' })
+      const filter = (r.filters || []).some(f => f.key === this.data.filter) ? this.data.filter : 'all'
+      this.setData({ loading: false, mall: r, error: '', filter })
+      this.renderGroups()
     } catch (e) {
       this.setData({ loading: false, mall: null, error: (e && e.message) || '商城加载失败' })
     }
   },
 
-  pickFilter(e) { this.setData({ filter: e.currentTarget.dataset.k || 'all' }) },
+  renderGroups() {
+    const mall = this.data.mall || {}
+    const visibleSections = (mall.sections || []).filter(s => this.data.filter === 'all' || s.kind === this.data.filter).map(s => ({ ...s, items: (mall.items || []).filter(i => i.section === s.key) })).filter(s => s.items.length)
+    this.setData({ visibleSections })
+  },
+  pickFilter(e) { this.setData({ filter: e.currentTarget.dataset.k || 'all' }); this.renderGroups() },
   // B3-2:同屏展开说明(不弹原生弹窗,四之七);再点收起
   tapBuy(e) {
     const id = e.currentTarget.dataset.id

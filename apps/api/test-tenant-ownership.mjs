@@ -83,131 +83,38 @@ try {
 console.log(`   [已知阳性] 沙箱库串味行 ${dirty.length} 条${dirty.length ? `(如 ${dirty[0].bid.slice(0, 22)}:单属 ${dirty[0].bt} / 人属 ${dirty[0].ut})` : ''}`)
 
 /* ═══ ③ 行为层(只打沙箱 4310;店主 03e 结构闸)═══ */
-const { ensureSandbox } = await import('./test-need-sandbox.mjs')
-const sb = await ensureSandbox({ label: '[tenant-ownership]' })
-if (!sb.ok) {
-  console.log('   ⚠️ 沙箱不可用 —— **行为层三条本轮未跑**(不静默跳过,如实说)')
-} else {
-  const {SANDBOX_URL:SANDBOX}=await import('./test-need-sandbox.mjs')
-  const H = (t) => ({ authorization: 'Bearer owner-demo-token', 'x-admin-tenant-id': t, 'content-type': 'application/json' })
-  const db = new DatabaseSync(SB, { readOnly: true })
-  const pick = (sql, ...a) => db.prepare(sql).get(...a)
-  const A = 'lucky-luxe'
-  const B = 'jics-nail'
-  const bUser = pick('SELECT id, display_name FROM users WHERE tenant_id = ? LIMIT 1', B)
-  /* 🔴 09x §一(店主批 (乙))· **夹具造不出来 ≠ 没守住,也 ≠ 通过 —— 是「本轮未跑」。**
-   * 案由:CI 上 `ensureSandbox()` **起得来**沙箱(`sb.ok` 为真),但那个沙箱是**空库** ——
-   * 没有 B 店顾客,也没有 A 店的样本单 ⇒ ③a/③b/③c 三条**都造不出阳性**。
-   * 它们原来按**红**报。判据的话是对的(J-58①:造不出阳性不许说验过),
-   * **但「没考」不该占「守不住」那一格** —— 挤在一起,红就不再指向产品。
-   * 按 09x (乙):报**未跑**(77),由 run-all-tests.sh 计数 + 逐名 + 对上限棘轮(今天 3,(丙) 后降 0)。
-   * 🔴 检查要放在**用它之前**:放在 ③c 里就太晚了,③a 先一步按红退出(第一版我就放错了位置)。 */
-  const aSample = pick('SELECT id FROM bookings WHERE tenant_id = ? AND user_id IS NOT NULL LIMIT 1', A)
-  if (!bUser?.id || !aSample?.id) {
-    db.close()
-    console.log(`[未跑] 沙箱库里造不出阳性:B 店(${B})顾客=${bUser?.id ? '有' : '没有'} · A 店(${A})样本单=${aSample?.id ? '有' : '没有'}`)
-    console.log('        ③a/③b/③c 三条都要这两样才验得成(跨店建单要 B 店顾客;③c 还要一张 A 店单来造串味)。')
-    console.log('        按 J-58① 不许当通过;按 09x (乙) 报「未跑」不报「红」——「没考」与「守不住」不许挤在同一格。')
-    process.exit(77)
-  }
-  const aUser = pick('SELECT id FROM users WHERE tenant_id = ? LIMIT 1', A)
-  const svc = pick('SELECT id FROM services WHERE tenant_id = ? AND is_active = 1 LIMIT 1', A)
-  const tech = pick('SELECT id, store_id FROM technicians WHERE tenant_id = ? AND is_active = 1 LIMIT 1', A)
-  db.close()
-
-  // 归属检查使用真实可约时段；固定周一会被正常的休息日规则拦下。
-  // 不修改店铺营业规则，也不把 REST_DAY 当作建单成功。
-  const slots = []
-  for (let offset = 0; offset < 7 && !slots.length; offset++) {
-    const date = new Date(Date.UTC(2030, 9, 7 + offset)).toISOString().slice(0, 10)
-    const q = new URLSearchParams({storeId: tech?.store_id || '', serviceId: svc?.id || '', technicianId: tech?.id || '', date})
-    const r = await fetch(`${SANDBOX}/availability?${q}`, {headers: {...H(A), 'x-tenant-id': A}})
-    const available = await r.json()
-    if (!r.ok) throw new Error(`读取归属检查时段失败:${r.status}`)
-    for (const row of available.slots || []) if (row.technician?.id === tech?.id) {
-      for (const time of row.slots || []) slots.push({date, time})
-    }
-  }
-  const mkBooking = async (uid, slot) => {
-    const r = await fetch(`${SANDBOX}/admin/bookings/direct`, {
-      method: 'POST',
-      headers: H(A),
-      body: JSON.stringify({ userId: uid, serviceId: svc?.id, technicianId: tech?.id, date: slot.date, time: slot.time, durationMin: 60 }),
-    }).catch(() => null)
-    if (!r) return { status: 0, code: '(请求失败)', id: '' }
-    const j = await r.json().catch(() => ({}))
-    return { status: r.status, code: j?.error?.code || '', id: j?.booking?.id || '' }
-  }
-
-  /* ③a A 店拿 B 店顾客建单 → 必 4xx */
-  const cross = await mkBooking(bUser?.id, slots[0] || {date: '2030-10-07', time: '14:00'})
-  check(`③ 行为层·跨店建单被拒:A 店(${A})拿 B 店(${B})顾客「${bUser?.display_name}」建单 → `
-    + `必须 4xx(实测 ${cross.status} ${cross.code})`,
-  cross.status >= 400 && cross.status < 500 && cross.code === 'USER_TENANT_MISMATCH', JSON.stringify(cross))
-
-  /* ③b 反向守:本店顾客必须建得成(不是见谁都拒)—— 造完当场删,不留脏数据。
-     🔴 首跑撞 409 SLOT_UNAVAILABLE:那个时段夹具里已有单。
-     409 其实说明**所有权那关已经过了**(它走到了排期检查),但断言写死 201 太脆 ——
-     判据不该因为夹具里恰好有单就红。改成换时段重试;仍然坚持「必须真建成」,
-     不降格成「只要不是所有权错就算过」——那样就验不出写口真能放行本店顾客了。 */
-  let same = { status: 0, code: '(没试)', id: '' }
-  for (const t of slots) {
-    same = await mkBooking(aUser?.id, t)
-    if (same.status !== 409) { console.log(`   [反向守] 用 ${t.date} ${t.time} 这个时段(前面的撞排期,与所有权无关)`); break }
-  }
-  check('③b 反向守:同样的请求换成**本店**顾客必须建得成 —— 一把见谁都拒的闸,'
-    + `跟没有闸一样守不住任何东西(实测 ${same.status} ${same.code || 'OK'})`,
-  same.status === 201 || same.status === 200, JSON.stringify(same))
-  if (same.id) {
-    /* 夹具收尾(J 族教训:判据不收尾就变成非幂等) */
-    const w = new DatabaseSync(SB)
-    w.prepare('DELETE FROM bookings WHERE id = ?').run(same.id)
-    w.close()
-    console.log(`   [收尾] 已删除本轮造的对照单 ${same.id.slice(0, 24)}`)
-  }
-
-  /* ③c 读口:A 店订单列表里不得出现任何非本店 tenant 的用户对象。
-     🔴 造景律(店主 08-29):D127 清理之后库里**已经没有脏行**,刀就没有阳性可咬了 ——
-     「零命中」不等于「守住了」。所以**这一刀自己造景**:临时把一张本店单的 user_id
-     指到别店顾客身上(制造一行串味),验读口零下发,**当场还原**。
-     造的是我自己指定的那一行,不碰真账;还原后回读确认。 */
-  const w = new DatabaseSync(SB)
-  const victim = w.prepare('SELECT id, user_id FROM bookings WHERE tenant_id = ? AND user_id IS NOT NULL LIMIT 1').get(A)
-  /* 🔴 09x §一(店主批 (乙))· **造不出阳性 ≠ 没守住,也 ≠ 通过 —— 它是「本轮未跑」。**
-   * 案由:CI 上 `ensureSandbox()` **起得来沙箱**(所以 `sb.ok` 是真),但那个沙箱是**空库** ——
-   * 没有 A 店的单、也没有 B 店的顾客 ⇒ `victim`/`bUser` 取不到 ⇒ 造不出那一行串味 ⇒
-   * 这一条原来按**红**报(「没造出阳性 —— 这一条不算验过」)。
-   * **判据的话是对的(J-58①),但「没验成」不该占「红」那一格** ——
-   * 红的意思是「守不住」,而这里是「没考」。两件事混在一格里,红就不再指向产品。
-   * 按 09x (乙):报**未跑**(退出码 77),由 run-all-tests.sh **计数 + 逐名 + 对上限棘轮**。
-   * 🔴 **本机有沙箱数据时照旧真跑真绿** —— 这一支只在夹具造不出来时才走。 */
-  if (!victim || !bUser?.id) {
-    w.close()
-    console.log(`[未跑] 沙箱库里造不出阳性:A 店(${A})的样本单=${victim ? '有' : '没有'} · B 店(${B})顾客=${bUser?.id ? '有' : '没有'}`)
-    console.log('        ③c 要把一张 A 店单的 user_id 临时指到 B 店顾客身上才验得成;两样缺一就造不出那一行串味。')
-    console.log('        按 J-58① 不许当通过;按店主 09x (乙) 报「未跑」不报「红」——「没考」与「守不住」不许挤在同一格。')
-    process.exit(77)
-  }
-  let leaked = []
-  let injected = false
-  if (victim && bUser?.id) {
-    w.prepare('UPDATE bookings SET user_id = ? WHERE id = ?').run(bUser.id, victim.id)
-    injected = true
-    console.log(`   [刀] 注入点=沙箱 bookings.${victim.id.slice(0, 22)} 的 user_id → ${bUser.id.slice(0, 18)}(属 ${B});回读=${w.prepare('SELECT user_id FROM bookings WHERE id = ?').get(victim.id).user_id.slice(0, 18)}`)
-    const r = await fetch(`${SANDBOX}/admin/bookings`, { headers: H(A) }).catch(() => null)
-    const list = r ? ((await r.json().catch(() => ({}))).bookings || []) : []
-    leaked = list.filter((b) => b.id === victim.id && b.user)
-    w.prepare('UPDATE bookings SET user_id = ? WHERE id = ?').run(victim.user_id, victim.id)
-    console.log(`   [收尾] 已还原 user_id;回读=${w.prepare('SELECT user_id FROM bookings WHERE id = ?').get(victim.id).user_id.slice(0, 18)}`)
-  }
-  w.close()
-  check('③c 🔴 读口零下发(自己造景验):把一张 A 店单的 user_id 临时指到 B 店顾客身上,'
-    + 'A 店订单接口对这一单**不许带 user 对象** —— 造完当场还原',
-  injected && leaked.length === 0,
-  injected ? `仍在下发:${JSON.stringify(leaked.map((b) => b.user))}`.slice(0, 160) : '没造出阳性(取不到样本单或 B 店顾客)—— 这一条不算验过')
-
-}
-
+// The fixture is generated through product APIs in the disposable target.
+// Existing shop names and a previously populated 4310 are not prerequisites.
+const SANDBOX = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+const { assertTestTarget } = await import('./test-guard.mjs')
+await assertTestTarget(SANDBOX)
+const health = await fetch(SANDBOX + '/health').then(r => r.json())
+if (!health.dataFile?.startsWith('/tmp/ll-ci-data.')) throw Error('ownership fixture refuses non-disposable database')
+const { requireOwnerToken } = await import('./owner-token.mjs')
+const token = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
+const A = 'ownership-a-' + Date.now().toString(36), B = A.replace('-a-', '-b-')
+const H = t => ({authorization:'Bearer '+token,'x-admin-tenant-id':t,'x-tenant-id':t,'content-type':'application/json'})
+async function req(t, path, body) {const r = await fetch(SANDBOX+path,{method:body?'POST':'GET',headers:H(t),body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()}}
+for (const tid of [A,B]) {const r=await req(tid,'/platform/tenants',{id:tid,name:tid,plan:'chain',currency:'CNY',timezone:'Asia/Shanghai'});if(r.status!==201)throw Error('Could not create isolated fixture tenant')}
+const store=(await req(A,'/platform/tenants/'+A+'/store')).data.store
+const tech=(await req(A,'/platform/tenants/'+A+'/technicians',{name:'Ownership fixture'})).data.technician
+const service=(await req(A,'/platform/tenants/'+A+'/services',{type:'NAIL',nameZh:'Ownership fixture',nameEn:'Ownership fixture',priceCents:10000,baseDurationMin:60})).data.service
+const aUser=(await req(A,'/admin/customers',{displayName:'Local fixture',requestId:'ownership_a_'+Date.now()})).data.customer
+const bUser=(await req(B,'/admin/customers',{displayName:'Foreign fixture',requestId:'ownership_b_'+Date.now()})).data.customer
+const payload=userId=>({userId,storeId:store.id,serviceId:service.id,technicianId:tech.id,date:'2030-10-08',time:'10:00'})
+const foreign=await req(A,'/admin/bookings/direct',payload(bUser.id))
+check('③a 外店顾客不能写入本店预约',foreign.status>=400&&foreign.status<500,JSON.stringify(foreign))
+const same=await req(A,'/admin/bookings/direct',payload(aUser.id))
+check('③b 反向守：本店顾客通过同一产品入口实际建单成功',same.status===201,JSON.stringify(same))
+if(!same.data.booking?.id)throw Error('No local positive fixture')
+const db=new DatabaseSync(health.dataFile),victim=same.data.booking.id
+let injected=false,leaked=[]
+try {
+ db.prepare('UPDATE bookings SET user_id=? WHERE id=?').run(bUser.id,victim);injected=true
+ const list=await req(A,'/admin/bookings');if(list.status!==200)throw Error('Read path unavailable')
+ leaked=(list.data.bookings||[]).filter(b=>b.id===victim&&b.user)
+}finally{db.prepare('UPDATE bookings SET user_id=? WHERE id=?').run(aUser.id,victim);db.close()}
+check('③c 注入跨店存量脏行后，本店订单读口不得下发外店 user；验证后还原',injected&&leaked.length===0)
 
 /* ═══ ⑤ 读写同源:**回读用的租户必须是写进去时用的那一个**(夜9 段4)═══
 

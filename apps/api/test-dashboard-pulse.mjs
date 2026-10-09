@@ -4,7 +4,7 @@
    §七 原文那十一条,这里逐条落:
    ① 同口径:大屏 revenue.value === 财务页当期营收(同一夹具比)
    ② 已日结日 === daily_closes.revenue_cents 快照
-   ③ metrics 恒六项、顺序固定;period=year 的 spark 恒 12 项
+   ③ metrics 恒六项、顺序固定;趋势按当期真实日期分桶
    ④ prev=0 → deltaPct === null,无 ∞/NaN
    ⑤ bookings.value 与副行三数 === 今日台面同一时刻的数(同源函数)
    ⑦ 今日要处理:0 的项**仍然返回**(隐不隐是前端的事)
@@ -14,7 +14,7 @@
 
    三店各跑(05o §一⑥):加拿大档 / 境内档 / 北京档,重点看币种与「今天」。 */
 import { assertTestTarget } from './test-guard.mjs'
-import { periodRange, deltaOf, METRIC_KEYS, PERIODS } from './dashboard-pulse.mjs'
+import { periodRange, sparkBuckets, deltaOf, METRIC_KEYS, PERIODS } from './dashboard-pulse.mjs'
 /* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
 const { requireOwnerToken } = await import('./owner-token.mjs')
 
@@ -59,6 +59,15 @@ async function req(path, options = {}, token = PLATFORM, tid = '') {
   check('①3 期间·本年:1 月 1 日起;上期=去年同期至今;spark 恒 12',
     y.from === '2026-01-01' && y.prevTo === '2025-09-08' && y.sparkN === 12, JSON.stringify(y))
 
+  const wb = sparkBuckets('week','2026-10-07')
+  check('本周完整周一至周日，周几与日期逐点对应', wb.length===7 && wb[0].from==='2026-10-05' && wb[2].label==='周三' && wb[6].label==='周日')
+  const leap = sparkBuckets('year','2024-03-01')
+  check('本年按月聚合，闰年二月止于29号，当前月不含未来日', leap.length===3 && leap[1].to==='2024-02-29' && leap[2].to==='2024-03-01')
+  const mb = sparkBuckets('month','2026-10-31')
+  check('31天月份完整保留31个日期点，不画别的月份', mb.length===31 && mb[0].label==='10-01' && mb.at(-1).to==='2026-10-31')
+  check('今日跨年仍只显示当天分时，不混入前一年', sparkBuckets('today','2026-01-01').length===6 && sparkBuckets('today','2026-01-01')[0].from==='2026-01-01' && sparkBuckets('today','2026-01-01').at(-1).label==='20:00–24:00')
+  check('周一保留全周坐标，月年起点单点可标注', sparkBuckets('week','2026-10-05').length===7 && sparkBuckets('month','2026-10-01').length===1 && sparkBuckets('year','2026-01-01').length===1)
+
   check('②0 🔴 §七④ prev=0 → deltaPct **必须是 null**(不是 0、不是 ∞、不是 NaN)',
     deltaOf(100, 0).deltaPct === null && deltaOf(0, 0).deltaPct === null, JSON.stringify(deltaOf(100, 0)))
   check('②1 反向守:prev 非 0 时算得出百分比(拦住 ∞ 不等于把功能拦没)',
@@ -98,11 +107,11 @@ if (fixtureOk) {
     JSON.stringify((A.metrics || []).map((m) => m.key)))
   check('④b 每一项都带 value/unit/prev/deltaAbs/deltaPct/spark(缺字段前端就得自己猜)',
     (A.metrics || []).every((m) => 'value' in m && 'unit' in m && 'prev' in m && 'deltaAbs' in m && 'deltaPct' in m && Array.isArray(m.spark)))
-  check('④c today 的 spark 恒 7 点', (A.metrics || []).every((m) => m.spark.length === 7),
+  check('④c today 的 spark 为当天 6 个四小时区间', (A.metrics || []).every((m) => m.spark.length === 6),
     JSON.stringify((A.metrics || []).map((m) => m.spark.length)))
   const yr = (await req('/admin/dashboard/pulse?period=year', {}, PLATFORM, SHOPS[0].id)).data
-  check('④d 🔴 §七③ period=year 的 spark **恒 12 项**',
-    (yr?.metrics || []).every((m) => m.spark.length === 12),
+  check('④d 本年趋势只有已经开始的月份，与日期标签逐点配对',
+    (yr?.metrics || []).every((m) => m.spark.length === Number(m.sparkDates.at(-1).slice(5, 7)) && m.spark.length === m.sparkLabels.length),
     JSON.stringify((yr?.metrics || []).map((m) => m.spark.length)))
   check('④e 无效 period 落回 today(不许 500,也不许拿一个空壳糊弄)',
     (await req('/admin/dashboard/pulse?period=nonsense', {}, PLATFORM, SHOPS[0].id)).data?.period === 'today')
@@ -257,7 +266,7 @@ if (fixtureOk) {
   rodb.close()
 }
 
-console.log(`\n[主页大屏] 期间/delta 纯函数 · 六项恒序 · year spark 12 · 币种随店 · 同口径 · now 同源 · todo 五项 · 身份裁字段`)
+console.log(`\n[主页大屏] 期间/delta 纯函数 · 六项恒序 · 实际日期趋势 · 币种随店 · 同口径 · now 同源 · todo 五项 · 身份裁字段`)
 if (fails.length) {
   console.error(`\n❌ test-dashboard-pulse ${fails.length}/${n} 项未过`)
   for (const f of fails) console.error(`  - ${f}`)

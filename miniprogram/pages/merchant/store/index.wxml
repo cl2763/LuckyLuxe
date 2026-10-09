@@ -10,6 +10,14 @@
     </view>
     <view class="hint">地址/电话改后会同步到 AI 客服的回答口径。</view>
 
+    <view class="gtitle">门店专属小程序码</view>
+    <view class="card store-code-card">
+      <view class="hint">顾客扫码直接进入本店，会员与消费记录按门店独立保存。</view>
+      <button class="btn" bindtap="showStoreCode" loading="{{qrLoading}}" disabled="{{qrLoading}}">{{qrUrl ? '重新获取门店码' : '查看门店码'}}</button>
+      <image wx:if="{{qrUrl && !qrError}}" class="store-code-image" src="{{qrUrl}}" mode="aspectFit" bindload="codeLoaded" binderror="codeFailed" bindtap="previewCode" />
+      <view wx:if="{{qrError}}" class="hint" bindtap="showStoreCode">{{qrError}}</view>
+      <view wx:if="{{qrUrl && !qrError}}" class="hint">{{qrTrial ? '体验版门店码，仅供已获体验权限的微信测试，请勿对外印刷。' : '正式版门店码，可用于门店展示。'}} 点击图片可放大保存。</view>
+    </view>
     <view class="gtitle">营业时间</view>
     <view class="card">
       <!-- 裁定2 收敛:与强制页同一份组件(改口=常驻入口,合同六) -->

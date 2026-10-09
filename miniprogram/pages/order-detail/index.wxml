@@ -1,4 +1,4 @@
-<view wx:if="{{order}}" class="page order-detail-page {{themeClass}}">
+<view wx:if="{{order}}" class="page order-detail-page {{order.actions.length ? 'has-bottom-actions' : ''}} {{themeClass}}" style="{{bottomInset ? 'padding-bottom:' + bottomInset + 'px' : ''}}">
   <!-- 批③首件 A1(§二):头卡=服务名+状态徽标(后端三态同源)+单号 -->
   <view class="detail-card card">
     <view class="status-line">

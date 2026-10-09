@@ -24,16 +24,16 @@ page{background:var(--paper)}
 .sec{font-size:22rpx;color:var(--sub);font-weight:700;margin:4rpx 2rpx 12rpx}
 /* 真机 WebView 对 calc+rpx 支持不稳,用百分比+space-between 保证 2×2 */
 .tiers{display:flex;flex-wrap:wrap;justify-content:space-between;margin-bottom:6rpx}
-.tcard{width:48.5%;margin-bottom:12rpx;border-radius:20rpx;padding:20rpx 22rpx;color:#fff;position:relative;box-sizing:border-box}
+.tcard{width:48.5%;margin-bottom:12rpx;border-radius:20rpx;padding:20rpx 22rpx;color:var(--heroink);position:relative;box-sizing:border-box}
 .tcard.sel{box-shadow:0 0 0 4rpx rgba(45,40,38,.35) inset}
 .tcard .tn{font-size:44rpx;font-weight:800;line-height:1.1}
 .tcard .tt{font-size:24rpx;font-weight:700;margin-top:2rpx}
 .tcard .td{font-size:18rpx;opacity:.85;margin-top:2rpx}
 .tcard.a{background:var(--brand);color:var(--hero)}   /* 规矩丙:金底上的字一律 --hero */
-.tcard.b{background:linear-gradient(135deg,#3f6b52,#5d8a70)}
-.tcard.n{background:linear-gradient(135deg,#3b6ea5,#6b95c4)}
-.tcard.s{background:linear-gradient(135deg,#8a5a52,#a5786f)}
-.tbadge{font-size:18rpx;font-weight:800;color:#fff;border-radius:8rpx;padding:2rpx 12rpx;margin-left:8rpx}
+.tcard.b{background:linear-gradient(135deg,var(--good),var(--good))}
+.tcard.n{background:linear-gradient(135deg,var(--tagw),var(--tagw))}
+.tcard.s{background:linear-gradient(135deg,var(--bad),var(--bad))}
+.tbadge{font-size:18rpx;font-weight:800;color:var(--heroink);border-radius:8rpx;padding:2rpx 12rpx;margin-left:8rpx}
 .tbadge.a{background:var(--brand);color:var(--hero)}   /* 规矩丙 */
 /* 07c 裁 #56:四档统一「淡底深字」,接现有成对令牌,不新造色(与网页 customer-tags.js 同一套) */
 .tbadge.b{background:var(--goodbg);color:var(--good)}

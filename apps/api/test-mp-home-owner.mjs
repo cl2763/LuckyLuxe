@@ -421,7 +421,7 @@ check('⑮f 轮播换指标**不发请求**:只把 headKey 换一个再跑一遍
   /switchMetric\(e\)/.test(pageJs) && /repaintMetric\(\)/.test(pageJs)
   && !/repaintMetric\(\)\s*\{[\s\S]{0,400}?adminGet/.test(pageJs))
 check('⑮g 轮播计时器**会被清掉**(onHide / onUnload),不留一条永远在跑的线',
-  /onHide\(\) \{ this\.clearRotate\(\) \}/.test(pageJs) && /onUnload\(\) \{ this\.clearRotate\(\) \}/.test(pageJs))
+  /onHide\(\) \{ this\.clearRotate\(\)[^}]*\}/.test(pageJs) && /onUnload\(\) \{ this\.clearRotate\(\)[^}]*\}/.test(pageJs))
 check('⑯ 🔴 字体做不到那件事**被说出来**:numfont 明写「小程序不能引 Google Fonts」与「系统字体」',
   /不能引 Google Fonts/.test(numfont) && /系统字体/.test(numfont) && /上线批/.test(numfont))
 check('⑯b 🔴 地址为空时不许假装加载成功(静默失败器族):回的是 loaded:false + why',

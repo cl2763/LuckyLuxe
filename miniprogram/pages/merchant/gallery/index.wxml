@@ -2,7 +2,6 @@
   <view wx:if="{{canCreate}}" class="creation-tools">
     <view class="creation-title">作品</view>
     <view class="creation-card"><view class="creation-name">拍照姿势卡</view><view class="creation-copy">33 张手势示意，找到适合这副甲的拍法。</view><button class="creation-button primary" bindtap="openPoses">挑一个姿势</button></view>
-    <view class="creation-card"><view class="creation-name">AI 快速修图</view><view class="creation-copy">功能正在完善。可先选图预览，暂不处理、不扣额度。</view><button class="creation-button" bindtap="openRetouch">查看修图入口</button></view>
   </view>
   <view class="seg">
     <text class="s {{seg===0?'on':''}}" data-i="0" bindtap="onSeg">展示图库</text>

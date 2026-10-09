@@ -12,9 +12,9 @@ if (!platforms[state.platform]) state.platform = 'xiaohongshu'
 const $ = id => document.getElementById(id)
 const tr = (zh, en) => state.lang === 'en' ? en : zh
 const back = audience === 'staff' ? '/admin' : '/?store=' + encodeURIComponent(tenant)
-$('shareReturn').href = back; $('shareLogin').href = back
+$('shareReturn').href = window.WebScope?.path(back) || back; $('shareLogin').href = window.WebScope?.path(back) || back
 async function request(path, options = {}) {
-  const response = await fetch(path, { ...options, headers: { 'content-type': 'application/json', 'x-tenant-id': tenant, ...(auth?.accessToken ? { authorization: `Bearer ${auth.accessToken}` } : {}), ...options.headers } })
+  const response = await fetch(window.WebScope?.path(path) || path, { ...options, headers: { 'content-type': 'application/json', 'x-tenant-id': tenant, ...(auth?.accessToken ? { authorization: `Bearer ${auth.accessToken}` } : {}), ...options.headers } })
   const data = await response.json()
   if (!response.ok) { const error = new Error(data.error?.message || tr('请求失败，请重试', 'Request failed. Please retry.')); error.status = response.status; throw error }
   return data

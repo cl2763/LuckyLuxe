@@ -7,7 +7,7 @@
   </view>
 
   <view class="amt">
-    <view class="amt-l">金额 (CAD)</view>
+    <view class="amt-l">金额{{currency ? " (" + currency + ")" : ""}}</view>
     <view class="amt-row">
       <text class="amt-sign">$</text>
       <input class="amt-inp" type="digit" placeholder="0.00" placeholder-class="ph" value="{{amount}}" bindinput="onAmount" focus />

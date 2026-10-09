@@ -1,0 +1,9 @@
+.privacy-page{min-height:100vh;box-sizing:border-box;padding:24rpx;color:var(--ink);background:var(--paper)}
+.privacy-summary,.privacy-section{padding:32rpx;margin-bottom:24rpx;background:var(--card);border:1rpx solid var(--line);border-radius:12rpx}
+.privacy-title{font-size:36rpx;font-weight:600;margin-bottom:24rpx}
+.privacy-meta{color:var(--sub);font-size:26rpx;line-height:1.7;margin-bottom:12rpx}
+.privacy-heading{font-size:30rpx;font-weight:600;margin-bottom:20rpx}
+.privacy-paragraph{font-size:28rpx;line-height:1.8;margin-bottom:20rpx}
+.privacy-paragraph:last-child{margin-bottom:0}
+.privacy-contact{margin-top:24rpx;font-size:24rpx;line-height:1.7;padding:20rpx;color:var(--ink);background:var(--wall);border:1rpx solid var(--line);border-radius:999rpx}
+.privacy-wechat{font-size:28rpx;line-height:1.6;padding:22rpx;background:var(--brand);color:var(--hero);border-radius:999rpx}

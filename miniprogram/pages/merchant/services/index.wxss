@@ -1,18 +1,18 @@
 page{background:var(--paper)}
 .page{padding:20rpx 26rpx 60rpx}
 .tabs{display:flex;gap:12rpx;margin-bottom:16rpx}
-.tab{flex:1;text-align:center;font-size:25rpx;font-weight:600;color:#8c8279;background:#fff;border:1rpx solid #e7ddd4;border-radius:999rpx;padding:14rpx 0}
-.tab.on{background:#2d2826;border-color:#2d2826;color:#fff}
-.empty{text-align:center;color:#8c8279;font-size:24rpx;padding:60rpx 0}
-.row{display:flex;align-items:center;gap:14rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:20rpx 20rpx;margin-bottom:14rpx}
+.tab{flex:1;text-align:center;font-size:25rpx;font-weight:600;color:var(--sub);background:var(--card);border:1rpx solid var(--line);border-radius:999rpx;padding:14rpx 0}
+.tab.on{background:var(--hero);border-color:var(--hero);color:var(--heroink)}
+.empty{text-align:center;color:var(--sub);font-size:24rpx;padding:60rpx 0}
+.row{display:flex;align-items:center;gap:14rpx;background:var(--card);border:1rpx solid var(--line);border-radius:16rpx;padding:20rpx 20rpx;margin-bottom:14rpx}
 .row.col{display:block}
 .main{flex:1;min-width:0}
-.nm{font-size:27rpx;font-weight:600;color:#2d2826}
-.nm.off{color:#b6a99b}
-.meta{font-size:22rpx;color:#8c8279;margin-top:6rpx}
+.nm{font-size:27rpx;font-weight:600;color:var(--ink)}
+.nm.off{color:var(--sub)}
+.meta{font-size:22rpx;color:var(--sub);margin-top:6rpx}
 .sw{transform:scale(.82);flex:0 0 auto}
-.ro{font-size:22rpx;color:#8c8279;flex:0 0 auto}
+.ro{font-size:22rpx;color:var(--sub);flex:0 0 auto}
 .chips{margin-top:10rpx}
-.chip{display:inline-block;font-size:21rpx;color:#5c4630;background:#f7efe6;border:1rpx solid #e3cfb8;border-radius:999rpx;padding:4rpx 16rpx;margin:0 10rpx 10rpx 0}
-.note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:18rpx;text-align:center}
-.link{margin-top:14rpx;text-align:center;font-size:24rpx;color:#9b7655;text-decoration:underline}
+.chip{display:inline-block;font-size:21rpx;color:var(--brandd);background:var(--wall);border:1rpx solid var(--line);border-radius:999rpx;padding:4rpx 16rpx;margin:0 10rpx 10rpx 0}
+.note{font-size:21rpx;color:var(--sub);line-height:1.6;margin-top:18rpx;text-align:center}
+.link{margin-top:14rpx;text-align:center;font-size:24rpx;color:var(--brandd);text-decoration:underline}

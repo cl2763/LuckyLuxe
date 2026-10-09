@@ -11,7 +11,8 @@
   </view>
 
   <!-- qrOnly 纯出码模式不加载价目表 -->
-  <view wx:if="{{!ready && !qrOnly}}" class="loading">正在读取本店价目表…</view>
+  <view wx:if="{{!ready && !qrOnly}}" class="loading">{{bootError ? '结算资料加载失败：' + bootError : '正在读取价目、卡项与顾客权益，请稍候…'}}</view>
+  <button wx:if="{{!ready && bootError && !qrOnly}}" class="retry-boot" bindtap="retryBoot">重新加载</button>
 
   <block wx:else>
     <!-- ═══ 组内六件套 × N(图 v2.2 屏1/屏2):每个服务项目一组,这组做什么、谁做、给谁做,一张卡说清 ═══ -->
@@ -183,11 +184,11 @@
       <view class="ch">支付构成 · 菜单式 <text class="hint">勾选支付方式,金额后端算</text></view>
       <!-- D55(店主终验抓出):勾选态与金额一致律——金额为 0 的支付腿不得处于勾选态(✓ 与高亮同条件) -->
       <!-- D64:0 余额客挂充后此行也必须在——显隐计入本单挂充(签字生效的钱一样可抵) -->
-      <view class="paym {{payMenu.useBalance && view.hasStored ? 'on' : ''}}" wx:if="{{view.hasBalance || view.hasRecharge}}" bindtap="payToggleBalance">
+      <view class="paym {{payMenu.useBalance && view.hasStored ? 'on' : ''}}" hover-class="tap-feedback" wx:if="{{view.hasBalance || view.hasRecharge}}" bindtap="payToggleBalance">
         <view class="ck {{payMenu.useBalance && view.hasStored ? 'on' : ''}}">{{payMenu.useBalance && view.hasStored ? '✓' : ''}}</view>
         <view class="pmain"><b>储值卡抵扣</b><text class="psmall">可用余额 {{view.balance}}{{view.rvNote}}{{payMenu.useBalance && view.hasStored ? ' → 本单抵 ' + view.storedDeduct : (payMenu.useBalance ? ' · 本单无可抵金额' : '')}}</text></view>
       </view>
-      <view class="paym {{depositApplied && view.hasDeposit ? 'on' : ''}}" wx:if="{{view.hasDepositReceipt && depositDeductible}}" bindtap="payToggleDeposit">
+      <view class="paym {{depositApplied && view.hasDeposit ? 'on' : ''}}" hover-class="tap-feedback" wx:if="{{view.hasDepositReceipt && depositDeductible}}" bindtap="payToggleDeposit">
         <view class="ck {{depositApplied && view.hasDeposit ? 'on' : ''}}">{{depositApplied && view.hasDeposit ? '✓' : ''}}</view>
         <view class="pmain"><b>已收定金抵扣</b><text class="psmall">−{{view.depositDeduct}}(来自收取记录)</text></view>
       </view>
@@ -196,7 +197,7 @@
         <view class="pmark">→</view>
         <view class="pmain"><b>到店收 · 差额自动</b><text class="psmall">现金/扫码/POS · 差额 {{view.offlineDue}}(其余支付方式结清后的余数,自动算)</text></view>
       </view>
-      <view class="paym {{payMenu.recharge ? 'on' : ''}}" bindtap="payToggleRecharge">
+      <view class="paym {{payMenu.recharge ? 'on' : ''}}" hover-class="tap-feedback" bindtap="payToggleRecharge">
         <view class="ck {{payMenu.recharge ? 'on' : ''}}">{{payMenu.recharge ? '✓' : ''}}</view>
         <view class="pmain">
           <b>随单充值(签字生效)</b>　<text class="rvlink {{bind.bound?'':'dis'}}" catchtap="openRecharge">{{rvDraft ? '改充值 →' : '去挂充值 →'}}</text>
@@ -258,7 +259,7 @@
       </view>
     </view>
 
-    <view class="cta {{submitting ? 'ing' : ''}}" bindtap="submit">{{submitting ? '提交中…' : ctaText}}</view>
+    <view class="cta {{submitting ? 'ing' : ''}}" hover-class="tap-feedback" bindtap="submit">{{submitting ? '提交中…' : ctaText}}</view>
 
     <view class="foot">金额全部由后端计价引擎算出，本页不做任何金额运算</view>
   </block>
@@ -304,13 +305,14 @@
       <text class="qt">请顾客扫码签署</text>
       <text class="qx" bindtap="closeQr">✕</text>
     </view>
-    <view class="qnewc" wx:if="{{qr.unbound}}">新客 · 尚未绑定档案——请顾客扫码签署(扫码即自动建立绑定)</view>
+    <view class="qnewc" wx:if="{{qr.unbound}}">顾客档案尚未绑定微信——请顾客扫码确认身份并签署</view>
     <view class="qpushed" wx:if="{{qr.pushedText}}">{{qr.pushedText}}</view>
     <view class="qcode">
       <image wx:if="{{qr.miniCodeUrl && !qr.codeError}}" class="qrimg" src="{{qr.miniCodeUrl}}" mode="aspectFit" binderror="qrImageError" />
       <view wx:else class="qphs">签署码暂不可用，请联系平台检查小程序码配置</view>
     </view>
     <view class="qno">{{qr.code}}</view>
+    <view class="qsub">结算经手账号：{{qr.operatorText}}</view>
     <view class="qamt">{{qr.amountText}}</view>
     <view class="qsub">{{qr.breakdownText}}</view>
     <view class="qbtns">

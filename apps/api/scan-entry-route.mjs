@@ -1,4 +1,6 @@
-import { getMiniCode } from './wechat-mini-code.mjs'
+import { draftForScene } from './booking-draft-confirm.mjs'
+import { storeForScene } from './store-code.mjs'
+import { getMiniCode, codeEnvironment } from './wechat-mini-code.mjs'
 import { randomUUID } from 'node:crypto'
 
 export function createSignTokenHelpers({ db, iso, publicAppUrl, scopeName, appPublicUrl }) {
@@ -24,7 +26,15 @@ export function createSignTokenHelpers({ db, iso, publicAppUrl, scopeName, appPu
 // Only short random aliases appear in WeChat codes. Resolve the bearer token
 // server-side and recheck its lifetime for every read and claim.
 export function createScanEntryRoute({ db, apiError, json, readBody, fetchJsCode2Session,
-  claimUserByOpenId, serializeUser, miniAuthFor, appid, secret, scopeName }) {
+  claimUserByOpenId, serializeUser, miniAuthFor, userIdFromMemberCode, verifiedCustomerForScan, appid, secret, scopeName }) {
+  function memberOfScene(scene) {
+    if (!/^m[A-Z0-9]{8}$/.test(String(scene || ''))) return null
+    const memberCode = `LL-${scene.slice(1)}`
+    const id = userIdFromMemberCode(memberCode)
+    const user = id ? db.prepare('SELECT id, tenant_id FROM users WHERE id=?').get(id) : null
+    if (!user) throw apiError(404, 'BAD_MEMBER_CODE', '这个会员码无效。')
+    return { user, memberCode }
+  }
   function scanToken(scene) {
     if (!/^[sb][0-9a-f]{24}$/.test(String(scene || ''))) throw apiError(404, 'BAD_SCAN_CODE', '这个码无效，请让店员重新出示。')
     const sign = scene[0] === 's'
@@ -39,15 +49,25 @@ export function createScanEntryRoute({ db, apiError, json, readBody, fetchJsCode
   return async function scanEntryRoute(req, res, path) {
     if (req.method === 'GET' && path.startsWith('/mini-code/')) {
       const scene = path.split('/')[2] || ''
-      scanToken(scene)
+      if (!storeForScene(db, scene, scopeName) && !draftForScene(db,scene) && !memberOfScene(scene)) scanToken(scene)
       if (!appid || !secret) throw apiError(503, 'MINI_CODE_NOT_CONFIGURED', '小程序码配置未就绪，请联系平台。')
-      const image = await getMiniCode({ appid, secret, scene, envVersion: scopeName === 'production' ? 'release' : 'trial' })
+      const image = await getMiniCode({ appid, secret, scene, envVersion: codeEnvironment(scopeName, new URL(req.url, 'http://localhost').searchParams.get('envVersion')) })
       res.writeHead(200, { 'content-type': image.mimeType, 'content-length': image.bytes.length, 'cache-control': 'no-store' })
       res.end(image.bytes)
       return true
     }
     if (req.method === 'GET' && path.startsWith('/scan/')) {
-      const { sign, ticket } = scanToken(path.split('/')[2] || '')
+      const scene = path.split('/')[2] || ''
+      const draft=draftForScene(db,scene)
+      if(draft) { json(res,200,{kind:'bookingDraft',draftId:draft.id,tenantId:draft.tenant_id},{'cache-control':'no-store'}); return true }
+      const scannedStore = storeForScene(db, scene, scopeName)
+      if (scannedStore) { json(res,200,{kind:'store',tenantId:scannedStore.id,storeName:scannedStore.name}); return true }
+      const member = memberOfScene(scene)
+      if (member) {
+        json(res, 200, { kind: 'member', memberCode: member.memberCode, tenantId: member.user.tenant_id }, { 'cache-control': 'no-store' })
+        return true
+      }
+      const { sign, ticket } = scanToken(scene)
       if (!sign) {
         const u = db.prepare('SELECT display_name FROM users WHERE id=? AND tenant_id=?').get(ticket.user_id, ticket.tenant_id)
         if (!u) throw apiError(404, 'NOT_FOUND', '找不到这份顾客档案。')
@@ -59,11 +79,31 @@ export function createScanEntryRoute({ db, apiError, json, readBody, fetchJsCode
       if (!row || row.status !== 'pending_sign') throw apiError(410, 'SETTLEMENT_NOT_PENDING', '这张确认单不能继续签署。')
       const u = db.prepare('SELECT display_name FROM users WHERE id=? AND tenant_id=?').get(row.user_id, row.tenant_id)
       const store = db.prepare('SELECT name FROM stores WHERE tenant_id=? ORDER BY rowid LIMIT 1').get(row.tenant_id)
-      json(res, 200, { kind: 'sign', code: row.code, token: ticket.token, customerName: u?.display_name || '顾客', storeName: store?.name || '', tenantId: row.tenant_id }, { 'cache-control': 'no-store' })
+      const verified = verifiedCustomerForScan?.(req)
+      json(res, 200, { kind: 'sign', code: row.code, token: ticket.token, customerName: u?.display_name || '顾客', storeName: store?.name || '', tenantId: row.tenant_id,
+        alreadyBound: Boolean(verified && verified.id === row.user_id && verified.tenantId === row.tenant_id) }, { 'cache-control': 'no-store' })
       return true
     }
     if (req.method === 'POST' && path.startsWith('/scan/') && path.endsWith('/claim')) {
       const scene = path.split('/')[2] || ''
+      const member = memberOfScene(scene)
+      if (member) {
+        const body = await readBody(req)
+        const code = String(body.code || '').trim()
+        if (!code) throw apiError(401, 'WECHAT_LOGIN_REQUIRED', '请先用微信确认本人身份。')
+        const hop = await fetchJsCode2Session({ code, appid, secret, scopeName })
+        if (hop.ok === false || hop.data?.errcode || !hop.data?.openid) throw apiError(401, 'WECHAT_LOGIN_FAILED', '微信身份验证失败，请重试。')
+        db.exec('BEGIN IMMEDIATE')
+        let result
+        try {
+          const out = claimUserByOpenId({tenantId:member.user.tenant_id,userId:member.user.id,providerUserId:hop.data.openid,unionId:hop.data.unionid || '',allowEmptyRegistration:true})
+          const user = out.bound ? serializeUser(db.prepare('SELECT * FROM users WHERE id=?').get(member.user.id), member.user.tenant_id) : null
+          result = {...out,sandbox:hop.viaStub === true,tenantId:member.user.tenant_id,...(user ? {user,auth:miniAuthFor(user,hop.data.openid)} : {})}
+          db.exec('COMMIT')
+        } catch (error) { db.exec('ROLLBACK'); throw error }
+        json(res,200,result,{'cache-control':'no-store'})
+        return true
+      }
       const { sign, ticket } = scanToken(scene)
       if (!sign) throw apiError(400, 'WRONG_SCAN_CODE', '绑定码不能当作签署码。')
       const row = db.prepare('SELECT * FROM settlements WHERE id=? AND tenant_id=?').get(ticket.settlement_id, ticket.tenant_id)

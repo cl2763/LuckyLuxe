@@ -10,10 +10,11 @@ const api = require('./api')
 const { formatMoney } = require('./money')
 const KEY = 'lucky_store_currency'
 const DEP_KEY = 'lucky_store_deposit'
+let refreshing = null
 
 function cached() {
   const v = wx.getStorageSync(KEY)
-  return v && v.currencyDisplay ? v : null
+  return v && v.currencyDisplay && (!v.tenant || v.tenant === api.currentTenantId()) ? v : null
 }
 
 /* R5:门店定金额也一起缓存(与币种同一个 /stores 请求、同一套缓存)。
@@ -28,14 +29,23 @@ function storeDepositYuan() {
   return d && d.enabled ? Math.round(d.amountCents) / 100 : null
 }
 
-async function refreshStoreCurrency() {
+function refreshStoreCurrency() {
+  const tenant = api.currentTenantId()
+  if (refreshing && refreshing.tenant === tenant) return refreshing.promise
+  const entry = { tenant }
+  entry.promise = loadStoreCurrency(tenant).finally(() => { if (refreshing === entry) refreshing = null })
+  refreshing = entry
+  return entry.promise
+}
+async function loadStoreCurrency(tenant) {
   /* 2026-08-10 核验轮修复:这里原本调 api.getStores(),拿回来的是**门店数组**,
      数组上没有 currencyDisplay —— 判断永远不成立,缓存一次也没写进去,
      顾客端 32 处 {{cur.p}}{{cur.s}} 一直渲染成空币符。改调只取币种字段的接口。 */
   const r = await api.getStoreCurrency()
+  if (tenant !== api.currentTenantId()) return r
   if (r && r.deposit) wx.setStorageSync(DEP_KEY, r.deposit)
   if (r && r.currencyDisplay) {
-    wx.setStorageSync(KEY, { currency: r.currency || '', currencyDisplay: r.currencyDisplay, at: Date.now() })
+    wx.setStorageSync(KEY, { tenant, currency: r.currency || '', currencyDisplay: r.currencyDisplay, at: Date.now() })
     repaintCurrency()
   }
   return r

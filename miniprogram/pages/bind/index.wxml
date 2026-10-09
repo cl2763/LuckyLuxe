@@ -13,13 +13,15 @@
 
   <view wx:if="{{state === 'done'}}" class="card done">
     <view class="okmark">已绑定 ✓</view>
-    <view class="okhint">请将手机交还技师</view>
-    <view class="mc" wx:if="{{memberCode}}">你的专属会员码:{{memberCode}}</view>
+    <view class="okhint">绑定完成，订单与签署记录可在「我的」查看</view>
+    <view class="mc" wx:if="{{memberCode}}">你的专属顾客码:{{memberCode}}</view>
+    <view class="btn" hover-class="tap-feedback" bindtap="goMe">返回我的</view>
   </view>
 
   <view wx:if="{{state === 'already'}}" class="card done">
     <view class="okmark">该档案已绑定 ✓</view>
-    <view class="okhint">无需重复操作,请将手机交还技师</view>
+    <view class="okhint">无需重复绑定，可在「我的」查看订单</view>
+    <view class="btn" hover-class="tap-feedback" bindtap="goMe">返回我的</view>
   </view>
 
   <view wx:if="{{state === 'error'}}" class="card">

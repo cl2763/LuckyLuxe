@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync,readFileSync,writeFileSync,rmSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-const files=['customer-facts.mjs','membership-config.mjs','dashboard-pulse.mjs','test-customer-facts-timezone.mjs']
+const files=['customer-facts.mjs','membership-config.mjs','dashboard-pulse.mjs','dashboard-intraday.mjs','test-customer-facts-timezone.mjs']
 const cases=[
  ['未绑定重新误判新客','customer-facts.mjs',s=>s.replace("'未绑定微信'","'新客 · 未绑定'")],
  ['草稿重新混进累计消费','customer-facts.mjs',s=>s.replace("status='signed'","status IN ('signed','draft')")],

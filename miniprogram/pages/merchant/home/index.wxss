@@ -124,10 +124,16 @@ page{background:var(--paper)}
 .dh-sd.up{color:var(--good)}
 .dh-sd.down{color:var(--bad)}
 .dh-sd.flat{color:var(--flat)}
-/* 折线:小程序端画不了 SVG,仍是柱形,但**颜色改成金色渐变**,与图上那条金线同一族。
-   与图的差异写进回执:图上是带渐变填充的折线,这里是渐变柱(待裁 #19,要不要上 canvas)。 */
-.dh-spark{display:flex;align-items:flex-end;gap:6rpx;height:72rpx;margin:16rpx 0;position:relative}
-.dh-canvas{width:100%;height:72rpx}
+.dh-trend-caption{color:var(--herosub);font-size:19rpx;margin:6rpx 0 10rpx}
+.dh-trend-scroll{width:100%;height:170rpx}
+.dh-trend-inner{min-width:100%;height:170rpx}
+.dh-trend-values,.dh-trend-dates{display:flex;justify-content:space-around;color:var(--heroink);font-size:19rpx;line-height:28rpx;height:28rpx;font-variant-numeric:tabular-nums}
+.dh-trend-values text,.dh-trend-dates text{flex:1;min-width:0;text-align:center;white-space:nowrap}
+.dh-trend-dates{color:var(--herosub);height:56rpx}
+.dh-trend-tick{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center}
+.dh-trend-tick text{flex:none;height:28rpx}
+.dh-spark{display:flex;align-items:flex-end;gap:6rpx;height:80rpx;margin:3rpx 0;position:relative}
+.dh-canvas{width:100%;height:80rpx}
 .dh-bar{flex:1;background:linear-gradient(180deg,var(--herogold),rgba(217,185,126,0));border-radius:0}
 
 /* dots:5 个,选中那个变成金色胶囊并会移动(图 §一)。

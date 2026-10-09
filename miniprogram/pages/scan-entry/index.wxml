@@ -1,6 +1,8 @@
 <view class="pg {{themeClass}}">
-  <view class="card" wx:if="{{state === 'loading' || state === 'working'}}">正在核对二维码…</view>
+  <view class="card" wx:if="{{state === 'loading' || state === 'working'}}"><view class="scan-spinner"></view>{{state === 'working' ? '正在确认微信身份…' : '正在核对二维码…'}}</view>
   <view class="card" wx:elif="{{state === 'error'}}"><view class="title">二维码无法使用</view><view class="hint">{{message}}</view></view>
+  <view class="card" wx:elif="{{state === 'member'}}"><view class="title">会员码</view><view class="name">{{card.memberCode}}</view><view class="hint">请向店员出示此码，由店员核对本店顾客档案。如这是你本人的档案，可用微信确认绑定。</view><view class="hint" wx:if="{{message}}">{{message}}</view><button class="action" hover-class="tap-feedback" bindtap="confirm">这是我的档案，绑定微信</button></view>
+  <view class="card" wx:elif="{{state === 'member-conflict'}}"><view class="title">需要店员核对档案</view><view class="name">{{card.memberCode}}</view><view class="hint">{{message}}</view></view>
   <view class="card" wx:else>
     <view class="eyebrow">{{card.storeName}}</view>
     <view class="title">{{state === 'conflict' ? '档案需要门店核对' : '请确认是本人的服务单'}}</view>
@@ -8,7 +10,7 @@
     <view class="code">{{card.code}}</view>
     <view class="hint" wx:if="{{message}}">{{message}}</view>
     <view class="hint" wx:if="{{state === 'confirm'}}">确认后绑定这份顾客档案，再查看结算单并签名。请核对姓名与服务内容；如果不是本人，请停止操作并联系店员。</view>
-    <button wx:if="{{state === 'confirm'}}" class="action" bindtap="confirm">是我本人，绑定并查看</button>
-    <button wx:if="{{state === 'conflict'}}" class="action" bindtap="signOnly">仅核对并签署本单</button>
+    <button wx:if="{{state === 'confirm'}}" class="action" hover-class="tap-feedback" bindtap="confirm">是我本人，绑定并查看</button>
+    <button wx:if="{{state === 'conflict' && card.kind !== 'member'}}" class="action" hover-class="tap-feedback" bindtap="signOnly">仅核对并签署本单</button>
   </view>
 </view>

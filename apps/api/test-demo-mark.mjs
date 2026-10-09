@@ -100,32 +100,33 @@ missing.length === 0, `${missing.length} 个没发:${missing.join(' | ')}`)
 console.log(`   [盖章形态] ${tracked.filter((f) => !NO_MARK[f]).map((f) => `${f.split('/').pop()}=${marks(f)}`).join(' · ')}`)
 
 /* ⑤ 🔴 行为层:真跑一次造景,那条查询必须把它整批捞出来 —— 判据原文就是这句 */
-const { ensureSandbox } = await import('./test-need-sandbox.mjs')
-const sb = await ensureSandbox({ label: '[demo-mark]' })
-/* 🔴 同上:走唯一出口,CI 上跟着 SANDBOX_DATA_DIR 走 */
-const { SANDBOX_DB_PATH } = await import('./test-need-sandbox.mjs')
-const SB = SANDBOX_DB_PATH
-if (!sb.ok) {
-  console.log('   ⚠️ 沙箱不可用 —— **行为层这一刀本轮未跑**(不静默跳过,如实说)')
-} else {
-  const db = new DatabaseSync(SB, { readOnly: true })
-  const marked = Object.fromEntries(DEMO_MARK_TABLES.map((t) => [t, countDemoRows(db, t)]))
-  const tags = db.prepare("SELECT DISTINCT demo_seed AS t FROM bookings WHERE demo_seed IS NOT NULL").all().map((r) => r.t)
-  db.close()
-  console.log(`   [现测] 沙箱带标记的行:${JSON.stringify(marked)} · 批次名:${JSON.stringify(tags)}`)
-  check('⑤ 🔴 一条查询整批认出来(判据原文):沙箱里造景写的行,'
-    + '`WHERE demo_seed IS NOT NULL` 必须捞得到 —— 「加了个列」不算完,要能真捞出来',
-  marked.bookings > 0 && tags.length > 0, JSON.stringify({ marked, tags }))
-
-  /* ⑤b 反向守:真实数据不许被标成演示的(fail-closed 那一侧) */
-  const db2 = new DatabaseSync(SB, { readOnly: true })
-  const realMarked = db2.prepare("SELECT COUNT(*) AS n FROM bookings WHERE demo_seed IS NOT NULL AND source_channel = 'wechat_miniprogram'").get().n
-  db2.close()
-  check('⑤b 反向守:顾客从小程序真下的单不许被标成演示的 —— '
-    + '标错方向的代价不对称:多算一点无妨,把真数据当演示清掉是灾难',
-  realMarked === 0, `${realMarked} 条真单被标成了演示`)
+// Each run creates its own marked and unmarked records through product APIs.
+// An empty disposable database must not depend on someone having seeded 4310.
+const BASE = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+const { assertTestTarget } = await import('./test-guard.mjs')
+await assertTestTarget(BASE)
+const health = await fetch(BASE + '/health').then(r => r.json())
+if (!health.dataFile?.startsWith('/tmp/ll-ci-data.')) throw Error('demo-mark refuses non-disposable database')
+const { requireOwnerToken } = await import('./owner-token.mjs')
+const token = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
+const tid = 'mark-proof-' + Date.now().toString(36), batch = 'mark-proof'
+async function req(path, body, marked = false) {
+  const r = await fetch(BASE + path, {method: 'POST', headers: {'content-type':'application/json', authorization:'Bearer '+token,
+    'x-admin-tenant-id':tid,'x-tenant-id':tid,...(marked ? {'x-demo-seed':batch} : {})},body:JSON.stringify(body)})
+  const data = await r.json(); if (!r.ok) throw Error(path + ': ' + JSON.stringify(data)); return data
 }
-
+await req('/platform/tenants',{id:tid,name:'Mark proof fixture',plan:'chain',currency:'CNY',timezone:'Asia/Shanghai'})
+const store = await fetch(BASE+'/platform/tenants/'+tid+'/store',{headers:{authorization:'Bearer '+token}}).then(r=>r.json())
+const tech = (await req('/platform/tenants/'+tid+'/technicians',{name:'Mark proof tech'})).technician
+const service = (await req('/platform/tenants/'+tid+'/services',{type:'NAIL',nameZh:'Mark proof',nameEn:'Mark proof',priceCents:10000,baseDurationMin:60})).service
+const make = (time, marked) => req('/admin/bookings/direct',{newCustomerName:'Mark proof customer',storeId:store.store.id,
+  serviceId:service.id,technicianId:tech.id,date:'2030-10-08',time},marked)
+const demo = (await make('10:00',true)).booking, ordinary = (await make('12:00',false)).booking
+const db = new DatabaseSync(health.dataFile,{readOnly:true})
+try {
+  const tagged = db.prepare('SELECT id FROM bookings WHERE tenant_id=? AND demo_seed=?').all(tid,batch)
+  check('⑤ 一条查询捞到本轮实际经产品接口创建的演示单，不依赖预置种子',tagged.some(row=>row.id===demo.id))
+  check('⑤b 未携带演示标记的普通创建请求不得被盖章',db.prepare('SELECT demo_seed FROM bookings WHERE id=?').get(ordinary.id).demo_seed===null)
+} finally {db.close()}
 console.log(`\n[演示标记] 造景脚本 ${tracked.length} 个 · 免盖章白名单 ${Object.keys(NO_MARK).length} · 标记列 ${DEMO_MARK_TABLES.join('/')}`)
 if (fails.length) { console.error(`\n❌ test-demo-mark ${fails.length}/${checks} 项未过`); process.exit(1) }
-console.log(`\n✅ test-demo-mark 通过 ${checks} 项`)

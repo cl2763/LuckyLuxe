@@ -77,7 +77,8 @@
        summaryRows / editHint,与网页端、与顾客端实际生效的规则同一出口(不各查各的)。 -->
   <block wx:elif="{{seg===3}}">
     <view class="card">
-      <view wx:if="{{!msRows.length}}" class="empty">读取中…</view>
+      <view wx:if="{{msLoading}}" class="empty">正在读取会员规则…</view>
+      <view wx:elif="{{msError}}" class="empty">{{msError}}<view class="add" bindtap="loadMembershipView">重新加载</view></view>
       <view class="mrow" wx:for="{{msRows}}" wx:key="key">
         <text class="mk">{{item.label}}</text>
         <text class="mv">{{item.value}}</text>

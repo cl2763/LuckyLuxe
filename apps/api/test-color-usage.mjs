@@ -9,6 +9,7 @@
  * 判据都从**令牌文件现读色值**再算比值 —— 不抄一份色值进判据(一件事一处真相)。
  */
 import { readFileSync } from 'node:fs'
+import vm from 'node:vm'
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -360,6 +361,7 @@ const baseColorOf = (r) => {
 }
 const isHero = (c) => /^var\(--hero\)$/.test(String(c).replace(/\s*\/\*[\s\S]*$/, '').trim())
 const goldBad = []
+const noTextRules = []
 let goldNoText = 0
 /* `::before` / `::after` 且 `content` 是空串 —— 它画的是一个纯色块(小圆点、竖条),
    **不承载任何字**,所以不许拿它继承来的字色去判它。这条是刀现测逼出来的:
@@ -367,11 +369,11 @@ let goldNoText = 0
 /* 单冒号 `:before` 是老写法,仓里两种都有 —— 判据只认一种,等于漏掉另一种(刀现测漏了 .fin-ai-li:before) */
 const isPureBlock = (r) => /::?(before|after)\b/.test(r.sel) && /content\s*:\s*(""|'')/.test(r.body)
 for (const r of goldRules) {
-  if (isPureBlock(r)) { goldNoText += 1; continue }
+  if (isPureBlock(r)) { goldNoText += 1; noTextRules.push(r); continue }
   if (r.own) { if (!isHero(r.own)) goldBad.push({ ...r, why: `自己写的字色是 ${r.own.slice(0, 24)}` }); continue }
   const base = baseColorOf(r)
   if (base) { if (!isHero(base.own)) goldBad.push({ ...r, why: `字色继承自 ${base.sel}(${base.own.slice(0, 24)})` }); continue }
-  goldNoText += 1
+  goldNoText += 1; noTextRules.push(r)
 }
 check(`⑥ 规矩丙:${goldRules.length} 条画金底的规则,每条要么自己写 color: var(--hero),要么在「没有字的色块」白名单里`,
   goldRules.length > 0 && goldBad.length === 0,
@@ -386,7 +388,7 @@ check(`⑥ 规矩丙:${goldRules.length} 条画金底的规则,每条要么自�
    **这一支比抬棘轮便宜得多,而且系统上更对:金色是装饰色,「选中」是状态,状态该用主色。** */
 const NO_TEXT_CAP = 16   /* 06g 棘轮初值;**只许降**(10b 曾抬到 17,10c 改图后退回) */
 check(`⑥b 丙筐「金底上没有字」${goldNoText} 条 ≤ 棘轮 ${NO_TEXT_CAP}(只许降;新加一条金底色块要让店主看见)`,
-  goldNoText <= NO_TEXT_CAP, `${goldNoText} > ${NO_TEXT_CAP}`)
+  goldNoText <= NO_TEXT_CAP, `${goldNoText} > ${NO_TEXT_CAP}: ${noTextRules.map(r=>r.f+":"+r.sel).join(" || ")}`)
 check(`⑥d 三筐穷尽:甲/乙筐 ${goldBad.length} 红 + 过了的 ${goldRules.length - goldBad.length - goldNoText} + 丙筐 ${goldNoText} = 全部 ${goldRules.length} 条`,
   goldBad.length + (goldRules.length - goldBad.length - goldNoText) + goldNoText === goldRules.length, '')
 check(`⑥c 反向守:金底上如果用奶白 --heroink,两档分别只有 ${ratio(tok(LIGHT, 'heroink'), tok(LIGHT, 'brand'))} / ${ratio(tok(DARK, 'heroink'), tok(DARK, 'brand'))} —— 证明这条规矩在分好坏`,
@@ -407,7 +409,6 @@ check(`⑥c 反向守:金底上如果用奶白 --heroink,两档分别只有 ${ra
  */
 const PIN_OK = [
   ['apps/web/platform.html', '平台运营控制台:整页浅色版式(白卡 + 一大片写死的浅底),只翻令牌会金翻面不翻', 'D188 双档化时拆'],
-  ['apps/web/sign.html', '顾客签单页:同上,而且它是 web-view 里那一页,双档要连小程序一起改', 'D188 双档化时拆'],
 ]
 const pinHits = []
 for (const f of SURFACE.filter((x) => /\.html$/i.test(x))) {
@@ -422,12 +423,25 @@ check(`⑧ 钉浅色只许 ${PIN_OK.length} 处:现测 ${pinHits.length} 处,且
   pinBad.length === 0, `名单外的:${pinBad.join(' || ')}`)
 check(`⑧b 钉浅色条数棘轮 ≤ ${PIN_OK.length}(只许降;要加第三页得店主点头)`,
   pinHits.length <= PIN_OK.length, `现测 ${pinHits.length} 处:${pinHits.join(' || ')}`)
-check('⑧c 反向守:名单里那两页**确实还钉着**(判据不能因为钉子被悄悄拆了就一直绿)',
+check('⑧c 反向守:剩余名单页**确实还钉着**(判据不能因为钉子被悄悄拆了就一直绿)',
   PIN_OK.every(([f]) => pinHits.some((h) => h.startsWith(`${f}:`))),
   `现测钉子:${pinHits.join(' || ')}`)
 check('⑧d 每颗钉子旁边都写清了「为什么钉 + 谁来拆」(拆的去处必须写明 D188,不许只写「暂时」)',
   PIN_OK.every(([f]) => { const src = read(f); return /D188/.test(src) && /故意钉|为什么钉/.test(src) }),
   PIN_OK.filter(([f]) => !/D188/.test(read(f))).map(([f]) => f).join(' || '))
+
+// 2026-10-07 店主要求服务确认单跟随深色；签单页退出浅色钉子名单。
+const signPage = read('apps/web/sign.html')
+const themeBoot = signPage.match(/<script>([\s\S]*?)<\/script>/)[1]
+const effectiveSignTheme = (query, saved) => {
+  const document = {documentElement:{dataset:{}},write() {}}
+  vm.runInNewContext(themeBoot,{URLSearchParams,location:{search:query,pathname:'/experience/sign'},localStorage:{getItem:()=>saved},document,window:{}})
+  return document.documentElement.dataset.theme
+}
+check('⑧e 签署页接受小程序深色/浅色，浏览器保存主题，并拒绝非法主题',
+ effectiveSignTheme('?theme=dark','light')==='dark' && effectiveSignTheme('?theme=light','dark')==='light' && effectiveSignTheme('','dark')==='dark' && effectiveSignTheme('?theme=invalid','')===undefined)
+check('⑧f 签署页退出强制浅色名单，账单/声明跟随令牌；签名白纸单独保留',
+ !/<html[^>]*data-theme/.test(signPage) && /\.doc\{background:var\(--card\)/.test(signPage) && /\.confirmation-checks/.test(signPage))
 
 /* ═══ ⑦ 判据自己也守规矩:**锚规矩,不锚数字**(店主 06f §二 第二件)═══
  *

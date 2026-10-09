@@ -74,11 +74,12 @@ export function createBookingDraftsModule(deps) {
     const linkUrl = bookingDraftLink(draftId)
     db.prepare(`
       INSERT INTO booking_drafts
-        (id, quote_request_id, conversation_id, user_id, source_channel, service_id, technician_id, store_id, date, time,
+        (id, tenant_id, quote_request_id, conversation_id, user_id, source_channel, service_id, technician_id, store_id, date, time,
          addons_json, reference_images_json, notes, status, booking_id, link_url, expires_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', NULL, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', NULL, ?, ?, ?, ?)
     `).run(
       draftId,
+      currentTenantId(),
       quote?.id || body.quoteRequestId || null,
       conversationId,
       quote?.userId || body.userId || null,

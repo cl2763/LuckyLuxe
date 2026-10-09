@@ -7,7 +7,6 @@
 const api = require('../../../utils/api')
 const { formatMoney, displayOf } = require('../../../utils/money')
 const { storeMoney } = require('../../../utils/storeclock')
-
 const TIERS = [
   { key: 'list', label: '原价' },
   { key: 'share', label: '分享价' },
@@ -16,7 +15,6 @@ const TIERS = [
 ]
 const TIER_PRICE_FIELD = { list: 'listPriceCents', share: 'sharePriceCents', member: 'memberPriceCents', course: 'coursePriceCents' }
 const TIER_LABEL = { list: '原价', share: '分享价', member: '会员价', course: '疗程价' }
-
 /* 加项按主项目类别过滤(合同规则①③):正式映射日后在 S1 可配,眼下用「甲/睫」域启发式 ——
    类别名含「睫」=lash,含「甲」=nail,其余=other;未归类(无类别)的加项各组都显示。 */
 function domainOfName(name) {
@@ -25,7 +23,6 @@ function domainOfName(name) {
   if (n.includes('甲')) return 'nail'
   return 'other'
 }
-
 function newGroup(tierDefault, firstCat) {
   return {
     key: '', label: '',        // renderAll 按位置补(①②…);wxml 不做字符串下标运算
@@ -46,16 +43,15 @@ function newGroup(tierDefault, firstCat) {
     mainItems: [], addonGroups: [], mainName: '', summary: '', techRows: null, numbered: null
   }
 }
-
 // 条目编号显示位(规则⑧):后端 itemNo 从 1 起;超过 10 直接显示数字
 const NO_MARKS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩']
 const noMark = (n) => NO_MARKS[n - 1] || String(n)
-
 Page({
   // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
   onShow() { api.guardMerchant() },
   data: {
     ready: false,
+    bootError: '',
     bookingId: '', userId: '', customerName: '',
     display: null,
     tiers: TIERS,
@@ -80,7 +76,6 @@ Page({
     ctaText: '推送签署',
     submitting: false
   },
-
   onLoad(q) {
     /* D9 规则⑤:?qrFor=<settlementId> = 纯出码模式(台面「递给顾客签」的未绑定客通道) */
     if (q.qrFor) {
@@ -92,36 +87,38 @@ Page({
     this.setData({
       bookingId: q.bookingId || '',
       userId: q.userId || '',
+      preselectServiceId: q.serviceId || '',
       customerName: decodeURIComponent(q.name || '') || '顾客'
     })
     this.boot(q.serviceId || '')
   },
-
   async boot(preselectServiceId) {
+    this.setData({bootError:''})
     try {
-      const [cats, items, techs, dep] = await Promise.all([
+      // These reads do not depend on each other. On a phone each proxy hop has
+      // noticeable latency; serial timecard/package/member reads previously
+      // added several full round trips before the first usable screen.
+      const [cats, items, techs, dep, tc, tp, m, existing] = await Promise.all([
         api.adminGet('/admin/pricing/categories'),
         api.adminGet('/admin/pricing/items'),
         api.adminGet('/admin/technicians?roster=1'),
-        api.adminGet('/admin/deposit-config').catch(() => null)
+        api.adminGet('/admin/deposit-config').catch(() => null),
+        this.data.userId ? api.adminGet(`/admin/customers/${encodeURIComponent(this.data.userId)}/timecards`).catch(() => null) : null,
+        api.adminGet('/admin/timecard-packages').catch(() => null),
+        this.data.userId ? api.adminGet(`/admin/membership/members?userId=${encodeURIComponent(this.data.userId)}`).catch(() => null) : null,
+        this.data.bookingId ? api.adminGet(`/admin/settlements?bookingId=${encodeURIComponent(this.data.bookingId)}`).catch(() => null) : null
       ])
       const categories = (cats.categories || []).filter((c) => c.isBookable !== false)
       const all = (items.items || []).filter((i) => i.isActive !== false)
       this.allItems = all
       /* B1(图 §四 屏1):次卡大类——该顾客有可用卡才亮起,角标=可核销数;
          数据源=三端同一持卡接口(剩0接口层已隐,过期带位置灰)。 */
-      let timecards = []
-      if (this.data.userId) {
-        const tc = await api.adminGet(`/admin/customers/${encodeURIComponent(this.data.userId)}/timecards`).catch(() => null)
-        timecards = (tc && tc.timecards) || []
-      }
+      const timecards = (tc && tc.timecards) || []
       // B1-6:现场购卡套餐(员工可读口;有在售 times 套餐才出「+现场购卡」入口)
-      const tp = await api.adminGet('/admin/timecard-packages').catch(() => null)
       const timecardPackages = (tp && tp.packages) || []
       // 组内价格体系:默认按系统会员判定自动选档(现有口径,落到每一组;可手动改,改档留痕)
       let tierDefault = 'list'
       if (this.data.userId) {
-        const m = await api.adminGet(`/admin/membership/members?userId=${encodeURIComponent(this.data.userId)}`).catch(() => null)
         const one = m && (m.members || [])[0]
         if (one && one.isMember) tierDefault = 'member'
       }
@@ -150,8 +147,7 @@ Page({
          非 qrOnly:整页都在,关掉码还能操作绑定/充值;重复开单后端 409 挡着(双单口径)。 */
       if (this.data.bookingId) {
         try {
-          const r = await api.adminGet(`/admin/settlements?bookingId=${encodeURIComponent(this.data.bookingId)}`)
-          const pending = ((r && r.settlements) || []).filter((s) => s.status === 'pending_sign')
+          const pending = ((existing && existing.settlements) || []).filter((s) => s.status === 'pending_sign')
           if (pending.length) {
             wx.showToast({ title: `该预约已有待签单 ${pending.length} 张,继续办理`, icon: 'none', duration: 2200 })
             this.openQr(pending[0])
@@ -159,9 +155,11 @@ Page({
         } catch (e) { /* 拉不到不挡页面 */ }
       }
     } catch (e) {
-      wx.showToast({ title: (e && e.message) || '加载价目表失败', icon: 'none' })
+      this.setData({bootError:(e && e.message) || '加载价目表失败'})
     }
   },
+
+  retryBoot() { this.boot(this.data.preselectServiceId || '') },
 
   async loadBindState() {
     if (!this.data.userId) return
@@ -747,17 +745,20 @@ Page({
 
   /* ===== 出码 / 签署(现有闭环全保留;多组=同组多张单,顾客按 1/N 顺序签) ===== */
   async openQr(sheet) {
-    if (!sheet) { wx.navigateBack(); return }
+    const key = sheet && (sheet.id || sheet.settlementId || sheet.code)
+    if (!key) { wx.showModal({title:'无法出示签署码',content:'没有取得结算单编号，请返回订单重试。',showCancel:false,fail:(e)=>console.warn('[showModal fail]',e)}); return }
     try {
-      const r = await api.adminPost(`/admin/settlements/${encodeURIComponent(sheet.id)}/sign-token`, {})
+      const r = await api.adminPost(`/admin/settlements/${encodeURIComponent(key)}/sign-token`, {})
       const s = r.settlement || {}
+      if (!s.id) throw new Error('结算单编号缺失，请重新打开订单。')
       const m = (c) => storeMoney(c, 2)
       this.setData({
         qr: {
-          settlementId: sheet.id,
+          settlementId: s.id,
           code: s.code || sheet.code,
+          operatorText: s.operatorText || '历史未记录',
           url: r.url,
-          miniCodeUrl: r.miniCodePath ? `${api.API_BASE}${r.miniCodePath}` : '',
+          miniCodeUrl: r.miniCodePath ? api.miniCodeUrl(r.miniCodePath) : '',
           codeError: false,
           pushedText: r.pushedText || '',
           unbound: r.customerBound === false,
@@ -781,7 +782,7 @@ Page({
     clearTimeout(this._qrTimer)
     this._qrTimer = setTimeout(async () => {
       const q = this.data.qr
-      if (!q) return
+      if (!q || !q.settlementId) return
       try {
         const st = await api.adminGet(`/admin/settlements/${encodeURIComponent(q.settlementId)}/sign-state`)
         this.setData({ 'qr.state': st.state, 'qr.stateText': st.text })
@@ -793,23 +794,10 @@ Page({
             return
           }
           wx.showToast({ title: '顾客已签署,全部完成', icon: 'success' })
-          /* D97(01t 设计回归恢复):结算完成 → 写小记环节(可跳过);跳过=这单自动进「待写小记」清单。
-             D67① 回台面动作保留在两个分支尾。 */
+          // 店主 2026-10-07：签完直接回今日台面，小记从台面待办补写。
           setTimeout(() => {
             this.setData({ qr: null })
-            const goBoard = () => require('../../../utils/nav').relaunch('/pages/merchant/workbench/index')
-            const { userId, bookingId, customerName } = this.data
-            if (!userId) { goBoard(); return }
-            wx.showModal({
-              title: '给这单写个服务小记?',
-              content: '记录做了什么/用色/下次注意;跳过后这单会进「待写小记」清单,随时可补。',
-              confirmText: '去写', cancelText: '跳过',
-              success: (r2) => {
-                if (r2.confirm) wx.redirectTo({ url: `/pages/merchant/service-note/index?userId=${userId}&bookingId=${bookingId || ''}&name=${encodeURIComponent(customerName || '')}` })
-                else goBoard()
-              },
-              fail: () => goBoard()
-            })
+            require('../../../utils/nav').relaunch('/pages/merchant/orders/index')
           }, 900)
           return
         }
@@ -838,7 +826,7 @@ Page({
     clearTimeout(this._qrTimer)
     const code = this.data.qr.code
     this.setData({ qr: null })
-    wx.navigateTo({ url: `/pages/sign/index?merchant=1&code=${encodeURIComponent(code)}` })
+    require('../../../utils/nav').to(`/pages/sign/index?merchant=1&code=${encodeURIComponent(code)}`)
   },
   onUnload() { clearTimeout(this._qrTimer); clearTimeout(this._bindTimer) },
 
@@ -849,7 +837,7 @@ Page({
     if (this.data.bind.bound) { wx.showToast({ title: '该档案已绑定,无需绑定码', icon: 'none' }); return }
     try {
       const r = await api.adminPost(`/admin/customers/${encodeURIComponent(this.data.userId)}/bind-token`, {})
-      this.setData({ bindQr: { url: r.url, pagePath: r.pagePath, miniCodeUrl: r.miniCodePath ? `${api.API_BASE}${r.miniCodePath}` : '', codeError: false, displayName: r.displayName, hint: r.hint, state: 'waiting', stateText: '等待顾客扫码绑定…' } })
+      this.setData({ bindQr: { url: r.url, pagePath: r.pagePath, miniCodeUrl: r.miniCodePath ? api.miniCodeUrl(r.miniCodePath) : '', codeError: false, displayName: r.displayName, hint: r.hint, state: 'waiting', stateText: '等待顾客扫码绑定…' } })
       this.pollBind()
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '绑定码生成失败', icon: 'none' })
@@ -882,12 +870,12 @@ Page({
   /* 沙盒打开签署页入口；正式验收以真机扫码为准。 */
   openQrLink() {
     if (!this.data.qr) return
-    wx.navigateTo({ url: `/pages/sign/index?merchant=1&code=${encodeURIComponent(this.data.qr.code)}` })
+    require('../../../utils/nav').to(`/pages/sign/index?merchant=1&code=${encodeURIComponent(this.data.qr.code)}`)
   },
   // D26:绑定码「打开链接」 —— 沙盒直落本人确认卡(与真码扫后同一落点)
   openBindLink() {
     if (!this.data.bindQr) return
-    wx.navigateTo({ url: this.data.bindQr.pagePath })
+    require('../../../utils/nav').to(this.data.bindQr.pagePath)
   },
   copyBindLink() {
     if (!this.data.bindQr) return

@@ -72,14 +72,10 @@ check('③a反 🟢 **阳性对照**:别的待办还在(证明 ③a 的「没有
 await setState(DEF, 'soon')
 const keysSoon = await todoKeys()
 const card = await firstTodo()
-check('③b 🔴 **soon:卡出现,而且排第一张**(店主批的位置)',
-  keysSoon[0] === 'aiRetouch', JSON.stringify(keysSoon))
-check('③c 🔴 **soon 的 `to` 是空** —— 点击不跳页(跳过去是空页面,那是假入口)',
-  card?.to === '', JSON.stringify(card))
-check('③d soon 标了 soon,并带后端出的三句(前端零拼串)',
-  card?.soon === true && card?.label === 'AI 修图' && card?.badge === '敬请期待' && String(card?.hint || '').length > 0,
-  JSON.stringify(card))
-check('③e 🟢 soon 那张不带数字(它不是催人的事,`n` 不渲染)', card?.n === 0, String(card?.n))
+check('③b 未完成流程即使旧配置为 soon,两端待办仍无修图卡', !keysSoon.includes('aiRetouch'), JSON.stringify(keysSoon))
+check('③c 移除修图不影响其他待办', keysSoon.length >= 1, JSON.stringify(keysSoon))
+check('③d 配置仍保留 soon,不回写门店设置', (await req(`/platform/tenants/${DEF}/ai-retouch`)).data?.state === 'soon')
+check('③e 修图没有混入首项', card?.key !== 'aiRetouch', JSON.stringify(card))
 
 await setState(DEF, 'off')
 check('③f 🔴 拨回 off → 卡又消失(三态是活的,不是只进不出)',
@@ -90,11 +86,8 @@ const wxml = read('miniprogram/pages/merchant/home/index.wxml')
 check('④a 老板端那一列:`soon` 有淡态类,badge 渲染的是后端给的字段',
   /class="dh-todo \{\{item\.urgent[^"]*item\.soon\?'soon'/.test(wxml) && /\{\{item\.badge\}\}/.test(wxml), '')
 check('④b 老板端:`soon` 那张**不渲染数字**', /wx:if="\{\{!item\.soon\}\}" class="dh-todo-n"/.test(wxml))
-check('④c 快速修图在老板与员工首页底部快捷功能区,都指向同一入口',
-  (wxml.match(/class="retouch-shortcut" role="button" bindtap="openRetouch"/g) || []).length === 2 &&
-  wxml.indexOf('data-dh-todo') < wxml.indexOf('class="retouch-shortcut"') &&
-  wxml.lastIndexOf('data-staff-board') < wxml.lastIndexOf('class="retouch-shortcut"') &&
-  wxml.lastIndexOf('class="retouch-shortcut"') < wxml.indexOf('<!-- 快捷格取消'))
+check('④c 老板与员工首页移除未完成修图入口,保留两处扫码入口',
+  !wxml.includes('bindtap="openRetouch"') && (wxml.match(/bindtap="scanMemberCode"/g) || []).length === 2)
 check('④d 快速修图不重复占据员工任务卡位置', !/wx:if="\{\{aiRetouch\}\}"/.test(wxml))
 const pageJs = codeOnly(read('miniprogram/pages/merchant/home/index.js'))
 check('④e 🔴 点击分支:`soon` 只 toast,**在取 `k` 之前就 return**(不会走到跳页那一行)',

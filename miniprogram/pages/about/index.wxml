@@ -1,14 +1,17 @@
 <view class="about-page {{themeClass}}">
   <view class="about-card">
     <view class="about-title">版本信息</view>
+    <view class="about-row"><text class="about-k">小程序版本</text><text class="about-v">{{packageVersion}} · {{packageEnv}}</text></view>
+    <view class="about-row"><text class="about-k">小程序构建</text><text class="about-v">{{packageBuild}}</text></view>
     <block wx:if="{{failed}}">
       <view class="about-row"><text class="about-k">状态</text><text class="about-v">{{failed}}</text></view>
     </block>
     <block wx:else>
-      <view class="about-row"><text class="about-k">前端版本</text><text class="about-v" id="aboutBuild">{{build || '—'}}</text></view>
+      <view class="about-row"><text class="about-k">接口版本</text><text class="about-v" id="aboutBuild">{{build || '—'}}</text></view>
       <view class="about-row"><text class="about-k">提交号</text><text class="about-v">{{commit || '—'}}</text></view>
       <view class="about-row"><text class="about-k">服务启动</text><text class="about-v">{{builtAt || '—'}}</text></view>
     </block>
-    <view class="about-note">这三项由服务端下发。网页后台左下角显示的是同一个前端版本号 —— 两边对不上,说明有一端的缓存是旧的。</view>
+    <view class="about-note">小程序版本来自微信当前安装包；小程序构建随上传更新；接口版本来自当前连接的服务。它们分别用于核对发布状态。</view>
   </view>
+  <navigator class="about-card about-note" url="/pages/privacy/index" hover-class="tap-feedback">隐私与个人信息 ›</navigator>
 </view>

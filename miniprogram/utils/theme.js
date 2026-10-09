@@ -30,6 +30,7 @@ function currentTheme() {
 function setTheme(mode) {
   const m = MODES.includes(mode) ? mode : 'system'
   try { wx.setStorageSync(THEME_KEY, m) } catch (e) { /* 存不上不影响这一次生效 */ }
+  applyChrome(m)
   return m
 }
 /* 挂到根 view 的 class:`system` 时不加类,让 `@media` 那一段说了算 */

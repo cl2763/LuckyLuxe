@@ -10,7 +10,7 @@
 
   <view class="group" wx:if="{{isOwnerRole}}">
     <view class="row" bindtap="subscription">
-      <text class="t">套餐与续费</text>
+      <text class="t">套餐与授权</text>
       <text class="tag {{subWarn ? 'warn' : 'on'}}" wx:if="{{subText}}">{{subText}}</text>
       <text class="arr">›</text>
     </view>
@@ -23,9 +23,9 @@
     <view class="row" bindtap="changePwd">
       <text class="t">修改密码</text><text class="arr">›</text>
     </view>
-    <view class="row" bindtap="finance">
+    <view class="row" bindtap="finance" wx:if="{{isOwnerRole}}">
       <text class="t">财务密码</text>
-      <text class="tag {{financeLockEnabled ? 'on' : ''}}">{{financeLockEnabled ? (financeOn ? '已启用 · 本次已解锁' : '已启用') : '未启用(默认)'}}</text>
+      <text class="tag {{financeLockEnabled ? 'on' : ''}}">{{!financeSettingsLoaded ? '状态待读取 · 点此重试' : financeLockEnabled ? (financeOn ? '已启用 · 本次已解锁' : '已启用') : '未启用(默认)'}}</text>
       <text class="arr">›</text>
     </view>
     <!-- D183(店主 2026-09-09):明暗双模式三档。深色只换配色,不改任何功能与数字。 -->
@@ -37,6 +37,7 @@
     </view>
   </view>
 
+  <navigator class="group" url="/pages/privacy/index" hover-class="tap-feedback"><view class="row"><text class="t">隐私与个人信息</text><text class="arr">›</text></view></navigator>
   <view class="out" bindtap="logout">退出登录</view>
   <view class="ver">有迹商家端</view>
 </view>

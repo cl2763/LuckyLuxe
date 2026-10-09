@@ -39,12 +39,31 @@ const app = JSON.parse(readFileSync(join(MP, 'app.json'), 'utf8'))
 const subRoots = (app.subPackages || app.subpackages || []).map((s) => String(s.root).replace(/\/+$/, ''))
 
 const SKIP_FILE = new Set(['.DS_Store'])
+// Preserve the old asset and unfinished retouch source locally, but ship neither.
+const packIgnores = JSON.parse(readFileSync(join(ROOT, 'project.config.json'), 'utf8')).packOptions?.ignore || []
+const miniPackIgnores = JSON.parse(readFileSync(join(MP, 'project.config.json'), 'utf8')).packOptions?.ignore || []
+check('打包排除项仅为旧 Logo 与未开放修图页，两种项目入口一致',
+  JSON.stringify(packIgnores) === JSON.stringify([{type:'file',value:'assets/images/brand-logo.png'}, {type:'folder',value:'pages/pose/retouch'}])
+  && JSON.stringify(packIgnores) === JSON.stringify(miniPackIgnores))
+let oldLogoReferenced = false
+function inspectReferences(dir) {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name)
+    if (statSync(p).isDirectory()) inspectReferences(p)
+    else if (/\.(js|wxml|wxss|json)$/.test(name) && name !== 'project.config.json'
+      && readFileSync(p,'utf8').includes('brand-logo.png')) oldLogoReferenced = true
+  }
+}
+inspectReferences(MP)
+check('旧 Logo 无小程序引用，现用品牌图保留', !oldLogoReferenced && existsSync(join(MP,'assets/images/youji-logo.png')))
+const excludedPackFiles = new Set(packIgnores.filter(x => x.type === 'file').map(x => x.value))
 function bytesUnder(base, excludeRoots = []) {
   let total = 0
   const walk = (dir, rel) => {
     for (const name of readdirSync(dir)) {
       const p = join(dir, name)
       const r = rel ? `${rel}/${name}` : name
+      if (excludedPackFiles.has(r)) continue
       if (name === 'node_modules' || name === '.git') continue
       if (excludeRoots.some((x) => r === x || r.startsWith(`${x}/`))) continue
       const st = statSync(p)

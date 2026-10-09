@@ -1,19 +1,19 @@
 page{background:var(--paper)}
 .page{padding:20rpx 26rpx 160rpx}
 .topbar{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14rpx}
-.h1{font-size:34rpx;font-weight:600;color:#2d2826}
-.stat{font-size:21rpx;color:#8c8279}
-.srch{background:#fff;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:0 20rpx;height:72rpx;display:flex;align-items:center;margin-bottom:16rpx}
-.inp{flex:1;font-size:26rpx;color:#2d2826}
-.ph{color:#b6a99b}
-.empty{text-align:center;color:#8c8279;font-size:24rpx;padding:60rpx 0}
-.conv{background:#fff;border:1rpx solid #e7ddd4;border-radius:18rpx;padding:18rpx 20rpx;margin-bottom:14rpx}
-.conv.alert{border-left:6rpx solid #a34c48}
+.h1{font-size:34rpx;font-weight:600;color:var(--ink)}
+.stat{font-size:21rpx;color:var(--sub)}
+.srch{background:var(--card);border:1rpx solid var(--line);border-radius:14rpx;padding:0 20rpx;height:72rpx;display:flex;align-items:center;margin-bottom:16rpx}
+.inp{flex:1;font-size:26rpx;color:var(--ink)}
+.ph{color:var(--sub)}
+.empty{text-align:center;color:var(--sub);font-size:24rpx;padding:60rpx 0}
+.conv{background:var(--card);border:1rpx solid var(--line);border-radius:18rpx;padding:18rpx 20rpx;margin-bottom:14rpx}
+.conv.alert{border-left:6rpx solid var(--bad)}
 .conv-top{display:flex;justify-content:space-between;align-items:center}
-.conv-name{font-size:28rpx;font-weight:600;color:#2d2826}
-.conv-msg{font-size:24rpx;color:#8c8279;margin-top:8rpx;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.conv-time{font-size:20rpx;color:#b6a99b;margin-top:8rpx}
+.conv-name{font-size:28rpx;font-weight:600;color:var(--ink)}
+.conv-msg{font-size:24rpx;color:var(--sub);margin-top:8rpx;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conv-time{font-size:20rpx;color:var(--sub);margin-top:8rpx}
 .tag{font-size:21rpx;border-radius:40rpx;padding:5rpx 16rpx}
-.tag.g{background:#f1e7df;color:#9b7655}
-.tag.d{background:#f3e1df;color:#a34c48}
-.tag.s{background:#e3eee8;color:#47735f}
+.tag.g{background:var(--wall);color:var(--brandd)}
+.tag.d{background:var(--badbg);color:var(--bad)}
+.tag.s{background:var(--goodbg);color:var(--good)}

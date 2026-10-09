@@ -142,9 +142,12 @@ check('⑤ 营业时段字段在(网格范围口径的输入)', 'openTime' in da
   const pastAgain = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uD, serviceId: svcD.id, technicianId: techD.id, date: today, time: '00:00', durationMin: 30 }) }, PLATFORM, H)
   check('🔴 D88 行为:过去时段撞位 → 409 说「已经过去了(门店现在 HH:MM)」,不再答非所因',
     pastAgain.status === 409 && /已经过去了.门店现在 \d{2}:\d{2}/.test(pastAgain.data?.error?.message || ''), JSON.stringify(pastAgain.data).slice(0, 140))
-  const fut = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uD, serviceId: svcD.id, technicianId: techD.id, date: today, time: '23:00', durationMin: 30 }) }, PLATFORM, H)
+  // Calendar arithmetic on the store's date; 23:00 today is already past in late-night runs.
+  const nextDate = new Date(today + 'T12:00:00Z'); nextDate.setUTCDate(nextDate.getUTCDate() + 1)
+  const futureDate = nextDate.toISOString().slice(0, 10)
+  const fut = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uD, serviceId: svcD.id, technicianId: techD.id, date: futureDate, time: '23:00', durationMin: 30 }) }, PLATFORM, H)
   check('D88 行为夹具:23:00 先占位', fut.status === 201, String(fut.status))
-  const futClash = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uD, serviceId: svcD.id, technicianId: techD.id, date: today, time: '23:00', durationMin: 30 }) }, PLATFORM, H)
+  const futClash = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uD, serviceId: svcD.id, technicianId: techD.id, date: futureDate, time: '23:00', durationMin: 30 }) }, PLATFORM, H)
   check('🔴 D88 行为:未来撞位 → 409 说「和已有预约重叠(所选服务需 N 分钟)」',
     futClash.status === 409 && /重叠.+分钟/.test(futClash.data?.error?.message || ''), JSON.stringify(futClash.data).slice(0, 140))
 

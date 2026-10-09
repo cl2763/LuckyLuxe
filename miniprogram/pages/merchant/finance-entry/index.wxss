@@ -1,26 +1,26 @@
 page{background:var(--paper)}
 .page{padding:24rpx 26rpx 60rpx}
-.ps{font-size:22rpx;color:#8c8279;margin-bottom:18rpx;line-height:1.6}.seg {display:flex;background:#efe7dd;border-radius:999rpx;padding:5rpx;margin-bottom:20rpx}.seg-b {flex:1;text-align:center;font-size:27rpx;font-weight:700;padding:16rpx 0;border-radius:999rpx;color:#2d2826;background:#fff;border:1rpx solid #2d2826}
-.seg-b.on{background:#2d2826;color:#fff;border-color:#2d2826}
+.ps{font-size:22rpx;color:var(--sub);margin-bottom:18rpx;line-height:1.6}.seg {display:flex;background:var(--wall);border-radius:999rpx;padding:5rpx;margin-bottom:20rpx}.seg-b {flex:1;text-align:center;font-size:27rpx;font-weight:700;padding:16rpx 0;border-radius:999rpx;color:var(--ink);background:var(--card);border:1rpx solid var(--hero)}
+.seg-b.on{background:var(--hero);color:var(--heroink);border-color:var(--hero)}
 /* 六统一(08-30c):收/支选中色语义并入统一黑白规格;金额红绿语义仍在列表数字上 */
 
-.amt{background:#fff;border:1rpx solid #e7ddd4;border-radius:20rpx;padding:22rpx 26rpx;margin-bottom:8rpx}
-.amt-l{font-size:21rpx;color:#8c8279}
+.amt{background:var(--card);border:1rpx solid var(--line);border-radius:20rpx;padding:22rpx 26rpx;margin-bottom:8rpx}
+.amt-l{font-size:21rpx;color:var(--sub)}
 .amt-row{display:flex;align-items:baseline;gap:8rpx;margin-top:6rpx}
-.amt-sign{font-size:40rpx;font-weight:700;color:#8c8279}
-.amt-inp{flex:1;font-size:56rpx;font-weight:700;color:#2d2826;height:80rpx}
-.ph{color:#d8cec2}
-.k{font-size:22rpx;color:#8c8279;font-weight:700;margin:20rpx 0 12rpx}
-.chips{display:flex;flex-wrap:wrap;gap:14rpx}.chip {font-size:24rpx;font-weight:600;color:#6d5f52;background:#fff;border:1rpx solid #e7ddd4;border-radius:999rpx;padding:12rpx 26rpx}
-.chip.on{background:#2d2826;color:#fff;border-color:#2d2826}
-.inp{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:20rpx 24rpx;display:flex;justify-content:space-between;align-items:center;margin-bottom:14rpx}
-.inp-l{font-size:24rpx;color:#8c8279}
-.inp-v{font-size:26rpx;font-weight:600;color:#2d2826}
-.note-inp{flex:1;text-align:right;font-size:25rpx;color:#2d2826;margin-left:20rpx}
-.save{height:92rpx;line-height:92rpx;text-align:center;background:#2d2826;color:#fff;border-radius:18rpx;font-size:31rpx;font-weight:700;margin-top:16rpx}
+.amt-sign{font-size:40rpx;font-weight:700;color:var(--sub)}
+.amt-inp{flex:1;font-size:56rpx;font-weight:700;color:var(--ink);height:80rpx}
+.ph{color:var(--brandd)}
+.k{font-size:22rpx;color:var(--sub);font-weight:700;margin:20rpx 0 12rpx}
+.chips{display:flex;flex-wrap:wrap;gap:14rpx}.chip {font-size:24rpx;font-weight:600;color:var(--sub);background:var(--card);border:1rpx solid var(--line);border-radius:999rpx;padding:12rpx 26rpx}
+.chip.on{background:var(--hero);color:var(--heroink);border-color:var(--hero)}
+.inp{background:var(--card);border:1rpx solid var(--line);border-radius:16rpx;padding:20rpx 24rpx;display:flex;justify-content:space-between;align-items:center;margin-bottom:14rpx}
+.inp-l{font-size:24rpx;color:var(--sub)}
+.inp-v{font-size:26rpx;font-weight:600;color:var(--ink)}
+.note-inp{flex:1;text-align:right;font-size:25rpx;color:var(--ink);margin-left:20rpx}
+.save{height:92rpx;line-height:92rpx;text-align:center;background:var(--hero);color:var(--heroink);border-radius:18rpx;font-size:31rpx;font-weight:700;margin-top:16rpx}
 .save.dis{opacity:.6}
-.tip{font-size:20rpx;color:#8c8279;line-height:1.7;margin-top:18rpx}
-.link{color:#9b7655;text-decoration:underline}
+.tip{font-size:20rpx;color:var(--sub);line-height:1.7;margin-top:18rpx}
+.link{color:var(--brandd);text-decoration:underline}
 
 /* 08-29:记一笔的分工句(后端出句) */
-.entry-note { display: block; font-size: 22rpx; color: #9a938c; margin: 8rpx 0 16rpx; padding-left: 12rpx; border-left: 2rpx solid #ece7e1; }
+.entry-note { display: block; font-size: 22rpx; color: var(--sub); margin: 8rpx 0 16rpx; padding-left: 12rpx; border-left: 2rpx solid var(--line); }
