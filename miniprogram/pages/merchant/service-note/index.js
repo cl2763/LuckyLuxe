@@ -1,5 +1,6 @@
 const api = require('../../../utils/api')
 Page({
+  behaviors: [require('../../../utils/media-privacy')],
   // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
   onShow() { api.guardMerchant() },
   data: {
@@ -18,19 +19,21 @@ Page({
   },
   onInput(e) { this.setData({ text: e.detail.value }) },
   /* 添加图片:拍照/相册(与图库上传同一通道:本地读 base64 → data: 直传) */
-  addImages() {
+  addImages() { this.withMediaPrivacy(() => this.addImagesAuthorized()) },
+  addImagesAuthorized() {
     const left = 9 - this.data.images.length
     if (left <= 0) { wx.showToast({ title: '最多 9 张', icon: 'none' }); return }
     wx.chooseMedia({
-      count: left, mediaType: ['image'], sourceType: ['album', 'camera'],
+      count: Math.min(left, 9), mediaType: ['image'], sourceType: ['album', 'camera'],
       success: async (res) => {
         const fs = wx.getFileSystemManager()
-        const datas = await Promise.all(res.tempFiles.map((f) => new Promise((resolve) => {
+        const datas = await Promise.all((res.tempFiles || []).map((f) => new Promise((resolve) => {
           fs.readFile({ filePath: f.tempFilePath, encoding: 'base64', success: (r) => resolve('data:image/jpeg;base64,' + r.data), fail: () => resolve('') })
         })))
+        if (!datas.filter(Boolean).length) { wx.showToast({ title: '未能读取图片，请重新选择', icon: 'none' }); return }
         this.setData({ images: this.data.images.concat(datas.filter(Boolean)).slice(0, 9) })
       },
-      fail: (e) => { if (!/cancel/.test(String(e && e.errMsg))) wx.showToast({ title: '选图失败', icon: 'none' }) }
+      fail: (e) => this.mediaPrivacyFailure(e)
     })
   },
   removeImage(e) {

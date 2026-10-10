@@ -2007,7 +2007,7 @@ textarea:focus {
   padding: 12px 16px;
   opacity: 0;
   pointer-events: none;
-  transition: 0.2s ease;
+  transition: transform 0.2s ease;
   text-align: center;
   font-weight: 800;
   z-index: 10;

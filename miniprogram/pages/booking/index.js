@@ -4,6 +4,7 @@ const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 
 Page({
+  behaviors: [require('../../utils/media-privacy')],
   data: {
     service: null,
     lang: 'zh',
@@ -191,7 +192,8 @@ Page({
     })
   },
 
-  chooseImage() {
+  chooseImage() { this.withMediaPrivacy(() => this.chooseImageAuthorized()) },
+  chooseImageAuthorized() {
     const left = 3 - this.data.referenceImages.length
     if (left <= 0) {
       wx.showToast({ title: this.data.t.imageLimit, icon: 'none' })
@@ -219,7 +221,8 @@ Page({
         mediaType: ['image'],
         sourceType: ['album', 'camera'],
         sizeType: ['compressed'],
-        success: (res) => handlePaths((res.tempFiles || []).map((item) => item.tempFilePath))
+        success: (res) => handlePaths((res.tempFiles || []).map((item) => item.tempFilePath)),
+        fail: (e) => this.mediaPrivacyFailure(e)
       })
       return
     }
@@ -227,7 +230,8 @@ Page({
       count: left,
       sizeType: ['compressed'],
       sourceType: ['album', 'camera'],
-      success: (res) => handlePaths(res.tempFilePaths || [])
+      success: (res) => handlePaths(res.tempFilePaths || []),
+      fail: (e) => this.mediaPrivacyFailure(e)
     })
   },
 

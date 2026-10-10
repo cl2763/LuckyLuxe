@@ -1,17 +1,8 @@
 <view class="pg {{themeClass}}">
-  <view wx:if="{{list.length}}" class="demobar">演示数据 · 正式版由站内消息表返回</view>
-  <block wx:if="{{list.length}}">
-    <view class="li" wx:for="{{list}}" wx:key="id">
-      <view class="dot {{item.type}}"></view>
-      <view class="mi">
-        <view class="mt">{{item.title}}</view>
-        <view class="mm">{{item.label}} · {{item.time}}</view>
-      </view>
-    </view>
-  </block>
-  <view wx:else class="empty">
-    <view class="et">暂无消息</view>
-    <view class="ed">预约提醒、补甲回访、优惠券到账、储值召回等,都会记录在这里,方便你随时查看。</view>
-  </view>
-  <view class="note">这里是站内记录;要在微信里收到锁屏/服务通知提醒,需小程序上线后开通「订阅消息」并授权。</view>
+ <view wx:if="{{loading}}" class="empty" role="status">{{en?'Loading messages…':'正在加载消息…'}}</view>
+ <view wx:elif="{{loginRequired}}" class="empty"><view>{{en?'Sign in to view your store messages':'登录后查看本店发给你的消息'}}</view><button bindtap="login">{{en?'Sign in':'前往登录'}}</button></view>
+ <view wx:elif="{{error}}" class="empty"><view>{{error}}</view><button bindtap="load">{{en?'Retry':'重试'}}</button></view>
+ <block wx:elif="{{list.length}}"><view class="li" wx:for="{{list}}" wx:key="id"><view class="mi"><view class="mt">{{item.text}}</view><view class="mm">{{item.timeText}}</view></view></view></block>
+ <view wx:else class="empty"><view class="et">{{en?'No messages':'暂无消息'}}</view><view class="ed">{{en?'Messages from this store will appear here.':'本店发给你的站内通知会显示在这里。'}}</view></view>
+ <view class="note">{{en?'Latest 100 in-app notices. Times follow the store time zone. WeChat reminders require a separate subscription.':'显示最近100条站内通知，时间按门店时区显示。微信提醒需另行订阅，站内记录不代表微信已送达。'}}</view>
 </view>

@@ -1,3 +1,4 @@
+@import "../../../templates/media-privacy.wxss";
 page{background:var(--paper)}
 .page{padding:16rpx 26rpx 140rpx;background:var(--paper);min-height:100vh;box-sizing:border-box}.seg {display:flex;background:var(--wall);border-radius:999rpx;padding:5rpx;margin-bottom:16rpx}
 .s{flex:1;text-align:center;font-size:24rpx;color:var(--ink);background:var(--card);border:1rpx solid var(--line);padding:14rpx 0;border-radius:9rpx}

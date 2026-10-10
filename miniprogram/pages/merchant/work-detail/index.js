@@ -3,6 +3,7 @@ const api = require('../../../utils/api')
 const PLATFORMS = [{ k: 'xiaohongshu', label: '小红书' }, { k: 'douyin', label: '抖音' }, { k: 'meituan', label: '美团／大众点评' }, { k: 'instagram', label: 'Instagram' }]
 
 Page({
+  behaviors: [require('../../../utils/media-privacy')],
   // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
   onShow() { api.guardMerchant() },
   data: {
@@ -78,13 +79,15 @@ Page({
     })
   },
 
-  saveImage() {
+  saveImage() { this.withMediaPrivacy(() => this.saveImageAuthorized()) },
+  saveImageAuthorized() {
     const img = this.data.curImg
     if (!img) return
     const doSave = (filePath) => wx.saveImageToPhotosAlbum({
       filePath,
       success: () => wx.showToast({ title: '图片已存相册', icon: 'none' }),
       fail: (e) => {
+        if (Number(e && e.errno) === 112 || /scope is not declared/i.test(String(e && e.errMsg))) { this.mediaPrivacyFailure(e); return }
         if (String(e.errMsg || '').includes('auth')) {
           wx.showModal({ title: '需要相册权限', content: '请在设置里允许保存到相册后重试。', confirmText: '去设置', success: (r) => { if (r.confirm) wx.openSetting() },
   fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)

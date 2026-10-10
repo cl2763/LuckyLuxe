@@ -1,3 +1,4 @@
+const { share } = require('../../utils/public-share')
 const api = require('../../utils/api')
 const i18n = require('../../utils/i18n')
 const { albumsOf, moveAlbum, previewOf } = require('./navigation')
@@ -18,6 +19,8 @@ function typeLabel(type, lang) {
 }
 
 Page({
+  onShareAppMessage() { return share('portfolio', this.data.lang === 'en' ? 'Our work' : '本店真实客作', { workId: this.data.preview && this.data.preview.id }) },
+  onShareTimeline() { return this.onShareAppMessage() },
   data: {
     loading: true, loadError: '', preview: null, previewLoading: false, previewError: false,
     lang: 'zh',
@@ -31,7 +34,7 @@ Page({
     t: { title: '本店作品', all: '全部', allShop: '全店', emptyText: '暂无该筛选下的作品' }
   },
 
-  onLoad() {},
+  onLoad(options) { this.sharedWorkId = options.workId || '' },
 
   onShow() {
     this.refresh()
@@ -78,6 +81,12 @@ Page({
     this._loading = false
     this.setData({ loading: false, lang, t, works: decorated, techs, chips, activeTech: '', activeType: '' })
     this.applyFilter()
+    if (this.sharedWorkId) {
+      const work = decorated.find(w => w.id === this.sharedWorkId)
+      this.sharedWorkId = ''
+      if (work) this.openPreview(work)
+      else wx.showToast({ title: lang === 'en' ? 'Work is no longer available' : '该作品已下架或不可用', icon: 'none' })
+    }
   },
 
   applyFilter() {

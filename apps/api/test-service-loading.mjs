@@ -72,7 +72,7 @@ const boot = web.slice(web.indexOf('async function bootstrap()'), web.indexOf('/
 function webSetup(load, lang = 'zh') {
   let retry, reloads = 0
   const screen = { innerHTML: '', attributes: {}, setAttribute(k, v) { this.attributes[k] = v }, querySelector(sel) { return sel === '[data-bootstrap-retry]' && this.innerHTML.includes('data-bootstrap-retry') ? { addEventListener: (_, fn) => { retry = fn } } : null } }
-  const context = { state: { lang, user: null }, TENANT_ID: 'isolated-web-test', els: { screen, authView: { classList: { add() {} } }, appView: { classList: { remove() {} } } }, bindGlobalEvents() {}, loadServices: load, loadStores: async () => {}, loadAddOns: async () => {}, loadPortfolio: async () => {}, handleStripeReturn: async () => {}, handleBookingDraftParam: async () => {}, showApp: async () => { screen.innerHTML = 'actual-loaded-store' }, toast() {}, location: { reload: () => { reloads++ } } }
+  const context = { window:{CustomerPublicShare:{restore(){}}}, state: { lang, user: null }, TENANT_ID: 'isolated-web-test', els: { screen, authView: { classList: { add() {} } }, appView: { classList: { remove() {} } } }, bindGlobalEvents() {}, loadServices: load, loadStores: async () => {}, loadAddOns: async () => {}, loadPortfolio: async () => {}, handleStripeReturn: async () => {}, handleBookingDraftParam: async () => {}, showApp: async () => { screen.innerHTML = 'actual-loaded-store' }, toast() {}, location: { reload: () => { reloads++ } } }
   vm.createContext(context); vm.runInContext(boot, context)
   return { context, screen, retry: () => retry?.(), reloads: () => reloads }
 }

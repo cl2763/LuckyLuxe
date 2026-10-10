@@ -1,6 +1,12 @@
 const api = require('../../utils/api')
 
 Page({
+  onShareAppMessage() {
+    return { title: '有迹 · 门店预约与服务管理', path: '/pages/entry/index' }
+  },
+  onShareTimeline() {
+    return { title: '有迹 · 门店预约与服务管理', query: '' }
+  },
   enterStore() {
     wx.switchTab({ url: '/pages/home/index' })
   },

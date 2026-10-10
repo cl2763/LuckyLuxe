@@ -1,3 +1,4 @@
+@import "../../../templates/media-privacy.wxss";
 .pg{padding:16rpx 24rpx 60rpx;background:var(--paper);min-height:100vh}
 .pcard{background:linear-gradient(135deg,var(--card),var(--paper));border-radius:18rpx;padding:18rpx;box-shadow:0 4rpx 14rpx rgba(92,70,48,.08);border:1rpx solid var(--line)}
 .pcard .top{display:flex;align-items:center;gap:14rpx}

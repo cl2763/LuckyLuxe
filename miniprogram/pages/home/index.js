@@ -1,3 +1,4 @@
+const { share } = require('../../utils/public-share')
 const storeNameFit = require('../../utils/store-name-fit')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const { isPlaceholderValue } = require('../../utils/placeholder-words.js')   // 11k:占位词表唯一出口
@@ -7,6 +8,8 @@ const storage = require('../../utils/storage')
 const tabbar = require('../../utils/tabbar')
 
 Page({
+  onShareAppMessage() { return share('home', this.data.shopName, {}) },
+  onShareTimeline() { return this.onShareAppMessage() },
   data: {
     loading: true,
     loadFailed: false,
@@ -52,7 +55,7 @@ Page({
       const tid = api.currentTenantId()
       const r = await api.getShops()
       const hit = (r.shops || []).find((s) => s.tenantId === tid)
-      /* 🔴 02v:英文态显示英文店名;没配 name_en 的租户退回中文店名(空态说真话,不空白) */
+
       const zh = (hit && (hit.name || hit.storeName)) || ''
       const en = (hit && (hit.name_en || hit.storeNameEn)) || ''
       this.setData({ shopName: (this.data.lang === 'en' && en) ? en : zh })
@@ -62,12 +65,9 @@ Page({
   switchShop() { wx.navigateTo({ url: '/pages/shop-select/index' }) },
 
   // AI 在线客服入口已下线(2026-08-04),页面保留备用;此处留空避免有残留调用导致跳转报错
-  goAiChat() { /* 入口已下线,改走企业微信外部客服 */ },
+  goAiChat() {  },
 
-  /* 🔴 永久律(店主 08-23):今日营业句/营业中状态**后端唯一出口**(/stores 的 todayHours)。
-     原来这里前端自己算:①只看每周固定营业时间,不看特殊营业日 —— 今天特殊休息也照样显示
-     「今日 10:00–19:00 · 营业中」;②算不出就回落到常规营业时间那句;③用手机时区推"今天"。
-     现在前端零计算:后端给什么显示什么,没给就不显示这一行(不拿常规时间顶今天)。 */
+
   todayHoursOf(store, lang) {
     const th = (store && store.todayHours && (store.todayHours[lang] || store.todayHours.zh)) || null
     if (!th) return { todayHoursText: '', openNow: false, hasHours: false }
@@ -108,8 +108,7 @@ Page({
     storage.syncCartBadge()
     tabbar.update(this, 0)
     i18n.setTitle('有迹')
-    /* 🔴 D17:接口挂了如实报失败态,不回 mock。以前这三条任何一条挂了都会
-       悄悄回写死的演示服务/门店,顾客看到的是一整套不存在的东西。 */
+
     this.setData({ loading: true, loadFailed: false, loadError: '' })
     let nailServices, lashServices, stores, heroSlides
     try {
@@ -135,21 +134,14 @@ Page({
       lang,
       t: i18n.pageCopy('home', lang),
       store: i18n.localizeStore(storeRaw, lang),
-      /* 🔴 D78(店主 2026-08-28):轮播图**按租户出**,与网页顾客端同一个出口(公开 /stores)。
-         原来这里写死三张 Lucky Luxe 的图、文案还带着店名 —— 小婕的店和两家演示店的顾客
-         首页看到的全是别人家的门店照。零回落:后端没给就是空数组,swiper 整块不渲染,只出店卡。 */
+
       heroSlides: heroSlides,
       technicianWorks: lang === 'en' ? 'Artist Work' : '技师作品',
       portfolioIntro: lang === 'en' ? 'View real work from this store' : '查看本店真实客作',
       recommendedNail: i18n.localizeServices(nailServices.filter((item) => item.isRecommended), lang),
       recommendedLash: i18n.localizeServices(lashServices.filter((item) => item.isRecommended), lang)
     }))
-    /* 🔴 兜底(店主 02z):两个「人气」分区都够不到 2 张时,首页会只剩一张店卡 + 一个点进去空空如也的
-       作品入口 —— **新店第一天开张必然经过这一天,第一个撞上的很可能是小婕的店**。
-       这不是「少于 2 张不出现」的 bug,是它落地后必然出现的新态,得有东西接住。
-       接法(我判):**列服务目录前几项,标题中性「我们的服务」** —— 不承诺"人气",但顾客真能点进去下单。
-       ⚠️ 第三种情况必须分开:**一个服务都没有时不给入口卡** ——
-       那正是店主点破的「点进去空空如也」,入口卡等于把空推给下一页。那时如实说一句。 */
+
     const allSvc = i18n.localizeServices(this._catalog || [...nailServices, ...lashServices], lang)
     this.setData({ fallbackServices: allSvc.slice(0, 4) }, () => storeNameFit.fit(this))
   },

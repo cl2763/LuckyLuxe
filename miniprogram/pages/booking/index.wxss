@@ -1,3 +1,4 @@
+@import "../../templates/media-privacy.wxss";
 .booking-page {
   padding: 24rpx 24rpx 320rpx;
 }

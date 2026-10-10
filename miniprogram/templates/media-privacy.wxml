@@ -1,0 +1,9 @@
+<view wx:if="{{mediaPrivacyVisible}}" class="media-privacy-overlay">
+  <view class="media-privacy-card">
+    <view class="media-privacy-title">隐私保护提示</view>
+    <view class="media-privacy-copy">使用照片功能前，请阅读并同意隐私保护指引。只有你选择的照片会用于本次操作。</view>
+    <view class="media-privacy-link" bindtap="openMediaPrivacyPolicy">查看隐私保护指引</view>
+    <button id="media-privacy-agree" class="media-privacy-agree" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="agreeMediaPrivacy">同意并继续</button>
+    <button class="media-privacy-cancel" bindtap="cancelMediaPrivacy">暂不使用</button>
+  </view>
+</view>
