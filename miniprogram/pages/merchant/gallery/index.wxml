@@ -1,13 +1,5 @@
 <view class="page {{themeClass}}">
-  <view wx:if="{{privacyPrompt}}" class="privacy-overlay">
-    <view class="privacy-card">
-      <view class="privacy-title">上传作品图</view>
-      <view class="privacy-copy">选择照片前，请阅读并同意隐私保护指引。</view>
-      <view class="privacy-link" bindtap="openPrivacyPolicy">查看隐私保护指引</view>
-      <button id="gallery-privacy-agree" class="privacy-agree" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="onAgreePrivacyAuthorization">同意并选择照片</button>
-      <button class="privacy-cancel" bindtap="closePrivacyPrompt">暂不上传</button>
-    </view>
-  </view>
+  <include src="../../../templates/media-privacy.wxml" />
   <view wx:if="{{canCreate}}" class="creation-tools">
     <view class="creation-title">作品</view>
     <view class="creation-card"><view class="creation-name">拍照姿势卡</view><view class="creation-copy">33 张手势示意，找到适合这副甲的拍法。</view><button class="creation-button primary" bindtap="openPoses">挑一个姿势</button></view>

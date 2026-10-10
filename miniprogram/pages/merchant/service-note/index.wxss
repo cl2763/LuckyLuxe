@@ -1,3 +1,4 @@
+@import "../../../templates/media-privacy.wxss";
 .pg{padding:16rpx 24rpx 60rpx;background:var(--paper);min-height:100vh}
 .cust{display:flex;align-items:center;gap:12rpx;background:var(--card);border-radius:16rpx;padding:14rpx 16rpx;box-shadow:0 3rpx 10rpx rgba(92,70,48,.06)}
 .cust .av{width:56rpx;height:56rpx;border-radius:50%;background: var(--brand);color:var(--hero);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:24rpx}

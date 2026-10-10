@@ -1,4 +1,5 @@
 <view class="page {{themeClass}}">
+  <include src="../../../templates/media-privacy.wxml" />
   <view wx:if="{{!curImg}}" class="note">这一单还没有审核通过的作品图，请返回订单添加或审核。</view>
   <image wx:if="{{curImg}}" class="hero" src="{{curImg}}" mode="aspectFit" bindtap="previewCur" />
   <scroll-view wx:if="{{images.length>1}}" class="strip" scroll-x>

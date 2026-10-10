@@ -1,16 +1,17 @@
 const api = require('../../../utils/api')
 Page({
+  behaviors: [require('../../../utils/media-privacy')],
   data: { userId: '', customerName: '', profile: null, notes: [], loading: true,
     /* 签署文件留档(10b 第一步 · 双端同批律:网页商家端有,这儿就得同一批有)。
        🔴 `docsEmptyText`/`docsEmptyHint`/每行的 `statusText` 全部由后端下发,页面一句都不拼。 */
-    docs: [], docsEmptyText: '', docsEmptyHint: '', docsMoreText: '', docTypes: [],
+    docsLoading: true, docsError: '', docs: [], docsEmptyText: '', docsEmptyHint: '', docsMoreText: '', docTypes: [],
     uploading: false, pickedType: 'rights', pickedTitle: '', pickedVisible: true, shots: [] },
   onLoad(q) {
     this.setData({ userId: q.userId || '', customerName: q.name ? decodeURIComponent(q.name) : '顾客' })
   },
   async onShow() {
     if (!api.guardMerchant()) return // 门禁:未登录/会话失效不渲染空壳,直接回登录页
-    if (this.data.userId) this.load()
+    if (this.data.userId) await Promise.all([this.load(), this.loadDocs()])
   },
   async load() {
     try {
@@ -32,16 +33,18 @@ Page({
   },
   /* ── 签署文件:读 ─────────────────────────────────────────── */
   async loadDocs() {
+    this.setData({ docsLoading: true, docsError: '' })
     try {
       const r = await api.getSignedDocs(this.data.userId)
       this.setData({
         docs: r.docs || [], docTypes: r.types || [],
         docsEmptyText: r.emptyText || '', docsEmptyHint: r.emptyHint || '', docsMoreText: r.moreText || ''
       })
-    } catch (e) { wx.showToast({ title: (e && e.message) || '签署文件加载失败', icon: 'none' }) }
+    } catch (e) { this.setData({ docsError: '签署文件加载失败，请重试' }) }
+    finally { this.setData({ docsLoading: false }) }
   },
   /* ── 签署文件:传(屏2 先定类型,屏3 再拍;一份可多页)───────── */
-  openUpload() { this.setData({ uploading: true, pickedType: 'rights', pickedTitle: '', pickedVisible: true, shots: [] }) },
+  openUpload() { if (this.data.docsLoading || this.data.docsError) return; this.setData({ uploading: true, pickedType: 'rights', pickedTitle: '', pickedVisible: true, shots: [] }) },
   closeUpload() { this.setData({ uploading: false }) },
   pickType(e) {
     const key = e.currentTarget.dataset.key
@@ -51,19 +54,21 @@ Page({
   },
   onTitle(e) { this.setData({ pickedTitle: e.detail.value }) },
   onVisible(e) { this.setData({ pickedVisible: !!e.detail.value }) },
-  addShots() {
+  addShots() { this.withMediaPrivacy(() => this.addShotsAuthorized()) },
+  addShotsAuthorized() {
     const left = 20 - this.data.shots.length
     if (left <= 0) { wx.showToast({ title: '一份最多 20 页', icon: 'none' }); return }
     wx.chooseMedia({
-      count: left, mediaType: ['image'], sourceType: ['album', 'camera'],
+      count: Math.min(left, 9), mediaType: ['image'], sourceType: ['album', 'camera'],
       success: async (res) => {
         const fs = wx.getFileSystemManager()
-        const datas = await Promise.all(res.tempFiles.map((f) => new Promise((resolve) => {
+        const datas = await Promise.all((res.tempFiles || []).map((f) => new Promise((resolve) => {
           fs.readFile({ filePath: f.tempFilePath, encoding: 'base64', success: (r) => resolve('data:image/jpeg;base64,' + r.data), fail: () => resolve('') })
         })))
+        if (!datas.filter(Boolean).length) { wx.showToast({ title: '未能读取图片，请重新选择', icon: 'none' }); return }
         this.setData({ shots: this.data.shots.concat(datas.filter(Boolean)).slice(0, 20) })
       },
-      fail: (e) => { if (!/cancel/.test(String(e && e.errMsg))) wx.showToast({ title: '选图失败', icon: 'none' }) }
+      fail: (e) => this.mediaPrivacyFailure(e)
     })
   },
   /* 图屏3 标题栏的「重拍」:点哪一页撤哪一页,重新拍进来

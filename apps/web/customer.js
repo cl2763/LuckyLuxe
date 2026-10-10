@@ -410,7 +410,7 @@ function miniGuideCard() {
 
 function privateViews() {
   // 卡包=私有(自己的卡券);商城=公开(没登录也能看有什么套餐,与小程序同口径)
-  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'memberBenefits', 'pointsMall', 'cardPack', 'storedValue'])
+  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'memberBenefits', 'pointsMall', 'cardPack', 'storedValue', 'messages'])
 }
 
 function requiresAuth(view) {
@@ -491,6 +491,7 @@ async function bootstrap() {
     localStorage.removeItem('lucky-web-user')
   }
   await handleStripeReturn()
+  window.CustomerPublicShare.restore(state,toast)
   await handleBookingDraftParam()
   await showApp()
   els.screen.setAttribute('aria-busy', 'false')
@@ -719,6 +720,7 @@ function render() {
     // 黑卡「卡包」格的数字唯一出口 = /my/card-pack;没拿到先显示「—」,拿到再重绘(不拿恒 0 字段冒充)
     if (state.user && !state.cardPack) loadCardPack().then(() => { if (state.view === 'me') render() })
   }
+  if (state.view === 'messages') renderMessagesWeb()
   if (state.view === 'orders') renderOrdersWeb()
   if (state.view === 'orderDetail') renderOrderDetailWeb()
   if (state.view === 'memberBenefits') renderMemberBenefitsWeb()
@@ -729,6 +731,7 @@ function render() {
   if (state.view === 'storedValue') renderStoredValueWeb()
   if (state.view === 'mall') renderMallWeb()
   if (state.view === 'pointsMall') renderPointsWeb()
+  window.CustomerPublicShare.render({state,root:els.screen,tenant:TENANT_ID,toast})
   renderAiAssistantWidget()
 }
 
@@ -1475,6 +1478,7 @@ function renderMe() {
                 格子里的图片位本身就是配图位——将来换奖品缩略图只换图源不动版。 */''}
           ${[
             [state.lang === 'zh' ? '积分商城' : 'Points mall', '/assets/icons/c-gift.png', 'pointsMall', 'points'],
+            [state.lang === 'zh' ? '我的消息' : 'Messages', '/assets/icons/c-message.png', 'messages', true],
             [state.lang === 'zh' ? '卡包' : 'Card pack', '/assets/icons/c-ticket.png', 'cardPack', true],
             /* 🔴 店主 08-25:「占位功能」四个字生产上顾客看得到 —— 要么做要么藏。
                门店卡是**真页面**(店名/联系方式/营业时间),副标题改成说实话;

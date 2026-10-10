@@ -1,7 +1,8 @@
 const api = require('../../../utils/api')
 
 Page({
-  data: { canCreate: false, seg: 0, showcase: [], items: [], pendingUpload: 0, pendingPublish: 0, loading: true, privacyPrompt: false, uploadId: '' },
+  behaviors: [require('../../../utils/media-privacy')],
+  data: { canCreate: false, seg: 0, showcase: [], items: [], pendingUpload: 0, pendingPublish: 0, loading: true },
 
   async onShow() {
     if (!api.guardMerchant()) return // 门禁:未登录/会话失效不渲染空壳,直接回登录页
@@ -62,30 +63,8 @@ Page({
   upload(e) {
     const id = e.currentTarget.dataset.id
     if (!id) { wx.showToast({ title: '订单信息缺失，请刷新后重试', icon: 'none' }); return }
-    this.setData({ uploadId: id })
-    if (wx.getPrivacySetting) {
-      wx.getPrivacySetting({
-        success: (result) => {
-          if (result.needAuthorization) this.setData({ privacyPrompt: true })
-          else this.chooseWorkImages(id)
-        },
-        fail: () => this.chooseWorkImages(id)
-      })
-      return
-    }
-    this.chooseWorkImages(id)
+    this.withMediaPrivacy(() => this.chooseWorkImages(id))
   },
-
-  onAgreePrivacyAuthorization() {
-    const app = typeof getApp === 'function' ? getApp() : null
-    if (app && app.resolvePrivacyAuthorization) app.resolvePrivacyAuthorization('gallery-privacy-agree')
-    const id = this.data.uploadId
-    this.setData({ privacyPrompt: false, uploadId: '' })
-    if (id) this.chooseWorkImages(id)
-  },
-
-  closePrivacyPrompt() { this.setData({ privacyPrompt: false, uploadId: '' }) },
-  openPrivacyPolicy() { require('../../../utils/nav').to('/pages/privacy/index') },
 
   chooseWorkImages(id) {
     wx.chooseMedia({
@@ -110,10 +89,7 @@ Page({
           } catch (err) { wx.hideLoading(); wx.showToast({ title: (err && err.message) || '上传失败', icon: 'none' }) }
         }).catch((err) => { wx.hideLoading(); wx.showToast({ title: (err && err.message) || '处理图片失败', icon: 'none' }) })
       },
-      fail: (err) => {
-        if (/cancel/i.test(String(err && err.errMsg))) return
-        wx.showToast({ title: '无法打开选图，请检查相册权限', icon: 'none' })
-      }
+      fail: (err) => this.mediaPrivacyFailure(err)
     })
   },
 

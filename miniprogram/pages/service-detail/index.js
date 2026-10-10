@@ -1,9 +1,12 @@
+const { share } = require('../../utils/public-share')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const storage = require('../../utils/storage')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 
 Page({
+  onShareAppMessage() { return share('service-detail', this.data.service && this.data.service.name, { id: this.serviceId }) },
+  onShareTimeline() { return this.onShareAppMessage() },
   data: {
     service: null,
     loading: true,

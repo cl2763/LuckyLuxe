@@ -50,6 +50,7 @@ import { basename, dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动日志给手机用的地址)
 import { storeCodeInfo } from './store-code.mjs'
+import { customerMessages } from './customer-messages.mjs'
 import { customerProfileRoute } from './customer-profile-route.mjs'
 import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
 import { inkToPng } from './ink-raster.mjs'
@@ -153,12 +154,10 @@ import { sceneForToken } from './wechat-mini-code.mjs'
 import { createScanEntryRoute, createSignTokenHelpers } from './scan-entry-route.mjs'
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, getAiUsage, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
-
 // 进程时区只作为「没有门店时区可用时」的兜底。业务上的「今天/本月/日期分桶」一律按门店时区算,
 // 见下方 tenantTimezone() / localParts(dateLike, tz) —— 2026-08-07 P0.9 按店时区改造(审计 B-1)。
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Toronto'
 process.env.TZ = APP_TIMEZONE
-
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const { legacyScope, scopeOf, miniCodeScope, isProductionEnv, isExperienceEnv, demoLoginAllowed, treatAsReal } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs'); const { intakeCustomerForDirectBooking } = await import('./write-intake.mjs'); const { bindMiniPhone, needsPhone, resolveLoginPhone } = await import('./mini-phone.mjs')
 const workspaceRoot = join(__dirname, '..', '..')
@@ -10857,6 +10856,7 @@ async function route(req, res) {
     db.prepare('UPDATE admin_accounts SET display_name = ?, updated_at = ? WHERE id = ?').run(displayName, iso(new Date()), me.accountId)
     return json(res, 200, { displayName, isDefault: !raw })
   }
+  if (req.method === 'GET' && path === '/my/messages') return customerMessages(req,res,{db,requireCustomer,resolveTenant,query,apiError,json,tenantTimezone,localParts})
   if (req.method === 'PATCH' && path === '/my/profile') return customerProfileRoute(req, res, { db, requireCustomer, resolveTenant, query, apiError, json, serializeUser })
   if (req.method === 'GET' && path.startsWith('/users/')) {
     // 隐私:必须登录,且只能查自己的资料(此前任意 id 可读,已修)

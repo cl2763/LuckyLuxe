@@ -270,7 +270,7 @@ let bk1
   /* 🔴 J族(刀N4 咬出):includes 子串盲 —— 'rules-v2' 含 'rules' 照样绿。判据加界定符:引号闭合的完整端点串 */
   check('🔴 ⑦ 两端读写同三口:rules/queue/preview 在小程序页与网页模块里都在(整串带引号钉)',
     ["'/admin/notify/rules'", "'/admin/notify/queue'", "'/admin/notify/preview'"].every((p2) => miniJs.includes(p2) && webJs.includes(p2)))
-  const NOTICE_SENT = '微信/短信通道开通前,所有通知先记录在「记录」页,一条不丢;通道开通后自动补发未来的、不补发历史的。'
+  const NOTICE_SENT = '此处显示通知任务与处理结果。站内记录不代表微信或短信已送达；外部提醒需完成对应通道接入。'
   check('⑦ 图合同五诚实句:两端同一句、逐字相等(N4 同文案)',
     miniJsRaw.includes(NOTICE_SENT) && webJsRaw.includes(NOTICE_SENT))
   check('⑦ 图合同二两组同文案:预约通知/关怀回访组题与说明两端逐字同串',

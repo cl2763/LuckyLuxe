@@ -1,14 +1,8 @@
-
-// ===== 联调开关(店主用)=====
-// true  = 连你 Mac 本地沙盘(模拟数据,随便测,不影响线上;开发者工具模拟器用 127.0.0.1 即可)
-// false = 连可从手机访问的 HTTPS API。正式提审构建连接正式服务。
-// 发布沿用正式持久化数据，体验演示数据不进入此构建。
 const USE_LOCAL_SANDBOX = false // 正式提审构建
 const { realValue } = require('./placeholder-words.js')   // 11j 判据 A:占位词表两端同源(见该文件抬头)
 const publicCatalogCache = require('./public-catalog-cache')
 const requestLoading = require('./request-loading')
 const beginRequestLoading = () => typeof requestLoading.begin === 'function' ? requestLoading.begin() : (() => {})
-// DevTools uses loopback; physical-device local preview uses the configured LAN host.
 
 const devhost = require('./devhost')
 const deploy = require('./deploy')
@@ -27,7 +21,6 @@ const API_BASE = USE_LOCAL_SANDBOX ? LOCAL_API : 'https://api.jingshengyouji.com
 const EXPERIENCE = /\/experience$/.test(API_BASE)
 const EXPERIENCE_TENANTS = ['demo-ai', 'demo-basic', 'demo-empty']
 const DEMO_USER_ID = 'user-demo'
-// Store context is tenant-specific; a missing store never falls back to another tenant.
 
 function storeIdKey() { return `lucky_store_id::${currentTenant()}` }
 function cacheStoreId(stores) {
@@ -825,14 +818,7 @@ function getShops(includeDemo = EXPERIENCE) {
   return request(includeDemo ? '/shops?include=demo' : '/shops')
 }
 
-/* AI 客服(按当前店回答;登录时自动带顾客身份与订单上下文)
 
-   🔴 D155(店主 09-08:「小程序接入外部 API 时,要就像网页一样」):
-   ① **不再把 history 带上来**。这条接口后端已经并进 `handleWecomInbound` —— 与企微、模拟器同一个出口,
-      记忆的唯一真相是**会话流水**。客户端再带一份 history,就是第二处真相,而且必然对不上
-      (页面一刷新就没了,后端那份还在)。
-   ② 带一个**在本地存住的 clientId**:没登录时,后端要靠它把同一个人的几句话归到同一通对话上。
-      登录了就用不上它 —— 那时身份是服务端从令牌解出来的,伪造不了。 */
 function clientChatId() {
   let id = wx.getStorageSync('lucky_client_id')
   if (!id) {
@@ -858,23 +844,20 @@ function getMyStoredValue() { return request('/my/stored-value') }
 // D57 顾客侧待签单再入口:全部未签单(不止最新一张;即时开单没挂预约的也在)
 function getMyPendingSign() { return request('/my/pending-sign') }
 // 批③首件 屏B:顾客侧售后发起/撤回(同一状态机,前置=已完成+已签署;撤回=转已解决留痕)
-/* 🔴 D70(店主 08-24):顾客端「取消预约」原来**根本没有接口** —— 页面只改本地缓存
-   (storage.updateOrder status:'cancelled'),服务器上这张单还是 CONFIRMED、占位也还锁着:
-   顾客看到"已取消",商家台面上照样排着。假状态红线同族,连按钮一起收进真接口。 */
+
 function cancelBooking(bookingId, reason) { return request(`/bookings/${encodeURIComponent(bookingId)}/cancel`, 'POST', { reason: reason || '' }) }
 function startAfterSales(bookingId, description) { return request(`/my/bookings/${encodeURIComponent(bookingId)}/after-sales`, 'POST', { description }) }
 function withdrawAfterSales(bookingId) { return request(`/my/bookings/${encodeURIComponent(bookingId)}/after-sales/withdraw`, 'POST', {}) }
 // B3-4 代充回执确认:幂等,只许确认本人的充值行;未确认不阻塞任何链路
 function confirmStoredRecharge(id) { return request('/my/stored-value/confirm', 'POST', { id }) }
-/* D33 余额单源(2026-08-12):顾客端可见余额一律实时取后端 /my/stored-value,
-   不再读 lucky_member.balance 缓存(旧演示残留 4500 事件)。返回 {cents, yuan}。 */
+
 async function myBalance() {
   try { await ensureStoreScopedAuth() } catch (e) { /* 未登录时照常请求,由服务端 401 */ }
   const r = await request('/my/stored-value')
   const cents = (r && r.balanceCents) || 0
   return { cents, yuan: Math.round(cents / 100) }
 }
-/* 沙盒切换演示身份(补强批):名册+按人登录。服务端 ALLOW_DEMO 闸门,生产 404。 */
+
 function getSandboxRoster() { return request('/sandbox/demo-roster') }
 async function sandboxLoginAs(userId) {
   const data = await request('/auth/wechat/mini-login', 'POST', { demoLogin: true, tenantId: currentTenant(), asUserId: userId })
@@ -939,8 +922,7 @@ function saveServiceNote(data) {
 function getCustomerNotes(userId) {
   return adminRequest(`/admin/customers/${encodeURIComponent(userId)}/notes`)
 }
-/* 签署文件留档(10b 第一步 · 商家端)。🔴 与网页商家端同一批口,**同一份数据两端渲染**。
-   所有**句子**都从后端带下来(statusText / profileMetaText / emptyText …),页面零拼串。 */
+
 function getSignedDocs(userId) {
   return adminRequest(`/admin/customers/${encodeURIComponent(userId)}/signed-docs`)
 }
@@ -953,9 +935,7 @@ function getSignedDoc(docId) {
 function voidSignedDoc(docId, reason) {
   return adminRequest(`/admin/signed-docs/${encodeURIComponent(docId)}/void`, 'POST', { reason })
 }
-/* 顾客端只读:我签署过的文件(图 v2 第 5 屏)。🔴 **只有 GET,没有任何写口** ——
-   顾客不能传、不能删、不能作废,所以这一族只此一个函数。
-   不传任何 id:后端按「本人 + 同一家店」两个条件查,前端连猜都猜不了。 */
+
 function getMySignedDocs() { return request('/my/signed-docs') }
 // 角色缓存(登录/adminMe 后写入),供页面同步判断
 function getCachedRole() { return wx.getStorageSync('lucky_admin_role') || '' }
@@ -968,8 +948,7 @@ function goMerchantLogin() {
 
 // 商家区通用守卫(老板或员工都可):没登录就送回登录页,别让人停在没有数据的空壳页面上。
 // 只做本地会话判断,不发请求——放在 onShow 开头零成本。
-/* D84 强制设置闸(图 v1.0 合同一/四):未设置态 → 强制页(老板=表单,员工=墙,同页分脸)。
-   redirectTo 不留返回键 —— 不可跳过、不可关闭。 */
+
 const HOURS_SETUP_PAGE = 'pages/merchant/hours-setup/index'
 function hoursGateText() { try { return JSON.parse(wx.getStorageSync('lucky_hours_gate') || 'null') || {} } catch (e) { return {} } }
 function enforceHoursGate() {
@@ -1069,8 +1048,7 @@ async function getAdminDashboardData() {
   }
 }
 
-/* 04f-3 三端版本指纹:「关于」页读服务自述的版本。
-   开一个**窄出口**而不是把 raw `request` 暴露给所有页面 —— 出口越窄,波及面越小。 */
+
 function getHealth() { return request('/health', 'GET') }
 
 function getSignLink(code) { return request('/my/settlements/'+encodeURIComponent(code)+'/sign-link','POST',{}) }
@@ -1089,6 +1067,7 @@ module.exports = {
   getBookingDraft: id => request(`/booking-drafts/${encodeURIComponent(id)}`),
   acceptCustomerSession,
   getSignLink,
+  getMessages: () => request('/my/messages'),
   getDocumentLink: code => request('/my/settlements/'+encodeURIComponent(code)+'/document-link'),
   getHealth,
   getHeroSlides,

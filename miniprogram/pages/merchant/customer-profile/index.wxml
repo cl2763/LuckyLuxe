@@ -1,4 +1,5 @@
 <view class="pg {{themeClass}}">
+  <include src="../../../templates/media-privacy.wxml" />
   <view class="pcard">
     <view class="top">
       <view class="av">{{customerName[0]}}</view>
@@ -27,7 +28,9 @@
       <text class="sdoc-t">签署文件</text>
       <text class="sdoc-more" wx:if="{{docs.length}}">{{docsMoreText}} ›</text>
     </view>
-    <view class="sdoc-empty" wx:if="{{!docs.length}}">{{docsEmptyText}}\n{{docsEmptyHint}}</view>
+    <view class="sdoc-empty" wx:if="{{docsLoading}}">签署文件加载中…</view>
+    <view class="sdoc-empty" wx:elif="{{docsError}}" bindtap="loadDocs">{{docsError}}</view>
+    <view class="sdoc-empty" wx:elif="{{!docs.length}}">{{docsEmptyText}}\n{{docsEmptyHint}}</view>
     <view class="sdoc-row {{item.status === 'voided' ? 'is-voided' : ''}}" wx:for="{{docs}}" wx:key="id" bindtap="openDoc" data-id="{{item.id}}">
       <view class="sdoc-th"></view>
       <view class="sdoc-tx">
@@ -38,7 +41,7 @@
            而不是留一个空的描边框(那看起来像「有个状态但没显示出来」)。判据 test-empty-pill ① 盯着。 -->
       <text wx:if="{{item.statusText}}" class="sdoc-pill {{item.status === 'voided' ? 'v' : 'ok'}}">{{item.statusText}}</text>
     </view>
-    <button class="sdoc-add" bindtap="openUpload">+ 上传文件</button>
+    <button class="sdoc-add" disabled="{{docsLoading || docsError}}" bindtap="openUpload">+ 上传文件</button>
   </view>
 
   <!-- 屏2 + 屏3:先定类型,再拍 -->
