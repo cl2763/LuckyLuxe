@@ -38,6 +38,7 @@ Page({
     })
   },
 
+  previewGuide(e) { require('../../utils/guide-preview')(e.currentTarget.dataset.src) },
   copyAddress() {
     if (!this.data.store.address) return
     wx.setClipboardData({

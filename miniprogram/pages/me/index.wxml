@@ -217,7 +217,7 @@
       <view wx:if="{{authModalMode === 'login'}}" class="simple-login-body">
         <img-placeholder class="simple-login-avatar" src="" img-class="simple-login-avatar" text="没有头像"></img-placeholder>
         <view class="simple-login-title">{{lang === 'en' ? 'Youji 有迹' : '有迹'}}</view>
-        <view class="simple-login-desc">{{lang === 'en' ? 'Sign in with WeChat to view orders and member benefits.' : '微信一键登录后可查看订单与会员权益。'}}</view>
+        <view class="simple-login-desc">{{lang === 'en' ? 'Sign in with WeChat to view orders and member benefits.' : '通过微信登录并授权绑定手机号后，可查看订单与会员权益。'}}</view>
       </view>
 
       <view wx:else class="profile-edit-body">
@@ -251,7 +251,9 @@
           </view>
         </button>
         <view class="privacy-policy-link" hover-class="tap-feedback" bindtap="openPrivacyPolicy">{{lang === 'en' ? 'Read privacy policy' : '查看隐私保护指引'}}</view>
-        <button class="finish-button {{canFinishLogin ? '' : 'disabled'}}" disabled="{{!canFinishLogin}}" bindtap="finishLogin">
+        <view wx:if="{{phoneStep}}" class="auth-desc">{{authProfile.phoneMessage}}</view>
+        <button wx:if="{{phoneStep}}" class="finish-button" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" disabled="{{phoneBusy}}">{{lang === 'en' ? 'Authorize phone and sign in' : '授权手机号并完成登录'}}</button>
+        <button wx:else class="finish-button {{canFinishLogin ? '' : 'disabled'}}" disabled="{{!canFinishLogin}}" bindtap="finishLogin">
           {{authModalMode === 'profile' ? (lang === 'en' ? 'Save profile' : '保存资料') : (lang === 'en' ? 'WeChat one-tap login' : '微信一键登录')}}
         </button>
       </view>

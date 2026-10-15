@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto'
 import {SUBSCRIBE_TEMPLATES,subscriptionPayload} from './wechat-subscribe.mjs'
 // Separate durable outbox: existing in-app delivery and its immutable history remain unchanged.
-export function createBookingSubscriptions({db,apiError,json,readBody,requireCustomer,resolveTenant,localParts,tenantTimezone,send,enabled=false}) {
+export function createBookingSubscriptions({db,apiError,json,readBody,requireCustomer,resolveTenant,localParts,tenantTimezone,send,enabled=false,allowTarget=()=>true}) {
  let busy=false
  function ensureSchema(){db.exec(`
  CREATE TABLE IF NOT EXISTS booking_subscription_requests(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,user_id TEXT NOT NULL,booking_id TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,completed_at TEXT);
@@ -17,13 +17,14 @@ export function createBookingSubscriptions({db,apiError,json,readBody,requireCus
  }
  function config(tid,uid,id){
   const b=booking(tid,uid,id)
-  if(!enabled)return {enabled:false,reason:'微信提醒尚未开通，预约不受影响。'}
+  if(!enabled||!allowTarget(tid,uid))return {enabled:false,reason:'微信提醒尚未开通，预约不受影响。'}
   if(b.status!=='CONFIRMED')return {enabled:false,reason:'预约确认后可订阅微信提醒。'}
   const now=new Date(),requestId=randomUUID()
   db.prepare('INSERT INTO booking_subscription_requests VALUES(?,?,?,?,?,?,NULL)').run(requestId,tid,uid,id,now.toISOString(),new Date(+now+600000).toISOString())
   return {enabled:true,requestId,templates:Object.entries(SUBSCRIBE_TEMPLATES).map(([kind,t])=>({kind,id:t.id})),note:'仅在你同意后发送微信提醒；一次授权不代表持续订阅。拒绝不影响预约。'}
  }
  function consent(tid,uid,body){
+  if(!enabled||!allowTarget(tid,uid))throw apiError(409,'NOT_READY','微信提醒暂未开通。')
   const r=db.prepare('SELECT * FROM booking_subscription_requests WHERE id=? AND tenant_id=? AND user_id=?').get(String(body.requestId||''),tid,uid)
   if(!r)throw apiError(404,'NOT_FOUND','订阅请求不存在。')
   const b=booking(tid,uid,r.booking_id)
@@ -60,8 +61,11 @@ export function createBookingSubscriptions({db,apiError,json,readBody,requireCus
     AND NOT EXISTS(SELECT 1 FROM booking_subscription_outbox o WHERE o.task_id=t.id)
     AND EXISTS(SELECT 1 FROM booking_subscription_grants g WHERE g.tenant_id=t.tenant_id AND g.user_id=t.user_id AND g.booking_id=t.booking_id AND g.used_at IS NULL
      AND g.kind=CASE WHEN t.type='arrival_reminder' THEN 'arrival_reminder' ELSE 'booking_status' END AND t.scheduled_at>=g.created_at)
-    ORDER BY t.scheduled_at,t.id LIMIT 50`).all(now,now)
+    ORDER BY t.scheduled_at,t.id`).iterate(now,now)
+   let processed=0
    for(const task of tasks){
+    if(!allowTarget(task.tenant_id,task.user_id))continue
+    if(processed++>=50)break
     const kind=task.type==='arrival_reminder'?'arrival_reminder':'booking_status'
     const b=db.prepare('SELECT * FROM bookings WHERE id=? AND tenant_id=? AND user_id=?').get(task.booking_id,task.tenant_id,task.user_id)
     // Match the event's appointment slot, so delayed delivery never sends a superseded slot.

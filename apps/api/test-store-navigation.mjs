@@ -23,3 +23,5 @@ const web={window:{}};vm.runInNewContext(readFileSync(new URL('../web/store-navi
 assert.ok(web.window.StoreNavigation.render(withStoreNavigation(a),false).includes(withStoreNavigation(a).navigation.url))
 assert.equal(web.window.StoreNavigation.render({navigation:{url:'javascript:alert(1)'}},false),'')
 console.log('ok 1 - verified map destinations, changed-address invalidation, tenant isolation, five repeated clipboard flows, empty/error states and web links')
+
+let location;box.wx.openLocation=o=>{location=o};box.module.exports.navigate(withStoreNavigation(a));assert.equal(location.latitude,37.806177);assert.equal(location.longitude,112.528779);assert.equal(location.address,a.address);box.module.exports.navigate(withStoreNavigation(b));assert.equal(location.latitude,39.910069);assert.equal(location.longitude,116.472247);location.fail({errMsg:'fail denied'});assert.ok(modal.content.includes('复制地址'));modal.success({confirm:true});assert.ok(sheet.itemList[0].includes('高德'));console.log('ok 2 - native map destination coordinates and explicit fallback on map failure')

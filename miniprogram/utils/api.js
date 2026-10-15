@@ -94,7 +94,7 @@ function clearAuth() {
 
 function isLoggedIn() {
   const auth = getAuth()
-  return Boolean(auth && auth.accessToken && (!auth.expiresAt || Date.now() < auth.expiresAt - 60 * 1000))
+  return Boolean(auth && auth.needPhone === false && auth.accessToken && (!auth.expiresAt || Date.now() < auth.expiresAt - 60 * 1000))
 }
 
 function getAdminAuth() {
@@ -198,6 +198,7 @@ function request(path, method = 'GET', data, _retried) {
         const err = res.data && res.data.error ? res.data.error : new Error('请求失败，请重试')
         err.statusCode = res.statusCode
         err.requestPath = path.split('?')[0]
+        if (err.code === 'PHONE_BINDING_REQUIRED' && getAuth()) setAuth(Object.assign({}, getAuth(), {needPhone:true}))
         // 顾客会话失效 → 静默重登一次再重放(只对"曾经登录过"的会话做,未登录照常报错走登录引导)
         if (res.statusCode === 401 && !_retried && path.indexOf('/auth/') !== 0 && getAuth() && getAuth().accessToken) {
           if (!renewingCustomer || renewingCustomer.tenant !== tid) {
@@ -310,6 +311,7 @@ function toMiniStore(store) {
     storeNameEn: store.name_en || store.storeNameEn || '',
 
 
+    arrivalGuide: (store.arrivalGuide || []).map(s=>({...s,image:s.image.startsWith('/')?API_BASE+s.image:s.image})),
     address: realValue(store.address), navigation: store.navigation || null,
     phone: realValue(store.phone),
     addressText: realValue(store.address) || '门店地址待补充',   // 只作展示句,不驱动动作
@@ -443,7 +445,7 @@ async function loginForCurrentStore(options = {}) {
   if (tid !== currentTenant()) throw contextChanged()
   const realWechatClaim = previousRealWechatClaim || data.wechatVerified === true
   if (realWechatClaim) wx.setStorageSync(realWechatClaimKey(currentTenant()), true)
-  setAuth(Object.assign({}, data.auth, { user: data.user, tenantId: currentTenant(), _realWechat: realWechatClaim }))
+  setAuth(Object.assign({}, data.auth, { user: data.user, needPhone: data.needPhone, tenantId: currentTenant(), _realWechat: realWechatClaim }))
   wx.setStorageSync('lucky_member', Object.assign(miniMember(data.user), { _tenant: currentTenant() }))
   return data.user
 }
@@ -453,6 +455,7 @@ async function bindWechatPhone({ encryptedData, iv, phoneCode }) {
   const payload = phoneCode ? {phoneCode} : {code:await wxLoginCode(),encryptedData,iv}
   const out = await request('/auth/wechat/mini-phone', 'POST', payload)
   if (out.auth) acceptCustomerSession(out)
+  else if (out.needPhone === false) setAuth(Object.assign({}, getAuth(), {needPhone:false}))
   return out
 }
 
@@ -460,7 +463,7 @@ async function ensureLogin(options = {}) {
   const existing = getAuth()
   const fresh = Boolean(existing && existing.accessToken && (!existing.expiresAt || Date.now() < existing.expiresAt - 60 * 1000))
   const sameStore = Boolean(existing && existing.tenantId === currentTenant())  // 旧会话无租户戳=按不匹配处理,静默重登一次后就有戳了
-  if (fresh && sameStore) return existing.user
+  if (fresh && sameStore && typeof existing.needPhone === 'boolean') return existing.user
   if (fresh && !sameStore) {
     try { return await loginForCurrentStore(options) } catch (e) {
       clearAuth()
@@ -487,7 +490,7 @@ async function loginWithWechat(profile = {}) {
     phoneCode: profile.phoneCode || '',
     phone: profile.phone || ''
   })
-  if (profile.nickname || profile.avatarUrl) return updateProfile(profile)
+  if (!phoneBindingRequired() && (profile.nickname || profile.avatarUrl)) return updateProfile(profile)
   return user
 }
 async function updateProfile(profile) {
@@ -1008,11 +1011,19 @@ function acceptCustomerSession(out) {
   if (currentTenant() !== out.tenantId) onStoreSwitched()
   wx.setStorageSync('lucky_tenant', out.tenantId)
   wx.setStorageSync(realWechatClaimKey(out.tenantId), true)
-  setAuth(Object.assign({}, out.auth, {user:out.user, tenantId:out.tenantId, _realWechat:true}))
+  setAuth(Object.assign({}, out.auth, {user:out.user, needPhone:out.needPhone, tenantId:out.tenantId, _realWechat:true}))
   wx.setStorageSync('lucky_member', Object.assign(miniMember(out.user), {_tenant:out.tenantId}))
 }
 
+function phoneBindingRequired() { return getAuth()?.needPhone !== false }
+async function refreshPhoneRequirement() {
+  if (!getAuth()?.accessToken) return
+  const out = await request('/auth/wechat/mini-phone-status')
+  setAuth(Object.assign({}, getAuth(), {needPhone:out.needPhone}))
+}
+
 module.exports = {
+  phoneBindingRequired, refreshPhoneRequirement,
   miniCodeUrl, miniCodeEnvironment,
   getBookingDraft: id => request(`/booking-drafts/${encodeURIComponent(id)}`),
   acceptCustomerSession,

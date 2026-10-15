@@ -722,6 +722,12 @@
     "tenant_id",
     "type"
   ],
+  "store_guides": [
+    "revision",
+    "steps_json",
+    "store_id",
+    "tenant_id"
+  ],
   "store_special_dates": [
     "close_time",
     "date",

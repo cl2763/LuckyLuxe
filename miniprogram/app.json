@@ -83,7 +83,8 @@
         "migration-service/index",
         "migration-reconciliation/index",
         "booking-draft/index",
-        "messages/index"
+        "messages/index",
+        "store-guide/index"
       ]
     },
     {

@@ -1,7 +1,7 @@
 @import "../../templates/media-privacy.wxss";
 .store-hero {
   width: 100%;
-  height: 360rpx;
+  height: 220rpx;
   display: block;
   border-radius: 18rpx;
 }
@@ -45,7 +45,7 @@
 
 .action-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16rpx;
   margin-top: 24rpx;
 }
@@ -65,3 +65,9 @@
 .d17fail{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20rpx;padding:140rpx 40rpx}
 .d17msg{color:var(--sub);font-size:27rpx}
 .d17btn{border:1rpx solid var(--line);border-radius:999rpx;padding:14rpx 48rpx;font-size:27rpx;color:var(--brandd)}
+
+.arrival-guide{padding:28rpx;margin-top:24rpx}.guide-title{font-size:32rpx;font-weight:700}.arrival-step{margin-top:28rpx;font-size:27rpx;line-height:1.6;white-space:pre-wrap}.arrival-heading{display:flex;gap:14rpx;align-items:center;font-weight:600;margin-bottom:14rpx}.arrival-heading text{width:40rpx;height:40rpx;background:var(--brandd);color:var(--card);border-radius:50%;text-align:center;line-height:40rpx}.arrival-step image{width:100%;height:300rpx;border-radius:12rpx;margin-bottom:10rpx}
+
+.action-grid .btn{width:100%;padding:0 8rpx;font-size:25rpx;min-height:88rpx;display:flex;align-items:center;justify-content:center}
+
+.store-card{margin-top:0;padding:24rpx}.store-summary{display:flex;gap:22rpx;align-items:flex-start}.store-summary .store-hero{width:160rpx;height:160rpx;flex:0 0 160rpx;border-radius:12rpx}.store-summary-copy{flex:1;min-width:0}.store-name{font-size:30rpx}.store-summary-line{font-size:24rpx;line-height:1.55;margin-top:10rpx;color:var(--sub)}.action-grid{padding-top:16rpx;border-top:1rpx solid var(--line)}

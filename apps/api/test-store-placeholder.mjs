@@ -253,7 +253,8 @@ for (const f of SCAN_FILES) {
    customer.js 7 · store-content.js 2 · mp utils/api.js 4 · mp utils/i18n.js 4 ·
    home.wxml 4 · utils/store-navigation.js 2 · checkout.wxml 2 · store-location.wxml 2 ·
    store-location/index.js 2 · booking-done.wxml 1 · order-detail.wxml 1 */
-const OUTLET_CAP = 31
+// 2026-10-15: 到店指引三按钮新增 store.phone 可用性判断，无真实电话时隐藏拨号入口。
+const OUTLET_CAP = 32
 check(`⑦c 🔴 出口计数 ${outlets} ≡ 在册 ${OUTLET_CAP}(多了=有人加了新出口没登记;少了=出口被删或被改得认不出)`,
   outlets === OUTLET_CAP, outletMap.join(' | '))
 

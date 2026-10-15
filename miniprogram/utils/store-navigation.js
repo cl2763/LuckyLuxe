@@ -1,4 +1,13 @@
 function navigate(store = {}, en = false) {
+ const n=store.navigation
+ if(n && n.coordinateSystem==='gcj02' && Number.isFinite(n.latitude) && Number.isFinite(n.longitude) && Math.abs(n.latitude)<=90 && Math.abs(n.longitude)<=180 && typeof wx.openLocation==='function') {
+  wx.openLocation({latitude:n.latitude,longitude:n.longitude,name:store.storeName||store.name||'',address:store.address||'',scale:18,
+   fail:e=>{if(/cancel/.test(e.errMsg||''))return;wx.showModal({title:en?'Map unavailable':'地图暂时无法打开',content:en?'Copy a map link or address instead?':'是否改用地图链接或复制地址？',success:r=>{if(r.confirm)fallback(store,en)},fail:()=>wx.showToast({title:en?'Please retry':'导航暂不可用，请重试',icon:'none'})})}})
+  return
+ }
+ fallback(store,en)
+}
+function fallback(store = {}, en = false) {
  const toast = title => wx.showToast({title,icon:'none'})
  const address=store.address
  if(!address)return toast(en?'Address not available':'门店地址待补充')

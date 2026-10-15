@@ -10,6 +10,7 @@
     </view>
     <view class="hint">地址/电话改后会同步到 AI 客服的回答口径。</view>
 
+    <view class="gtitle">到店指引</view><view class="card navrow" bindtap="goGuide"><text>添加入口、停车及上楼路线的图片与说明</text><text>›</text></view>
     <view class="gtitle">门店专属小程序码</view>
     <view class="card store-code-card">
       <view class="hint">顾客扫码直接进入本店，会员与消费记录按门店独立保存。</view>
