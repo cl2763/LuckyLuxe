@@ -78,7 +78,7 @@
     "miniprogram/utils/scan-code.js": "d5633d0bbd280528fb73c1deb08b32c0be32814b76a2ea7c849e0d97db0c4273",
     "miniprogram/utils/api.js": "b949ac1d4539ee7d3b2bbb5fb935ef4094be8be9ffbd70af6555444a1f1fd52f",
     "miniprogram/utils/phone-auth.js": "43b42a9b51bc7f697a00e0e827cccc704d46c2c77bd2721ebfa6b9b65e6d68d1",
-    "miniprogram/utils/package-build.js": "98934502658728034f205ee2a2208b3a5045d1c545e0ec64a9ac91375d2d8917",
+    "miniprogram/utils/package-build.js": "d8166b7045051344add33b3ff0c3c98b3f3cbcfe6ac378829927eea1c6efb917",
     "miniprogram/utils/i18n.js": "95d24d3da0b06127b16c1afe51e3507cab135408a743c5e27b8dae93b28cdbf9",
     "miniprogram/utils/test-scan-actions.cjs": "9278c9df9f61748e9df3f6ae1858bee586c49a1285ef6f5663cbe53f7934e485",
     "miniprogram/utils/nav.js": "813281f51314c813f18c5666d1aaa0c107e03282e9adb1ead20b96d9ea6b0dde",
@@ -545,5 +545,6 @@
     "apps/api/test-mp-overlap.mjs": "9edf5d869df6521a5b7f6d68b2220b1538ef8e29512c8df97acea3a9ae9b8ed1",
     "apps/api/test-mp-home-sections.mjs": "76a99e10fcb3591ce1850253674f757be46b9206c943116e69ed1b604f5aaaf8"
   },
-  "limitations": "三项为布局测试，不代替真实手机首次微信隐私授权或审核登录。"
+  "limitations": "三项为布局测试，不代替真实手机首次微信隐私授权或审核登录。",
+  "packageIdentityNote": "上传前仅刷新自动生成的包指纹；业务源码与已执行原生测试一致。"
 }
