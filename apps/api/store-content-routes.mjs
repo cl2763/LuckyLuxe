@@ -11,11 +11,14 @@
    本文件三处涉钱写入(记一笔 · 现金手记 · 现金手记冲销)全部改走它 ——
    两处原来是 `|| ''`(甲档真空),一处是 `|| 'owner'`(乙档角色词)。
    公约④:`actorOf` 我 10b 在 `signed-docs.mjs` 里写过一份,这次**抽成共用出口**,不并排再写第二份。 */
+import { createHeroUpload } from './hero-upload.mjs'
 import { makeActorOf } from './actor-name.mjs'
 
 export function createStoreContentRoutes({ apiError, json, readBody, heroSlidesApi, cashNotesApi, constants, localParts, tenantTimezone, currentTenantId, HERO_SLIDE_MAX, insertFinanceTransaction, serializeFinanceTransaction }) {
   const { CASH_NOTE_KINDS, CASH_NOTE_KIND_LABELS } = constants
   const actorOf = makeActorOf({ apiError })
+  const uploads = createHeroUpload({ apiError })
+  const uploadScope = session => JSON.stringify([currentTenantId(), session.username || session.id || session.role])
   async function route(req, res, ctx) {
     const { path, query, adminSession } = ctx
     /* 手工「记一笔」写口(08-29 从 local-server.mjs 搬来,同批加付款方式闸)。
@@ -85,12 +88,22 @@ export function createStoreContentRoutes({ apiError, json, readBody, heroSlidesA
     }
   }
   /* D78 商家自管轮播:读写两道闸分别验(《读写两道闸律》)——读=已登录商家看本店,写=仅老板。 */
+  if (path === '/admin/hero-slides/upload' && req.method === 'PUT') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    json(res, 200, uploads.accept(uploadScope(adminSession), await readBody(req)))
+    return true
+  }
   if (path === '/admin/hero-slides') {
     if (req.method === 'GET') { json(res, 200, query.receipt === '1' ? heroSlidesApi.receipt() : { slides: heroSlidesApi.listHeroSlides(), max: HERO_SLIDE_MAX }); return true }
     if (req.method === 'PUT') {
       if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
       const body = await readBody(req)
-      const slides = heroSlidesApi.replaceHeroSlides(body.slides)
+      const incoming = Array.isArray(body.slides) ? body.slides.map(s => {
+        if (!s?.uploadRef) return s
+        if (s.image || s.imageRef) throw apiError(400, 'BAD_REQUEST', '图片引用冲突。')
+        return { ...s, image: uploads.resolve(uploadScope(adminSession), s.uploadRef) }
+      }) : body.slides
+      const slides = heroSlidesApi.replaceHeroSlides(incoming)
       json(res, 200, body.receiptOnly === true ? heroSlidesApi.receipt() : { slides })
       return true
     }
