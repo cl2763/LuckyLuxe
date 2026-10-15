@@ -61,7 +61,7 @@ export function createBookingSubscriptions({db,apiError,json,readBody,requireCus
     AND NOT EXISTS(SELECT 1 FROM booking_subscription_outbox o WHERE o.task_id=t.id)
     AND EXISTS(SELECT 1 FROM booking_subscription_grants g WHERE g.tenant_id=t.tenant_id AND g.user_id=t.user_id AND g.booking_id=t.booking_id AND g.used_at IS NULL
      AND g.kind=CASE WHEN t.type='arrival_reminder' THEN 'arrival_reminder' ELSE 'booking_status' END AND t.scheduled_at>=g.created_at)
-    ORDER BY t.scheduled_at,t.id`).iterate(now,now)
+    ORDER BY t.scheduled_at,t.id`).all(now,now)
    let processed=0
    for(const task of tasks){
     if(!allowTarget(task.tenant_id,task.user_id))continue
