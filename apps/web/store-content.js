@@ -117,15 +117,24 @@ function bindHeroSlidesPanel(body){
     const picked=Array.from(event.target.files||[]);if(!picked.length||!valid()||heroBusy)return
     if(heroSlidesDraft.length+picked.length>6){heroMessage=owner.lang==='zh'?'最多 6 张：本次未添加，请减少选择数量。':'Up to 6 images. No images added; select fewer.';heroError=true;heroStatus();event.target.value='';return}
     heroBusy='read';heroMessage=owner.lang==='zh'?`正在读取 ${picked.length} 张照片，请稍候…`:`Reading ${picked.length} images…`;renderHeroSlidesPanel()
-    const results=await Promise.allSettled(picked.map(f=>window.ImageFraming.read(f)))
+    const results=await Promise.allSettled(picked.map(f=>window.ImageFraming.read(f,{maxChars:450000})))
     if(!valid())return
     const failed=results.map((r,i)=>r.status==='rejected'?`${picked[i].name}: ${r.reason.message}`:'').filter(Boolean)
     heroBusy='';if(failed.length){heroError=true;heroMessage=(owner.lang==='zh'?'本批未添加，原草稿已保留：':'Batch not added; draft kept: ')+failed.join(' / ')}else{heroSlidesDraft.push(...results.map(r=>({image:r.value,labelZh:'',labelEn:'',isActive:true,imageView:{}})));heroChanged()}renderHeroSlidesPanel()
   }
   body.querySelector('[data-hero-save]').onclick=async()=>{
-    if(!valid()||heroBusy)return;const snapshot=heroCopy(heroSlidesDraft);heroBusy='save';heroMessage=owner.lang==='zh'?'正在保存并核对顾客首页…':'Saving and checking customer home…';heroError=false;renderHeroSlidesPanel()
-    try{await request('/admin/hero-slides', { method: 'PUT',body:JSON.stringify({slides:snapshot})});if(!valid())return;const saved=await request('/admin/hero-slides');if(!valid())return;const pub=await heroReadPublic();if(!valid())return;const active=snapshot.filter(s=>s.isActive);if(JSON.stringify(heroCopy(saved.slides))!==JSON.stringify(snapshot)||pub.length!==active.length||pub.some((s,i)=>s.image!==active[i].image||JSON.stringify(s.imageView)!==JSON.stringify(active[i].imageView)))throw Error(owner.lang==='zh'?'保存读回不一致，请重试核对':'Saved/public data mismatch; retry');heroSaved=heroCopy(saved.slides);heroSlidesDraft=heroCopy(saved.slides);heroPublicCount=pub.length;heroDirty=false;heroMessage=owner.lang==='zh'?`保存成功，顾客首页当前展示 ${pub.length} 张。`:`Saved. Customer home now shows ${pub.length} images.`}
-    catch(e){if(!valid())return;heroError=true;heroMessage=e.message+(owner.lang==='zh'?'；草稿已保留，请重试。':'; draft kept. Please retry.')}
+    if(!valid()||heroBusy)return;const snapshot=heroCopy(heroSlidesDraft).map(s=>({...s,image:s.image.trim(),labelZh:s.labelZh.trim(),labelEn:s.labelEn.trim()}));let acknowledged=false;heroBusy='save';heroMessage=owner.lang==='zh'?'正在保存并核对顾客首页…':'Saving and checking customer home…';heroError=false;renderHeroSlidesPanel()
+    try{
+      const hash=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join('');const digest=rows=>hash(JSON.stringify(heroCopy(rows)))
+      const expected=await digest(snapshot), expectedPublic=await digest(snapshot.filter(s=>s.isActive))
+      const known=new Set(heroSaved.map(s=>s.image));const upload=await Promise.all(snapshot.map(async s=>{if(!known.has(s.image))return s;const {image,...rest}=s;return {...rest,imageRef:await hash(image)}}))
+      const receipt=await request('/admin/hero-slides', { method: 'PUT',body:JSON.stringify({slides:upload,receiptOnly:true})});acknowledged=true;if(!valid())return
+      heroMessage=owner.lang==='zh'?'图片已保存，正在核对展示内容…':'Images saved; checking display…';heroStatus()
+      const verified=await request('/admin/hero-slides?receipt=1');if(!valid())return
+      if(receipt.savedDigest!==expected||verified.savedDigest!==expected||verified.publicDigest!==expectedPublic)throw Error(owner.lang==='zh'?'保存内容已变化，请核对后再操作':'Saved content changed; please check before continuing')
+      heroSaved=heroCopy(snapshot);heroSlidesDraft=heroCopy(snapshot);heroPublicCount=verified.publicCount;heroDirty=false;heroMessage=owner.lang==='zh'?`保存成功，顾客首页当前展示 ${verified.publicCount} 张。`:`Saved. Customer home now shows ${verified.publicCount} images.`
+    }
+    catch(e){if(!valid())return;heroError=true;heroMessage=(owner.lang==='zh'?(acknowledged?'服务器已确认保存，但展示核对未完成。':'未收到保存成功确认，当前结果未知。'):(acknowledged?'Saved, but verification did not finish. ':'Save result unknown. '))+e.message+(owner.lang==='zh'?'；草稿已保留，请先核对顾客首页，避免重复提交。':'; draft kept. Check customer home before resubmitting.')}
     finally{if(valid()){heroBusy='';renderHeroSlidesPanel()}}
   }
 }

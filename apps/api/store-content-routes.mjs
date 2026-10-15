@@ -86,11 +86,12 @@ export function createStoreContentRoutes({ apiError, json, readBody, heroSlidesA
   }
   /* D78 商家自管轮播:读写两道闸分别验(《读写两道闸律》)——读=已登录商家看本店,写=仅老板。 */
   if (path === '/admin/hero-slides') {
-    if (req.method === 'GET') { json(res, 200, { slides: heroSlidesApi.listHeroSlides(), max: HERO_SLIDE_MAX }); return true }
+    if (req.method === 'GET') { json(res, 200, query.receipt === '1' ? heroSlidesApi.receipt() : { slides: heroSlidesApi.listHeroSlides(), max: HERO_SLIDE_MAX }); return true }
     if (req.method === 'PUT') {
       if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
       const body = await readBody(req)
-      json(res, 200, { slides: heroSlidesApi.replaceHeroSlides(body.slides) })
+      const slides = heroSlidesApi.replaceHeroSlides(body.slides)
+      json(res, 200, body.receiptOnly === true ? heroSlidesApi.receipt() : { slides })
       return true
     }
   }

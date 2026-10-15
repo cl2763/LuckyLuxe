@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { imageView, storedImageView } from './image-view.mjs'
 /* 顾客首页轮播图 · 按租户出数据(D78,店主 2026-08-28 立案)。
 
@@ -96,6 +97,14 @@ export function createHeroSlides({ db, apiError, iso, randomId, currentTenantId 
   /* 整批替换(排序=数组顺序)。一次一店,顺序、文案、启停都在这一趟里,
      省得"改排序"和"改文案"两条路各写一份判断 —— 一件事一处真相。 */
   function replaceHeroSlides(slides, tenantId = currentTenantId()) {
+    if (Array.isArray(slides) && slides.some(s=>s?.imageRef)) {
+      const existing=new Map(listHeroSlides(tenantId).map(s=>[createHash('sha256').update(s.image).digest('hex'),s.image]))
+      slides=slides.map(s=>{
+        if (!s?.imageRef) return s
+        if (s.image || !existing.has(s.imageRef)) throw apiError(409,'CONFLICT','原图片已变化，请重新读取后再保存。')
+        return {...s,image:existing.get(s.imageRef)}
+      })
+    }
     assertSlidesOk(slides)
     const now = iso(new Date())
     db.exec('BEGIN IMMEDIATE')
@@ -130,5 +139,11 @@ export function createHeroSlides({ db, apiError, iso, randomId, currentTenantId 
     }
   }
 
-  return { listHeroSlides, publicHeroSlides, replaceHeroSlides, assertSlidesOk }
+  function receipt(tenantId = currentTenantId()) {
+    const slides = listHeroSlides(tenantId)
+    const canonical = rows => rows.map(s => ({image:s.image,labelZh:s.labelZh||'',labelEn:s.labelEn||'',isActive:s.isActive!==false,imageView:s.imageView||{}}))
+    const digest = rows => createHash('sha256').update(JSON.stringify(canonical(rows))).digest('hex')
+    return { savedDigest:digest(slides), publicDigest:digest(publicHeroSlides(tenantId)), count:slides.length, publicCount:slides.filter(s=>s.isActive).length }
+  }
+  return { listHeroSlides, publicHeroSlides, replaceHeroSlides, assertSlidesOk, receipt }
 }
