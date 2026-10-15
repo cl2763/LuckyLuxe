@@ -1,3 +1,4 @@
+<include src="../../templates/media-privacy.wxml" />
 <!-- D17 失败态:与正文互斥,取不到真门店就如实说,不拿假门店占位 -->
 <view wx:if="{{loadFailed}}" class="page store-page d17fail {{themeClass}}">
   <view class="d17msg">加载失败，请检查网络后重试</view>
@@ -33,7 +34,7 @@
   </view>
 
   <view class="map-placeholder card">
-    <view>{{t.map}}</view>
-    <view class="muted">{{t.mapHint}}</view>
+    <view>{{lang === 'en' ? 'Getting here' : '到店指引'}}</view>
+    <view class="muted">{{lang === 'en' ? 'Copy the map link or address using the navigation button, then open it in your maps app.' : '点击导航复制地图链接，在手机浏览器打开；也可复制完整地址到地图软件搜索。'}}</view>
   </view>
 </view>

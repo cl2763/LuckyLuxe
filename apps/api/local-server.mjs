@@ -50,7 +50,7 @@ import { basename, dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动日志给手机用的地址)
 import { storeCodeInfo } from './store-code.mjs'
-import { customerMessages } from './customer-messages.mjs'
+import { withStoreNavigation } from './store-navigation.mjs'; import { customerMessages, ensureCustomerMessageSchema } from './customer-messages.mjs'; import { createMerchantMessages } from './merchant-messages.mjs'; import { createBookingSubscriptions } from './booking-subscriptions.mjs'; import { createSubscribeSender } from './wechat-subscribe.mjs'
 import { customerProfileRoute } from './customer-profile-route.mjs'
 import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
 import { inkToPng } from './ink-raster.mjs'
@@ -5347,7 +5347,7 @@ function serializeBooking(row, lang = 'zh') {
       }
     })(),
     technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(row.technician_id, row.tenant_id) || null,
-    store: db.prepare('SELECT * FROM stores WHERE id = ? AND tenant_id = ?').get(row.store_id, row.tenant_id) || null,
+    store: withStoreNavigation(db.prepare('SELECT * FROM stores WHERE id = ? AND tenant_id = ?').get(row.store_id, row.tenant_id) || null),
     payments: db.prepare('SELECT * FROM payments WHERE booking_id = ? ORDER BY created_at DESC').all(row.id),
     updatedAt: row.updated_at || row.created_at,
     createdAt: row.created_at
@@ -6797,7 +6797,7 @@ const scheduleBoard = createScheduleBoard({
   backfillPlanFor
 })
 const dashboardPulse = createDashboardPulse({ db, currentTenantId, tenantTimezone, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked: (tid) => financeLockEnabled(tid), todayBoardOf: (tid, date) => scheduleBoard.dayCounts(tid, date), storeClosedOn: (tid, date) => { try { return isClosedDay(defaultStoreId(), date) } catch { return false } }, storeClockText: (tid) => localParts(new Date(), tenantTimezone(tid)).time, aiRetouchCard: (tid) => aiRetouchGate.card(tid) })   /* 主页大屏三接口(图 v3.1 §四);口径两问答案在模块抬头;「此刻」与台面同一条规则 */
-const notifyScheduler = createNotifyScheduler({
+const bookingSubscriptions=createBookingSubscriptions({db,apiError,json,readBody,requireCustomer,resolveTenant,localParts,tenantTimezone,enabled:process.env.WECHAT_SUBSCRIBE_ENABLED==='true',send:createSubscribeSender({appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET,miniprogramState:process.env.WECHAT_SUBSCRIBE_STATE||'formal'})}); const merchantMessages = createMerchantMessages({db,apiError,json,localParts,tenantTimezone}); const notifyScheduler = createNotifyScheduler({
   db, randomId, iso, apiError, json, readBody, parseJson: parseJson2, localParts, tenantTimezone,
   DEFAULT_TENANT_ID, dataScope: DATA_SCOPE
 })
@@ -10856,7 +10856,7 @@ async function route(req, res) {
     db.prepare('UPDATE admin_accounts SET display_name = ?, updated_at = ? WHERE id = ?').run(displayName, iso(new Date()), me.accountId)
     return json(res, 200, { displayName, isDefault: !raw })
   }
-  if (req.method === 'GET' && path === '/my/messages') return customerMessages(req,res,{db,requireCustomer,resolveTenant,query,apiError,json,tenantTimezone,localParts})
+  if(await bookingSubscriptions.route(req,res,{path,query}))return; if ((req.method === 'GET' && path === '/my/messages') || (req.method==='POST' && /^\/my\/messages\/[^/]+\/read$/.test(path))) return customerMessages(req,res,{db,requireCustomer,resolveTenant,query,apiError,json,tenantTimezone,localParts,messageId:req.method==='POST'?decodeURIComponent(path.split('/')[3]):null})
   if (req.method === 'PATCH' && path === '/my/profile') return customerProfileRoute(req, res, { db, requireCustomer, resolveTenant, query, apiError, json, serializeUser })
   if (req.method === 'GET' && path.startsWith('/users/')) {
     // 隐私:必须登录,且只能查自己的资料(此前任意 id 可读,已修)
@@ -10904,7 +10904,7 @@ async function route(req, res) {
       heroSlides: heroSlidesApi.publicHeroSlides(tid, query.lang === 'en' ? 'en' : 'zh'),
       /* 今日营业句/营业中:后端唯一出口(特殊营业日优先·按门店时区),顾客端零计算。
          注意位面:顾客端读的是**这个公开 /stores**,不是 /admin/stores —— 只加在 admin 那边等于没加。 */
-      stores: storeRows.map((s) => Object.assign({}, s, {
+      stores: storeRows.map((s) => Object.assign({}, withStoreNavigation(s), {
         hours: hourStmt.all(s.id),
         todayHours: { zh: storeTodayHours(s, 'zh'), en: storeTodayHours(s, 'en') }
       }))
@@ -13413,7 +13413,7 @@ async function route(req, res) {
   /* 退卡 / 账户调整 / 员工「我的客人」这一族路由整体搬去 ./refund-routes.mjs(公约①②,2026-08-27)。
      门禁扫描器同批改成连 `*-routes.mjs` 一起读 —— 搬家不许把接口从扫描面上搬没了。 */
   if (await refundRoutes.route(req, res, { path, query, adminSession, requireRefundRight, tenantId: currentTenantId() })) return
-  if (await notifyScheduler.route(req, res, { path, query, adminSession, tenantId: currentTenantId() })) return
+  if (await merchantMessages.route(req,res,{path,adminSession,tenantId:currentTenantId()}) || await notifyScheduler.route(req, res, { path, query, adminSession, tenantId: currentTenantId() })) return
   if (req.method === 'POST' && path === '/admin/stored-value/recharge') {
     if (adminSession.role !== 'owner' && adminSession.role !== 'staff') {
       throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
@@ -15543,7 +15543,7 @@ for (const table of ['stores', 'services', 'technicians', 'users', 'bookings', '
   }
 }
 /* P3 通知调度器建表/扩列 —— 放在 reminder_tasks 建表与 tenant_id ALTER 之后(迁移顺序学费:images_json 那次) */
-notifyScheduler.ensureSchema()
+notifyScheduler.ensureSchema(); merchantMessages.ensureSchema(); bookingSubscriptions.ensureSchema();ensureCustomerMessageSchema(db)
 scheduleBoard.ensureSchema()   // 值日表 duty_marks(31l)
 quoteState.ensureSchema()      // 报价状态机 session_key + 改价留痕表(31p)
 try {
@@ -17168,7 +17168,7 @@ if (process.env.BACKUP_ENABLED === 'true') {
 
 // ===== P3 通知调度器心跳(60 秒 tick;确定终点=每 tick 限量批;NOTIFY_TICK=off 可停,细节见 notify-scheduler.mjs)=====
 if (process.env.NOTIFY_TICK !== 'off') {
-  const safeTick = () => { try { notifyScheduler.runTick() } catch (error) { console.error('[notify] tick 失败:', error.message) } }
+  const safeTick = () => { try { notifyScheduler.runTick(); bookingSubscriptions.tick().catch(error=>console.error('[subscribe] tick failed:',error.message)) } catch (error) { console.error('[notify] tick 失败:', error.message) } }
   setTimeout(safeTick, 5000)          // 开机 5 秒后补一轮:停服期间到点的单从库里续上,不丢
   setInterval(safeTick, 60_000)
 }

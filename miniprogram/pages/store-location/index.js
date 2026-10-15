@@ -1,13 +1,11 @@
-/* 🔴 D17 同类(2026-08-11 L2 补扫发现):这一页**从来没调过接口** ——
-   data 里摆 mock.store,onShow 又把 mock.store 重新 localize 一遍塞回去,
-   顾客点「门店信息」看到的永远是编造的那家店。实测:真门店是「Jie's Nail 小婕」,
-   这一页却显示「Lucky Luxe」+「演示版暂用占位门店信息」的简介。
-   改法与三页失败态同一套标准:取真门店,取不到就如实说加载失败,不拿假门店占位。 */
+
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 
 Page({
+  behaviors: [require('../../utils/media-privacy')],
   data: {
+    mediaPrivacyCopy: '复制门店地址或地图链接前，请阅读并同意隐私保护指引。仅复制你选择的内容。',
     store: {},          // 不摆 mock 门店占位
     loadFailed: false,
     lang: 'zh',
@@ -26,8 +24,7 @@ Page({
     let stores, slides
     try {
       stores = await api.getStores()
-      /* 占位零回落(店主 08-28 六):门店封面原来写死店主本店那张沙龙照。
-         她配过轮播就用第一张(那是她自己的图),没配就交空串 → 出占位,不拿别家的顶上。 */
+
       slides = await api.getHeroSlides(lang)
     } catch (e) {
       this.setData({ lang, t, store: {}, loadFailed: true })
@@ -52,10 +49,10 @@ Page({
   },
 
   callStore() {
-    wx.showToast({ title: this.data.t.phoneMissing, icon: 'none' })
+    require('../../utils/store-navigation').call(this.data.store, this.data.lang === 'en')
   },
 
   openLocation() {
-    wx.showToast({ title: this.data.t.addressMissing, icon: 'none' })
+    require('../../utils/store-navigation').navigate(this.data.store, this.data.lang === 'en')
   }
 })

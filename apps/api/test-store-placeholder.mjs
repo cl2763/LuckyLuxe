@@ -249,9 +249,9 @@ for (const f of SCAN_FILES) {
   const n = (codeOnly(read(f)).match(OUTLET_RE) || []).length
   if (n) { outlets += n; outletMap.push(`${f}:${n}`) }
 }
-/* 在册 31 处 / 11 个文件(2026-09-22 实测):
+/* 在册 31 处 / 11 个文件(2026-10-15 实测；首页两处读取集中到导航工具，未增加出口):
    customer.js 7 · store-content.js 2 · mp utils/api.js 4 · mp utils/i18n.js 4 ·
-   home.wxml 4 · home/index.js 2 · checkout.wxml 2 · store-location.wxml 2 ·
+   home.wxml 4 · utils/store-navigation.js 2 · checkout.wxml 2 · store-location.wxml 2 ·
    store-location/index.js 2 · booking-done.wxml 1 · order-detail.wxml 1 */
 const OUTLET_CAP = 31
 check(`⑦c 🔴 出口计数 ${outlets} ≡ 在册 ${OUTLET_CAP}(多了=有人加了新出口没登记;少了=出口被删或被改得认不出)`,

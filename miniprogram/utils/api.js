@@ -58,8 +58,7 @@ const localImageMap = {
 // Failed customer requests must remain errors; never substitute demo data.
 
 
-/* 🔴 归因2 的根(店主 02a 走查:同一批服务网页说「还没有图片」、小程序出一张环境照)——
-   就是下面这一行。取不到不许编,返回空由渲染层出占位(与网页 img-placeholder 逐字同款)。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #1
 // QR target follows the running mini-program version; API/database scope never changes.
 function miniCodeEnvironment() {
   try { const v = wx.getAccountInfoSync().miniProgram.envVersion; return ['trial', 'develop'].includes(v) ? v : 'release' } catch (e) { return 'release' }
@@ -121,9 +120,7 @@ function clearAdminAuth() {
   wx.removeStorageSync(ADMIN_AUTH_KEY)
 }
 
-/* 🔴 租户不许回落到别人家的店(店主 08-23 裁定,假数回落同族第四例)。
-   顺序:①本次/上次记住的门店(扫码·深链·选店页都写这个键)→ ②单店部署的配置项(默认空)
-   → ③**空**:调用方必须把顾客送到选店页/提示扫码,绝不静默替换成任何一家店。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #2
 function currentTenant() {
   return wx.getStorageSync('lucky_tenant') || deploy.defaultTenantId || ''
 }
@@ -132,11 +129,7 @@ const realWechatClaimKey = tenantId => `lucky_real_wechat_claim::${tenantId}`
 // 有没有门店上下文(没有就该去选店,而不是拿别人家的店顶上)
 function hasTenant() { return Boolean(currentTenant()) }
 
-/* D39 L2(换店残留机制,第 2 案后全仓清单化):换店时必须清/重取的键统一从这走。
-   清:member 快照/币种/定金配置/AI 开关/购物车/本地订单缓存/款式预设(全部 per-store 值挂全局键);
-   不清:lucky_lang(用户偏好)/lucky_service_type(通用过滤)/lucky_store_id::<tenant>(键自带租户)/
-   商家端会话(商家无换店流,跨店有 D35 闸)。auth 不在这清 —— 它自己带租户戳,
-   getAuth 读的时候校验、不符即丢(D77;08-25 之前这句注释是空头支票,代码里并没有戳)。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #3
 function onStoreSwitched() {
   publicCatalogCache.clear()
   for (const k of ['lucky_member', 'lucky_store_currency', 'lucky_store_deposit', 'lucky_store_ai', 'lucky_cart', 'lucky_orders', 'lucky_style_preset']) {
@@ -159,9 +152,7 @@ function kickToLogin(silent) {
   }, silent ? 0 : 500)
 }
 
-/* 没有门店上下文时的守卫(店主 08-23 裁定):顾客端**一个数据请求都不许发** ——
-   空租户头到了后端会被当成默认店,顾客照样看到别人家的服务与价格(静默替换)。
-   放行的是平台级接口(选店页自己要用),其余一律先把人送去选店/扫码。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #4
 /* `/health` 是公开的服务自述口(版本指纹),不属于任何门店 —— 04f-3「关于」页读它 */
 const TENANT_FREE_PATHS = ['/shops', '/health']
 let pickingStore = false
@@ -174,11 +165,7 @@ function goPickStore() {
   })
 }
 
-/* 顾客端会话自愈(店主 08-23 收口件③):商家端一直有 kickToLogin,**顾客端没有** ——
-   后端重启换签名、token 过期,顾客看到的就是「卡包加载失败」这类死页(08-22 实测过一次)。
-   顾客不像商家有账号密码,静默 wx.login 就能换回身份:401 时自动重登一次并重放,顾客无感;
-   仍失败才如实清会话让页面走登录引导。登录接口自身不参与重放(否则死循环)。
-   网页顾客端同款能力早就有(refreshToken + 重放),这里是把两端拉齐(四之九)。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #5
 const publicPaths = new Set(['/shops', '/health', '/stores', '/services', '/portfolio', '/add-ons', '/service-categories'])
 let renewingCustomer = null
 function contextChanged() { return Object.assign(new Error('门店已切换，请重试'), { code: 'STORE_CHANGED' }) }
@@ -267,9 +254,7 @@ function adminRequest(path, method = 'GET', data) {
 
 /* R5:门店定金额(元)。读 /stores 缓存下来的配置;没有就回 0,
    宁可不显示,也不拿旗舰店的 50 冒充本店配置。 */
-/* 🔴 假数回落红线(店主 08-23 立律,批④ S7 顺手收):拿不到定金配置时原来返回 0 ——
-   而 0 在界面上等于「免定金」,顾客会以为不用付定金,到店才发现要付。
-   现在返回 null:调用方渲染成「—」或整行不出,绝不用 0 冒充"这家店不收定金"。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #6
 function storeDepositAmount() {
   try {
     const d = wx.getStorageSync('lucky_store_deposit')
@@ -316,31 +301,16 @@ function toMiniService(service) {
   }
 }
 
-/* 🔴 假数回落红线(店主 08-23):映射层是回落的重灾区 —— 这里原来写死了**旗舰店的**店名、
-   营业时间、时区、店介绍当兜底:多租户下别家店只要某个字段没配,顾客看到的就是「Lucky Luxe Ontario /
-   Tue-Sun 10:00-19:00 / 多伦多时区」,全是别人家的事实(D19 当年只修了 id 那一处)。
-   现在:没有就是空,页面按空态处理;地址/电话保留「待补充」是**如实说明**不是假数。
-   另:今日营业句 todayHours 必须透传 —— 映射层裁字段=后端加了顾客也拿不到(toMiniBooking 同款教训)。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #7
 function toMiniStore(store) {
   return {
     id: store.id || '',   // D19:不再用写死的旗舰店 id 兜底
     storeName: store.name || store.storeName || '',
-    /* 🔴 02v 甲案:英文店名新列 name_en 必须**透传到映射层** ——
-       后端有列、顾客端拿不到,等于没做(映射层裁字段的老教训:toMiniBooking 同款)。
-       空态说真话:name_en 为空的租户,页面按 lang 退回中文店名,不空白也不贴别家的名字。 */
+
     storeNameEn: store.name_en || store.storeNameEn || '',
-    /* 🔴 D108(店主 02x):原来空值被兜成「门店地址待补充」——**那句话让人以为有值**,
-       而旁边「导航·复制」「一键拨打」照样挂着,点了什么也不发生(死口)。
-       店主 02y 新律「不可用即不呈现,呈现即说明」:值没有 → **整块动作不出现**。
-       这里保留原样空串,由页面按空态决定出不出那一行(缺席可见律:该没有的就整块没有)。 */
-    /* 🔴 11j 判据 A(店主 2026-09-22):种子占位值(`Address TBD` / `Phone TBD` 等)**不是数据**。
-       原来这里是 `store.address || ''` —— `'Address TBD'` 是 truthy,于是:
-         ① 它被原样印给顾客(home / store-location / checkout / booking-done / order-detail 五处);
-         ② 更坏的是 `wx:if="{{store.address}}"` 成立,**`bindtap` 跟着挂上** ——
-            顾客点「导航·复制」,复制到的是 `Address TBD`。**那正是 D108 修掉的那种死口,被占位值复活了。**
-       现在先过 `realValue()`:占位值收成空串 → `wx:if` 落空 → 走 addressText 那句如实说明,且不挂 bindtap。
-       `order.store` 也走这个函数(下面 `toMiniBooking`),所以六个出口一次修完 —— 这就是改唯一出口的理由。 */
-    address: realValue(store.address),
+
+
+    address: realValue(store.address), navigation: store.navigation || null,
     phone: realValue(store.phone),
     addressText: realValue(store.address) || '门店地址待补充',   // 只作展示句,不驱动动作
     phoneText: realValue(store.phone) || '门店电话待补充',
@@ -451,11 +421,7 @@ function authRequiredError() {
   return error
 }
 
-/* 🔴 D39(店主 2026-08-12 末验,数据随店走红线):顾客 token 是按「出生店」的用户行签的
-   (会员=用户×店,同一个微信身份在每家店是独立档案)。换店后旧 token 会把上家店的身份带进本店:
-   「我的」页头部(累计消费/等级/积分)全是上家店的,而 /my/* 明细按新店查=全空。
-   修法:auth 打租户戳;租户不匹配=对本店而言未登录 → wx.login 静默重登(顾客无感);
-   重登失败如实清会话,绝不拿上家店身份凑数。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #8
 async function loginForCurrentStore(options = {}) {
   const tid = currentTenant()
   const code = await wxLoginCode()
@@ -482,9 +448,7 @@ async function loginForCurrentStore(options = {}) {
   return data.user
 }
 
-/* 授权手机号 → 后端**真解密**并落库(店主 夜11 段 B1/B2)
-   `code` 必须**当场再取一次**:`session_key` 跟着每次 wx.login 变,拿旧的解不开。
-   服务端解密失败会回 400 —— 这里**不兜底**,让调用方如实报错(静默失败器族)。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #9
 async function bindWechatPhone({ encryptedData, iv, phoneCode }) {
   const payload = phoneCode ? {phoneCode} : {code:await wxLoginCode(),encryptedData,iv}
   const out = await request('/auth/wechat/mini-phone', 'POST', payload)
@@ -592,9 +556,7 @@ function miniMember(user = {}) {
   }
 }
 
-/* D17 家族终章(S组卫生批 2026-08-12):加项解析从 mock 表改**真目录**。
-   旧实现按 id 查写死的 mock.addOns——服务端下发的真加项 id 在 mock 表里查不到,
-   会被 filter 静默丢掉:可用时段少算加项时长、下单载荷丢加项。真目录带 60s 缓存。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #10
 let _addOnCatalog = null
 let _addOnCatalogAt = 0
 async function selectedAddOns(ids) {
@@ -644,20 +606,13 @@ async function getStores() {
   }
 }
 
-/* 🔴 D78(店主 2026-08-28):顾客首页轮播**按租户出**,与网页顾客端同一个出口(公开 /stores)。
-   为什么单独一个函数而不是塞进 getStores():getStores() 返回的是**门店数组**,顶层字段在那一步就被丢了 ——
-   币种当年正是踩了这个坑(见下面那段注释)。**不加 catch**:接口挂了就抛,顾客端宁可不出轮播,
-   也不许回落到写死的图(那正是 D78 本身的病)。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #11
 async function getHeroSlides(lang) {
   const data = await publicRead(`/stores?lang=${lang === 'en' ? 'en' : 'zh'}`)
   return data.heroSlides || []
 }
 
-/* 门店币种(2026-08-10 核验轮修复)。
-   getStores() 返回的是**门店数组**,顶层的 currency / currencyDisplay 在那一步就被丢了 ——
-   storecurrency.js 拿到数组去读 .currencyDisplay 永远是 undefined,缓存一次都写不进去,
-   顾客端 32 处 {{cur.p}}{{cur.s}} 全渲染成空币符(只有后端拼好的价格串才带得出币符)。
-   这里单独把原始字段取回来,不经过 toMiniStore。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #12
 async function getStoreCurrency() {
   const data = await publicRead('/stores?lang=' + (wx.getStorageSync('lucky_lang') === 'en' ? 'en' : 'zh'))
   // R5:定金配置跟币种同一趟取回来,顾客端不再自己编默认 50
@@ -744,12 +699,7 @@ async function getTechnicians(serviceId) {
   }
 }
 
-/* 🔴 D21(店主 2026-08-11 拍板):删掉假订单路径。
-   以前这里 ①technicianId 兜底写死 'tech-mia' ②后端没回 booking 就自己编一张
-   (假技师 Mia Chen + 写死 50 元定金 + 自算尾款)。拍板④预言的「技师里有 Mia Chen
-   就是系统在骗人」,源头就是这两行;写死的 5000 还与 R5「定金只来自 /stores 配置」
-   直接冲突(本店真实定金 100 元,编出来的是错的一半)。
-   现在:预约由后端创建,或如实失败;技师必须真选(booking 页由真技师列表带出)。 */
+// Historical rationale: handoff/messages-20261012/api历史开发说明.md #13
 async function createBooking(cartItem, remark) {
   const user = await ensureLogin()
   const appointment = cartItem.appointmentInfo
@@ -1067,7 +1017,10 @@ module.exports = {
   getBookingDraft: id => request(`/booking-drafts/${encodeURIComponent(id)}`),
   acceptCustomerSession,
   getSignLink,
+  subscriptionConfig: id => request('/my/bookings/'+encodeURIComponent(id)+'/subscription'),
+  subscriptionConsent: data => request('/my/subscription-consent','POST',data),
   getMessages: () => request('/my/messages'),
+  readMessage: id => request('/my/messages/'+encodeURIComponent(id)+'/read','POST',{}),
   getDocumentLink: code => request('/my/settlements/'+encodeURIComponent(code)+'/document-link'),
   getHealth,
   getHeroSlides,

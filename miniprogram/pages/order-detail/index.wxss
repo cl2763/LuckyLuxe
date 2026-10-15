@@ -1,3 +1,4 @@
+@import "../../templates/media-privacy.wxss";
 .detail-card {
   padding: 34rpx;
 }

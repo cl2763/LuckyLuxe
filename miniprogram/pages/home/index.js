@@ -8,9 +8,11 @@ const storage = require('../../utils/storage')
 const tabbar = require('../../utils/tabbar')
 
 Page({
+  behaviors: [require('../../utils/media-privacy')],
   onShareAppMessage() { return share('home', this.data.shopName, {}) },
   onShareTimeline() { return this.onShareAppMessage() },
   data: {
+    mediaPrivacyCopy: '复制门店地址或地图链接前，请阅读并同意隐私保护指引。仅复制你选择的内容。',
     loading: true,
     loadFailed: false,
     loadError: '',
@@ -74,22 +76,7 @@ Page({
     return { todayHoursText: th.text || '', openNow: Boolean(th.openNow), hasHours: Boolean(th.hasHours) }
   },
 
-  copyAddress() {
-    const store = this.data.store || {}
-    const itemList = this.data.lang === 'en' ? ['Open in Maps', 'Copy address'] : ['地图导航', '复制地址']
-    wx.showActionSheet({
-      itemList,
-      success: (res) => {
-        if (res.tapIndex === 0 && store.latitude && store.longitude) {
-          wx.openLocation({ latitude: Number(store.latitude), longitude: Number(store.longitude), name: store.storeName, address: store.address })
-        } else {
-          wx.setClipboardData({ data: store.address || '' ,
-      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
-    })
-        }
-      }
-    })
-  },
+  copyAddress() { require('../../utils/store-navigation').navigate(this.data.store, this.data.lang === 'en') },
 
   callStore() {
     const phone = String((this.data.store || {}).phone || '')

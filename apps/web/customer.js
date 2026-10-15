@@ -972,7 +972,7 @@ function storeHoursSummary(store) {
 // 占位值不算数据(11j 判据 B):词表与理由都在 placeholder-words.js,这里只接出口
 function storeContactLine(store) {
   const real = (v) => window.LLPlaceholder.realValue(v)
-  return [real(store.address), real(store.phone)].filter(Boolean).join(' · ')
+  return [real(store.address), real(store.phone), window.StoreNavigation.render(store, state.lang === 'en')].filter(Boolean).join(' · ')
 }
 
 const renderRecommendSection = (title, type) => window.CustomerRecommend.render({ title, type, items: recommended(type), lang: state.lang, t, fromPriceLabel })   // D103②:整段搬进 customer-recommend.js(公约②边改边拆)

@@ -1,3 +1,4 @@
+@import "../../templates/media-privacy.wxss";
 .home-page {
   --home-edge: 24rpx;
   padding: 24rpx var(--home-edge) 180rpx;

@@ -1,6 +1,7 @@
 const api = require('../../../utils/api')
 
 const ROUTES = {
+  messages: '/pages/merchant/messages/index',
   schedule: '/pages/merchant/schedule-day/index',
   dailyClose: '/pages/merchant/daily-close/index',
   orders: '/pages/merchant/orders/index',
@@ -20,6 +21,7 @@ const ROUTES = {
 }
 
 const E = {
+  messages: { k:'messages',icon:'c-message',t:'消息',d:'工作提醒 · 预约消息' },
   schedule: { k: 'schedule', icon: 'm-schedule', t: '排班', d: '周网格 · 申请审批' },
   scheduleView: { k: 'schedule', icon: 'm-schedule', t: '排班', d: '查看本周班表' },
   finance: { k: 'finance', icon: 'm-finance', t: '财务', d: '指标 · 记一笔 · 储值卡' },
@@ -43,7 +45,8 @@ const E = {
 Page({
   data: { name: '员工', shopName: '', isOwner: true, groups: [] },
 
-  onShow() { if (!api.guardMerchant()) return; this.loadMe() },
+  onShow() { if (!api.guardMerchant()) return; this._messageGeneration=(this._messageGeneration||0)+1;this.loadMe() },
+  onHide(){this._messageGeneration=(this._messageGeneration||0)+1},
 
   async loadMe() {
     let owner = true
@@ -62,14 +65,16 @@ Page({
     const groups = owner ? [
       // 排班已移入「员工管理 → 排班」板块(P2③ 屏 4a);员工管理随之从「店铺设置」提到
       // 「日常经营」—— 排班是天天要用的,再让老板去设置里翻一层不合理
-      { title: '日常经营', rows: [E.orders, E.staff, E.attendance, E.finance, E.salaryMonth, E.customers] },
+      { title: '日常经营', rows: [E.messages, E.orders, E.staff, E.attendance, E.finance, E.salaryMonth, E.customers] },
       { title: '营销与会员', rows: [E.marketing, E.member, E.pointsMall, E.analytics] },
       { title: '店铺设置', rows: [E.services, E.store, E.me] }
     ] : [
-      { title: '日常', rows: [E.attendanceStaff, E.scheduleView, E.myperf] },
+      { title: '日常', rows: [E.messages, E.attendanceStaff, E.scheduleView, E.myperf] },
       { title: '账号', rows: [{ ...E.me, d: '改密 · 外观 · 隐私' }] }
     ]
     this.setData({ isOwner: owner, name, shopName, groups })
+    const generation=this._messageGeneration
+    try{const r=await api.adminGet('/admin/messages');if(generation===this._messageGeneration)this.setData({groups:groups.map(g=>({...g,rows:g.rows.map(row=>row.k==='messages'?{...row,d:r.unreadCount?'未读 '+r.unreadCount+' 条':'暂无未读 · 查看历史'}:row)}))})}catch(e){ /* Keep entry available when badge retrieval fails. */ }
   },
 
   go(e) {

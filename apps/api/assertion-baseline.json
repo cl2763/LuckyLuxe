@@ -192,9 +192,14 @@
     "release17-behavior": 23,
     "release18-behavior": 42,
     "membership-summary-ui": 12,
-    "media-privacy-review": 112,
+    "media-privacy-review": 127,
     "public-share": 12,
-    "customer-messages": 5
+    "customer-messages": 6,
+    "booking-subscription-ui": 1,
+    "merchant-messages": 1,
+    "wechat-subscribe": 2,
+    "booking-subscriptions": 2,
+    "store-navigation": 1
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
