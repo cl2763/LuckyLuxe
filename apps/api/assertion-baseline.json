@@ -199,7 +199,8 @@
     "merchant-messages": 1,
     "wechat-subscribe": 2,
     "booking-subscriptions": 2,
-    "store-navigation": 1
+    "store-navigation": 1,
+    "hero-receipt": 2
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
