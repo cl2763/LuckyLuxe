@@ -128,7 +128,25 @@ function bindHeroSlidesPanel(body){
     try{
       const hash=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join('');const digest=rows=>hash(JSON.stringify(heroCopy(rows)))
       const expected=await digest(snapshot), expectedPublic=await digest(snapshot.filter(s=>s.isActive))
-      const known=new Set(heroSaved.map(s=>s.image));const upload=await Promise.all(snapshot.map(async s=>{if(!known.has(s.image))return s;const {image,...rest}=s;return {...rest,imageRef:await hash(image)}}))
+      const known=new Set(heroSaved.map(s=>s.image)), upload=[]
+      for(let i=0;i<snapshot.length;i++){
+        const {image,...rest}=snapshot[i], imageHash=await hash(image)
+        if(known.has(image)){upload.push({...rest,imageRef:imageHash});continue}
+        if(!image.startsWith('data:image/')){upload.push(snapshot[i]);continue}
+        const count=Math.ceil(image.length/100000)
+        for(let index=0;index<count;index++){
+          if(!valid())return
+          heroMessage=owner.lang==='zh'?`正在上传第 ${i+1}/${snapshot.length} 张图片（${index+1}/${count}）…`:`Uploading image ${i+1}/${snapshot.length} (${index+1}/${count})…`;heroStatus()
+          const payload=JSON.stringify({hash:imageHash,index,count,chunk:image.slice(index*100000,(index+1)*100000)})
+          let receipt
+          for(let attempt=0;attempt<2;attempt++){
+            try{receipt=await request('/admin/hero-slides/upload',{method:'PUT',body:payload});break}
+            catch(e){if(attempt===1||!valid())throw e}
+          }
+          if(receipt?.hash!==imageHash||receipt?.index!==index||receipt?.accepted!==true)throw Error(owner.lang==='zh'?'图片上传确认失败':'Image upload was not confirmed')
+        }
+        upload.push({...rest,uploadRef:imageHash})
+      }
       const receipt=await request('/admin/hero-slides', { method: 'PUT',body:JSON.stringify({slides:upload,receiptOnly:true})});acknowledged=true;if(!valid())return
       heroMessage=owner.lang==='zh'?'图片已保存，正在核对展示内容…':'Images saved; checking display…';heroStatus()
       const verified=await request('/admin/hero-slides?receipt=1');if(!valid())return
