@@ -1,0 +1,8 @@
+{
+  "checkedAt": "2026-10-15T05:02:49.383222+00:00",
+  "method": "railway ssh read-only node process.version and RAILWAY_GIT_COMMIT_SHA",
+  "node": "v22.11.0",
+  "commit": "7298fec408523b9f25e29a8f96e0ba6c3e2ca675",
+  "candidateProductionModeStartup": "passed on Node 22.11.0 with isolated empty temporary DB",
+  "freshRetainedDataRehearsal": "pending new consistent backup approval"
+}

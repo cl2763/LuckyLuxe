@@ -48,4 +48,14 @@ for (const name of ['merchant/gallery','merchant/service-note','merchant/custome
  page.mediaPrivacyFailure({errMsg:'chooseMedia:fail auth deny'});
  ok(dialogs.length===2&&dialogs[1].content.includes('照片权限未获允许'),`${name} actual device denial remains distinguishable`);
 }
+// Navigation clipboard calls must expose the same native authorization bridge.
+for (const name of ['home','store-location','order-detail']) {
+ const outcomes=[]; const app={globalData:{privacyResolve:r=>outcomes.push(r.event)},resolvePrivacyAuthorization(){outcomes.push('agree');this.globalData.privacyResolve=null}};
+ const page=loadPage(`pages/${name}/index.js`,{}, {},app);
+ ok(read(`pages/${name}/index.js`).includes("behaviors: [require('../../utils/media-privacy')]"),`${name} privacy behavior registered`);
+ ok(read(`pages/${name}/index.wxml`).includes('templates/media-privacy.wxml') && read(`pages/${name}/index.wxss`).includes('templates/media-privacy.wxss'),`${name} privacy dialog rendered and styled`);
+ page.showMediaPrivacy();ok(page.data.mediaPrivacyVisible&&page.data.mediaPrivacyCopy.includes('地图链接'),`${name} clipboard authorization visible with accurate purpose`);
+ page.cancelMediaPrivacy();ok(!page.data.mediaPrivacyVisible&&outcomes[0]==='disagree'&&!app.globalData.privacyResolve,`${name} refusal settles native request`);
+ page.showMediaPrivacy();page.agreeMediaPrivacy();ok(!page.data.mediaPrivacyVisible&&outcomes.at(-1)==='agree',`${name} repeat attempt can agree`);
+}
 console.log(`1..${assertions}`);

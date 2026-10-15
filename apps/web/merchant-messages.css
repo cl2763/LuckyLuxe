@@ -1,0 +1,5 @@
+#merchantMessagesPanel{max-width:620px;width:calc(100% - 48px);max-height:80vh;overflow:auto;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:24px}
+#merchantMessagesPanel::backdrop{background:rgba(0,0,0,.45)}
+#merchantMessagesPanel button{border-radius:999px;padding:10px 18px;color:var(--ink);background:var(--card);border:1px solid var(--line);cursor:pointer}
+#merchantMessagesPanel .merchant-message-item{display:flex;flex-direction:column;gap:8px;width:100%;text-align:left;margin:12px 0;white-space:normal}
+#merchantMessagesPanel p{white-space:pre-wrap;overflow-wrap:anywhere}

@@ -1,0 +1,21 @@
+{
+  "node": "v22.11.0",
+  "source": "fresh authorized production backup 2026-10-15",
+  "runs": [
+    {
+      "run": 1,
+      "schemaChanges": [],
+      "changedTables": [],
+      "tables": 107,
+      "rows": 11841
+    },
+    {
+      "run": 2,
+      "schemaChanges": [],
+      "changedTables": [],
+      "tables": 107,
+      "rows": 11841
+    }
+  ],
+  "backupSha256": "35c4a19d23ad33ce14b22ce7cc7d3c4a24ec2740c5f2e31c1cb124b63c046e8d"
+}

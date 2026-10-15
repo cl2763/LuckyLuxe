@@ -82,7 +82,8 @@
         "migration-gift/index",
         "migration-service/index",
         "migration-reconciliation/index",
-        "booking-draft/index"
+        "booking-draft/index",
+        "messages/index"
       ]
     },
     {

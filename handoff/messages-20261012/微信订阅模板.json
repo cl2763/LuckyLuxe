@@ -1,0 +1,36 @@
+{
+  "templates": [
+    {
+      "event": "arrival_reminder",
+      "title": "预约提醒",
+      "templateNumber": 375,
+      "templateId": "JoWvz9_dqGf8dULAgRHJUz8JxsBwKkJF_A5dmfkiTwE",
+      "fields": {
+        "storeName": "thing8",
+        "serviceName": "thing7",
+        "appointmentTime": "time2",
+        "address": "thing4",
+        "notice": "thing9"
+      },
+      "scenario": "美甲美睫预约到店前提醒",
+      "source": "用户提供2026-10-12 17.42.15模板详情截图",
+      "status": "模板已添加；尚未接通发送与用户订阅授权"
+    },
+    {
+      "event": "booking_status",
+      "title": "预约通知",
+      "templateNumber": 461,
+      "templateId": "eEbhsKqygu_7iCx2_jz9bcQrHQ5McJybT-skDL1TopU",
+      "fields": {
+        "storeName": "thing66",
+        "serviceName": "thing13",
+        "appointmentTime": "date3",
+        "status": "phrase14",
+        "notice": "thing8"
+      },
+      "scenario": "美甲美睫预约确认及变更通知",
+      "source": "用户提供2026-10-12 17.46.05模板详情截图",
+      "status": "已添加；字段格式和发送联调待验证"
+    }
+  ]
+}

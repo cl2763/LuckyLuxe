@@ -1,0 +1,13 @@
+<view class="pg {{themeClass}}">
+ <view wx:if="{{loading}}" class="empty" role="status">正在加载消息…</view>
+ <view wx:elif="{{error}}" class="empty"><view>{{error}}</view><button bindtap="load">重试</button></view>
+ <block wx:else>
+  <view class="mt">未读 {{unreadCount}}</view>
+  <view wx:if="{{detail}}" class="li"><view class="mi"><view class="mt">{{detail.title}}</view><view class="mm">{{detail.timeText}}</view><view class="mt">{{detail.text}}</view><button wx:if="{{detail.bookingId}}" bindtap="booking">查看预约</button><button bindtap="close">返回消息列表</button></view></view>
+  <block wx:else>
+   <view class="li" wx:for="{{messages}}" wx:key="id" data-id="{{item.id}}" bindtap="open"><view class="mi"><view class="mt">{{item.readAt?'已读':'未读'}} · {{item.title}}</view><view class="mm">{{item.timeText}}</view><view class="mt">{{item.text}}</view></view></view>
+   <view wx:if="{{!messages.length}}" class="empty">暂无消息</view>
+  </block>
+  <view class="note">{{scopeText}}</view>
+ </block>
+</view>

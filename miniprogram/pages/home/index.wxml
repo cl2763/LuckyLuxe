@@ -1,3 +1,4 @@
+<include src="../../templates/media-privacy.wxml" />
 <view class="page home-page {{themeClass}}">
   <text class="store-name-measure" aria-hidden="true">{{storeNameMeasure}}</text>
   <!-- 加载、失败、正文互斥，避免把未加载当成空门店。 -->

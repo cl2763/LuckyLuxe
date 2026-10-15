@@ -5,7 +5,12 @@ const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 
 Page({
+  behaviors: [require('../../utils/media-privacy')],
+  ...require('../../utils/booking-subscription'),
+  onHide(){this._subscriptionHidden=true},
+  onUnload(){this._subscriptionHidden=true},
   onShow() {
+    if(this._orderId)this.loadSubscription(this._orderId)
     ensureCurrencyCached()
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
     // 返回本页时重新读取状态机动作：签署后旧列表缓存仍是「待签」，会吞掉售后入口。
@@ -13,6 +18,7 @@ Page({
     this._shownOnce = true
   },
   data: {
+    mediaPrivacyCopy: '复制门店地址或地图链接前，请阅读并同意隐私保护指引。仅复制你选择的内容。',
     viewer: { open: false, items: [], index: 0 },
     order: null,
     bottomInset: 0,
@@ -202,11 +208,11 @@ Page({
   },
 
   callStore() {
-    wx.showToast({ title: this.data.t.phoneMissing, icon: 'none' })
+    require('../../utils/store-navigation').call(this.data.order.store, this.data.lang === 'en')
   },
 
   openLocation() {
-    wx.showToast({ title: this.data.t.addressMissing, icon: 'none' })
+    require('../../utils/store-navigation').navigate(this.data.order.store, this.data.lang === 'en')
   },
 
   previewWork(event) {

@@ -1,3 +1,4 @@
+@import "../../templates/media-privacy.wxss";
 .store-hero {
   width: 100%;
   height: 360rpx;

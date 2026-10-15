@@ -112,6 +112,7 @@ Page(Object.assign({
 
 
 
+  onLoad(options) { if(options?.bookingId){this._messageBookingId=options.bookingId;this.setData({mode:'all',filter:'all'})} },
   onShow() {
     if (!api.guardMerchant()) return
     refreshStoreClock().catch(() => {})
@@ -121,6 +122,7 @@ Page(Object.assign({
   },
 
   switchMode(e) {
+    this._messageBookingId=null
     const m = e.currentTarget.dataset.m
     this.setData({ mode: m })
     if (m === 'today') this.loadDayView(this.data.selDate || todayStr())
@@ -141,6 +143,7 @@ Page(Object.assign({
   buildAll(raw) {
     const f = this.data.filter
     const target = (STATUS_MAP[f] || {}).label
+    if(this._messageBookingId){const match=raw.find(b=>b.id===this._messageBookingId);if(match)raw=[match];else{wx.showToast({title:'预约已不可用',icon:'none'});raw=[]}}
     const filtered = f === 'all' ? raw : raw.filter((b) => {
       if (f === 'COMPLETED') return Boolean(b.payment) && (b.status === 'COMPLETED' || b.status === 'DONE')
       return (STATUS_MAP[b.status] || {}).label === target
