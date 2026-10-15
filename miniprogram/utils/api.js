@@ -1017,8 +1017,10 @@ function acceptCustomerSession(out) {
 
 function phoneBindingRequired() { return getAuth()?.needPhone !== false }
 async function refreshPhoneRequirement() {
-  if (!getAuth()?.accessToken) return
+  const session = getAuth()?.accessToken
+  if (!session) return
   const out = await request('/auth/wechat/mini-phone-status')
+  if (getAuth()?.accessToken !== session) return
   setAuth(Object.assign({}, getAuth(), {needPhone:out.needPhone}))
 }
 
