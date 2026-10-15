@@ -53,17 +53,17 @@ window.ImageFraming = (() => {
     addEventListener('message',metrics);measure.onload=()=>{measuredFrame=true;measureKey()};dialog.querySelectorAll('[data-profile]').forEach(e=>e.addEventListener('click',()=>{if(measuredFrame)measureKey()}))
     dialog.onclose=()=>{removeEventListener('message',metrics);measure.remove();dialog.remove()};dialog.showModal();select(key)
   }
-  async function read(file){
+  async function read(file,{maxChars=2*1024*1024}={}){
     if(!file.type.startsWith('image/'))throw Error('请选择图片文件 / Choose an image')
     if(file.size>30*1024*1024)throw Error(file.name+'：原图超过 30MB，请换用较小图片 / Image exceeds 30MB')
     const src=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(Error(file.name+'：读取失败 / Read failed'));r.readAsDataURL(file)})
     const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(Error(file.name+'：无法识别图片 / Invalid image'));i.src=src})
-    if(src.length<=2*1024*1024)return src
+    if(src.length<=maxChars)return src
     // Resize the whole photograph to meet the existing API limit; never bake in a crop.
-    for(const edge of [2400,1800,1200]){
+    for(const edge of [2400,1800,1200,900,600]){
       const ratio=Math.min(1,edge/Math.max(img.naturalWidth,img.naturalHeight)),canvas=document.createElement('canvas');canvas.width=Math.round(img.naturalWidth*ratio);canvas.height=Math.round(img.naturalHeight*ratio)
       const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height)
-      for(const quality of [.86,.7,.55]){const encoded=canvas.toDataURL('image/jpeg',quality);if(encoded.length<=2*1024*1024)return encoded}
+      for(const quality of [.86,.7,.55]){const encoded=canvas.toDataURL('image/jpeg',quality);if(encoded.length<=maxChars)return encoded}
     }
     throw Error(file.name+'：图片处理失败，请换一张 / Could not process image')
   }

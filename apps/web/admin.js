@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261012-inbox'
+const ADMIN_BUILD = '20261015-upload'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -354,7 +354,7 @@ async function request(path, options = {}) {
   try {
     response = await doFetch(ownerBearer())
   } catch (error) {
-    throw new Error(error?.name === 'AbortError' ? '请求超时（30秒）：服务器没有响应，请查看服务器终端窗口' : (error.message || '网络错误：连不上服务器'))
+    throw new Error(error?.name === 'AbortError' ? '请求超时（30秒）：尚未收到服务器确认，请检查网络并核对保存结果' : (error.message || '网络错误：连不上服务器'))
   }
   /* 🔴 2026-08-09 安全修复:401 一律回登录页,**不做 token 降级**。
      原来这里会拿 owner.token / localStorage / 写死的 'owner-demo-token' 再试一次 ——
@@ -3856,7 +3856,7 @@ function renderServiceEditor() {
       <label><span>${t('descriptionEn')}</span><textarea name="descriptionEn" rows="2">${escapeHtml(service.descriptionEn)}</textarea></label>
       ${window.ServiceImageEditor.field(service, owner.lang === 'zh')}
       <div class="form-grid">
-        <label><span>${t('priceCad')}</span><input name="price" inputmode="decimal" value="${escapeHtml(service.price)}"></label>
+        <label><span>${escapeHtml((owner.lang === 'zh' ? '价格 ' : 'Price ') + (storeCurrency() || '—'))}</span><input name="price" inputmode="decimal" value="${escapeHtml(service.price)}"></label>
         <label><span>${t('depositCad')}</span><input name="deposit" inputmode="decimal" value="${escapeHtml(service.deposit)}"></label>
         <label><span>${t('durationMin')}</span><input name="duration" inputmode="numeric" value="${escapeHtml(service.duration)}"></label>
         <label><span>${t('sortOrder')}</span><input name="sortOrder" inputmode="numeric" value="${escapeHtml(service.sortOrder)}"></label>
