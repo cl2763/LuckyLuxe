@@ -734,7 +734,7 @@ if [ "${NOT_RUN_N:-0}" -gt "$NOT_RUN_CAP" ]; then
 fi
 echo "主档本轮 $(( ${#SUITES[@]} + 4 )) 个套件通过${CI_SUITES:+（子集，不能称全量）} · 主档未跑 ${NOT_RUN_N} 套"
 if [ "$DEMO_GATE_RED" -gt 0 ] || [ "$MP_LANE_RED" -gt 0 ] || [ "$MP_LANE_SKIP" -gt 0 ]; then
-  echo "🔴 发布回归未完成：门关红 $DEMO_GATE_RED · 小程序界面红 $MP_LANE_RED / 未执行 $MP_LANE_SKIP。主档通过不代替这些检查。"
+  echo "🔴 发布回归未完成：门关红 $DEMO_GATE_RED · 小程序界面红 $MP_LANE_RED / 未执行 ${MP_LANE_SKIP}。主档通过不代替这些检查。"
   exit 1
 fi
 echo "✅ 发布回归三档全部通过"
