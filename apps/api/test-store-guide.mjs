@@ -23,3 +23,29 @@ assert.equal(m.imageRoute({method:'GET'},res,{path:'/store-guide/image',query:{t
 assert.equal(headers['Content-Type'],'image/png');assert.equal(bytes.toString('base64'),'iVBORw0KGgo=')
 assert.throws(()=>m.imageRoute({method:'GET'},res,{path:'/store-guide/image',query:{tenantId:'t1',storeId:'a',step:'0',revision:'3'}}),e=>e.status===404)
 console.log('ok 2 - lightweight public image URLs, revision-scoped image serving and no cross-store image reuse')
+
+const owner={role:'owner',username:'owner1'}
+async function call(path,body,{tid='t1',admin=owner,method='PUT'}={}){
+ let output;await m.route({method},{},{path,query:body,tid,admin,readBody:async()=>body,json:(_r,status,data)=>{assert.equal(status,200);output=data}})
+ return output
+}
+const before=m.read('t1','a')
+const upload=await call('/admin/store-guide/upload',{storeId:'a',image})
+assert.match(upload.uploadRef,/^[a-f0-9]{64}$/)
+assert.deepEqual(m.read('t1','a'),before,'staging must not publish or mutate guide')
+assert.deepEqual(await call('/admin/store-guide/upload',{storeId:'a',image}),upload,'retry is idempotent')
+await assert.rejects(call('/admin/store-guide',{storeId:'b',steps:[{uploadRef:upload.uploadRef,description:''}],revision:0},{tid:'t2'}),e=>e.code==='UPLOAD_INCOMPLETE')
+await assert.rejects(call('/admin/store-guide',{storeId:'a',steps:[{uploadRef:upload.uploadRef,description:''}],revision:4},{admin:{role:'owner',username:'other'}}),e=>e.code==='UPLOAD_INCOMPLETE')
+for(const bad of ['data:image/svg+xml;base64,PHN2Zz4=','data:image/png;base64,invalid!','data:image/png;base64,'+'A'.repeat(450000)]){
+ await assert.rejects(call('/admin/store-guide/upload',{storeId:'a',image:bad}),e=>e.status===400)
+}
+await assert.rejects(call('/admin/store-guide/upload',{storeId:'a',image},{admin:{role:'staff'}}),e=>e.status===403)
+await assert.rejects(call('/admin/store-guide/upload',{storeId:'b',image}),e=>e.status===404)
+await assert.rejects(call('/admin/store-guide',{storeId:'a',steps:[{uploadRef:'missing',description:''}],revision:4}),e=>e.code==='UPLOAD_INCOMPLETE')
+await assert.rejects(call('/admin/store-guide',{storeId:'a',steps:[{uploadRef:upload.uploadRef,description:''}],revision:3}),e=>e.status===409)
+assert.deepEqual(m.read('t1','a'),before,'failed final save must preserve published guide')
+const committed=await call('/admin/store-guide',{storeId:'a',steps:Array(6).fill({uploadRef:upload.uploadRef,description:'入口'}),revision:4})
+assert.equal(committed.revision,5);assert.equal(committed.steps.length,6)
+assert.ok(committed.steps.every(s=>s.image.startsWith('/store-guide/image?')))
+assert.ok(m.read('t1','a').steps.every(s=>s.image===image))
+console.log('ok 3 - staged images are private to owner/store; retries, invalid uploads and revision conflicts preserve published guide; six-image final save')
