@@ -1,0 +1,28 @@
+{
+  "time": "2026-10-16T18:42:31.163649-04:00",
+  "environment": "本机隔离包＋隔离测试库；微信开发者工具普通模式，基础库3.15.2",
+  "message": {
+    "cycles": 5,
+    "detail": true,
+    "relatedBooking": true,
+    "returnList": true,
+    "unreadDecreased": true
+  },
+  "guide": {
+    "saveCycles": 5,
+    "previewReturnCycles": 4,
+    "chooseCompressAddImage": true,
+    "moveStep": true,
+    "cancelDelete": true,
+    "confirmDeleteThenSave": true,
+    "replaceImageThenSave": true,
+    "persistedRevision": 9,
+    "persistedDescriptions": [
+      "本机验收：第二步到店"
+    ]
+  },
+  "limits": [
+    "自动化模式导航仍有超时，五轮改用CUA实际点击",
+    "未替代真机手机号授权、微信提醒送达、导航App选择验证"
+  ]
+}
