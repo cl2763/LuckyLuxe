@@ -185,7 +185,7 @@ check('㋐14 🔴 假数回落红线:跳过头像昵称的顾客,名字兜底**�
   nickLine.trim())
 
 /* ㋐15 绑定失败不许打绿勾 */
-const failBranch = /catch[\s\S]{0,400}?phoneAuthorized: false[\s\S]{0,200}?phoneAuthFailed: true/.test(paJs)
+const failBranch = /catch[\s\S]{0,400}?phoneAuthorized['\"]?: false[\s\S]{0,200}?phoneAuthFailed['\"]?: true/.test(paJs)
 check('㋐15 🔴 绑定失败**不许打绿勾**:后端回 400 时小程序必须把 `phoneAuthorized` 置 false 并如实报错 —— '
   + '打了绿勾顾客就以为存住了,而后台永远认不出这个人(静默失败器族)',
   failBranch, '')

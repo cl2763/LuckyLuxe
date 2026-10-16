@@ -2005,6 +2005,7 @@ function renderStoreWeb() {
         ${storeContactLine(store) ? `<p>${storeContactLine(store)}</p>` : ''}
         ${storeHoursSummary(store) ? `<p>${storeHoursSummary(store)}</p>` : ''}
       </div>
+      ${store.arrivalGuide?.length ? `<div class="card arrival-guide-web"><h2>到店指引</h2>${store.arrivalGuide.map((s,i)=>`<article><h3>步骤 ${i+1}</h3><button type="button" class="guide-photo-button" data-guide-photo="${i}" aria-label="查看到店指引图片 ${i+1}">${window.ImgPlaceholder.tag(s.image,{alt:'到店指引步骤 '+(i+1)})}</button><p>${escapeHtml(s.description)}</p></article>`).join('')}</div>` : ''}
     </section>
   `
 }
@@ -2013,6 +2014,15 @@ function renderStoreWeb() {
    最后一个用它的「设置」卡已撤,函数不留(留着下次又会有人往里塞占位页)。 */
 
 async function handleScreenClick(event) {
+  const guidePhoto = event.target.closest('[data-guide-photo]')
+  if (guidePhoto) {
+    const step=state.stores[0]?.arrivalGuide?.[Number(guidePhoto.dataset.guidePhoto)]
+    if(!step)return
+    const dialog=document.createElement('dialog')
+    dialog.innerHTML=`<button type="button">${state.lang==='en'?'Close':'关闭'}</button>${window.ImgPlaceholder.tag(step.image,{className:'guide-dialog-image',alt:'到店指引'})}`
+    document.body.append(dialog);dialog.querySelector('button').onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();dialog.showModal();return
+  }
+
   const retryLoad = event.target.closest('[data-customer-retry]')
   if (retryLoad) { if (retryLoad.dataset.customerRetry === 'mall') { state.mallError = ''; render() } else setView(state.view); return }
 

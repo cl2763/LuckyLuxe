@@ -63,6 +63,7 @@ function renderStoreProfile() {
     <button class="primary slim" data-store-profile-save type="button">${owner.lang === 'zh' ? '保存门店信息' : 'Save store info'}</button>
     <p class="subtle">${owner.lang === 'zh' ? '保存后同步到订单系统和 AI 知识库——顾客问路、预约确认、AI 回答三处永远一致。' : 'Saved info syncs to bookings and the AI knowledge base so all three stay consistent.'}</p>
   `
+  const guide=document.createElement('div');body.append(guide);window.StoreGuide.mount(guide,store.id)
 }
 
 async function saveStoreProfile() {

@@ -21,6 +21,7 @@ Page({
     ordersLoading: true,
     authModalVisible: false,
     authModalMode: 'login',
+    phoneStep: false, phoneBusy: false,
     canFinishLogin: false,
     authProfile: {
       avatarUrl: '',
@@ -83,14 +84,9 @@ Page({
       privacyAuthorized: false
     }
   },
-  debugAuth(label, payload) {
-    if (payload === undefined) {
-      console.log(`[LuckyLuxe][auth] ${label}`)
-      return
-    }
-    console.log(`[LuckyLuxe][auth] ${label}`, payload)
-  },
+  debugAuth(label) { console.log(`[LuckyLuxe][auth] ${label}`) },
   async onShow() {
+    try { await api.refreshPhoneRequirement() } catch (_) { /* Keep the last confirmed state; business APIs enforce binding. */ }
     /* D33 单源:资产区余额实时后端,不吃 lucky_member 缓存 */
     if (api.isLoggedIn && api.isLoggedIn()) {
       api.myBalance().then((b) => this.setData({ liveBalance: b.yuan })).catch(() => {})
@@ -188,6 +184,7 @@ Page({
     this.setData({
       authModalVisible: true,
       authModalMode: 'login',
+      phoneStep: false,
       authProfile: Object.assign({}, this.data.authProfile, {
         avatarUrl: this.data.authProfile.avatarUrl || '',
         nickname: this.data.authProfile.nickname || ''
@@ -212,7 +209,9 @@ Page({
   },
 
   closeLoginPanel() {
-    this.setData({ authModalVisible: false })
+    if (this.data.phoneStep) { api.clearAuth(); wx.removeStorageSync('lucky_member') }
+    this.setData({ authModalVisible: false, phoneStep: false })
+    this.onShow()
   },
 
   noop() {},
@@ -261,24 +260,6 @@ Page({
   inputNickname(event) {
     this.debugAuth('nickname input', event && event.detail ? event.detail.value : '')
     this.setData({ 'authProfile.nickname': event.detail.value || '' })
-    this.syncAuthReady()
-  },
-
-  inputManualPhone(event) {
-    this.debugAuth('manual phone input', event && event.detail)
-    this.setData({
-      'authProfile.manualPhone': event.detail.value || '',
-      'authProfile.manualPhoneVerified': false
-    })
-    this.syncAuthReady()
-  },
-
-  inputSmsCode(event) {
-    this.debugAuth('sms code input', event && event.detail)
-    this.setData({
-      'authProfile.smsCode': event.detail.value || '',
-      'authProfile.manualPhoneVerified': false
-    })
     this.syncAuthReady()
   },
 
@@ -382,39 +363,7 @@ Page({
     }
     const privacyOk = await this.requestPrivacyAuthorization()
     if (!privacyOk) return
-    try {
-      const loginResult = await api.loginWithWechat({
-        nickname: profile.nickname || '',
-        avatarUrl: profile.avatarUrl || '',
-        phoneCode: '',
-        phone: ''
-      })
-      this.debugAuth('wx mini login success', {
-        id: loginResult && loginResult.id,
-        displayName: loginResult && loginResult.displayName,
-        provider: loginResult && loginResult.provider
-      })
-      const currentMember = wx.getStorageSync('lucky_member') || {}
-      const hasProfile = Boolean(profile.nickname || profile.avatarUrl)
-      wx.setStorageSync('lucky_member', Object.assign({}, currentMember, {
-        nickname: profile.nickname || currentMember.nickname || loginResult.id || loginResult.displayName || currentMember.memberCode || (this.data.lang === 'en' ? 'WeChat User' : '微信用户'),
-        avatarUrl: currentMember.avatarUrl || DEFAULT_AVATAR,
-        profileComplete: hasProfile || Boolean(currentMember.profileComplete),
-        memberLevel: currentMember.memberLevel || '会员', // F3 单源:兜底不再写死梯子标签
-        phoneAuthorized: false,
-        phoneCode: '',
-        phone: ''
-      }))
-      wx.showToast({ title: this.data.lang === 'en' ? 'Saved' : '已保存', icon: 'success' })
-      this.setData({ authModalVisible: false })
-      this.onShow()
-    } catch (error) {
-      this.debugAuth('wx mini login failed', {
-        message: error && error.message,
-        code: error && error.code
-      })
-      wx.showToast({ title: error.message || '登录失败', icon: 'none' })
-    }
+    return phoneAuth.beginLogin(this)
   },
 
   login() {
@@ -431,61 +380,6 @@ Page({
   onGetPhoneNumber(event) {
     this.debugAuth('onGetPhoneNumber result', event && event.detail)
     this.loginWithPhone(event)
-  },
-
-  sendSmsCode() {
-    this.debugAuth('send code click', {
-      phone: this.data.authProfile.manualPhone,
-      countdown: this.data.authProfile.smsCountdown
-    })
-    const phone = (this.data.authProfile.manualPhone || '').trim()
-    if (!/^(\+?\d[\d -]{7,18})$/.test(phone)) {
-      wx.showToast({ title: this.data.lang === 'en' ? 'Enter a valid phone number' : '请输入有效手机号', icon: 'none' })
-      return
-    }
-    if (this.data.authProfile.smsCountdown > 0) return
-    // TODO: Replace this placeholder with a real backend SMS provider before production.
-    this.setData({
-      'authProfile.smsSent': true,
-      'authProfile.smsCountdown': 60,
-      'authProfile.phoneMessage': this.data.lang === 'en'
-        ? 'Verification code sent. Demo code: 0312.'
-        : '验证码已发送。测试验证码：0312。'
-    })
-    if (this.smsTimer) clearInterval(this.smsTimer)
-    this.smsTimer = setInterval(() => {
-      const next = Math.max(0, this.data.authProfile.smsCountdown - 1)
-      this.setData({ 'authProfile.smsCountdown': next })
-      if (next <= 0 && this.smsTimer) {
-        clearInterval(this.smsTimer)
-        this.smsTimer = null
-      }
-    }, 1000)
-  },
-
-  verifySmsCode() {
-    this.debugAuth('verify code click', {
-      phone: this.data.authProfile.manualPhone,
-      code: this.data.authProfile.smsCode
-    })
-    const code = (this.data.authProfile.smsCode || '').trim()
-    // TODO: Replace local demo validation with backend SMS verification.
-    if (code !== '0312') {
-      this.setData({
-        'authProfile.manualPhoneVerified': false,
-        'authProfile.phoneMessage': this.data.lang === 'en' ? 'Invalid code. Demo code is 0312.' : '验证码不正确，测试验证码为 0312。'
-      })
-      this.syncAuthReady()
-      this.debugAuth('verify code result', { ok: false })
-      return
-    }
-    this.setData({
-      'authProfile.manualPhoneVerified': true,
-      'authProfile.phoneAuthorized': false,
-      'authProfile.phoneMessage': this.data.lang === 'en' ? 'Phone number verified.' : '手机号验证完成。'
-    })
-    this.syncAuthReady()
-    this.debugAuth('verify code result', { ok: true })
   },
 
   logout() {

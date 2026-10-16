@@ -6,35 +6,29 @@
 </view>
 
 <view wx:else class="page store-page {{themeClass}}">
-  <!-- 占位零回落:门店封面原来写死店主本店那张沙龙照,每家店都用它。没配就出占位 -->
-  <img-placeholder class="store-hero" src="{{storeCover}}" img-class="store-hero" text="还没有门店照片"></img-placeholder>
-
   <view class="store-card card">
-    <view class="store-name">{{store.storeName}}</view>
-    <!-- D211:没有店介绍就整块不出现(缺席可见律:该没有的就整块没有,不编一句顶上) -->
+    <view class="store-summary">
+      <img-placeholder class="store-hero" src="{{storeCover}}" img-class="store-hero" text="暂无门店照片"></img-placeholder>
+      <view class="store-summary-copy">
+        <view class="store-name">{{store.storeName}}</view>
+        <view class="store-summary-line">{{store.address}}</view>
+        <view class="store-summary-line">{{store.businessHours}}</view>
+      </view>
+    </view>
     <view class="store-desc" wx:if="{{store.description}}">{{store.description}}</view>
-    <view class="info-row">
-      <text>{{t.address}}</text>
-      <text>{{store.address}}</text>
-    </view>
-    <view class="info-row">
-      <text>{{t.phone}}</text>
-      <text>{{store.phone}}</text>
-    </view>
-    <view class="info-row">
-      <text>{{t.hours}}</text>
-      <text>{{store.businessHours}}</text>
+    <view class="action-grid">
+      <button class="btn btn-ghost" bindtap="openLocation">{{t.nav}}</button>
+      <button class="btn btn-ghost" wx:if="{{store.phone}}" bindtap="callStore">{{t.call}}</button>
+      <button class="btn btn-ghost" bindtap="copyAddress">{{t.copy}}</button>
     </view>
   </view>
 
-  <view class="action-grid">
-    <button class="btn btn-primary" bindtap="openLocation">{{t.nav}}</button>
-    <button class="btn btn-ghost" bindtap="callStore">{{t.call}}</button>
-    <button class="btn btn-ghost" bindtap="copyAddress">{{t.copy}}</button>
-  </view>
-
-  <view class="map-placeholder card">
-    <view>{{lang === 'en' ? 'Getting here' : '到店指引'}}</view>
-    <view class="muted">{{lang === 'en' ? 'Copy the map link or address using the navigation button, then open it in your maps app.' : '点击导航复制地图链接，在手机浏览器打开；也可复制完整地址到地图软件搜索。'}}</view>
+  <view wx:if="{{store.arrivalGuide.length}}" class="card arrival-guide">
+    <view class="guide-title">{{lang === 'en' ? 'Getting here' : '到店指引'}}</view>
+    <view wx:for="{{store.arrivalGuide}}" wx:key="index" class="arrival-step">
+      <view class="arrival-heading"><text>{{index + 1}}</text>{{lang === 'en' ? 'Step' : '步骤'}} {{index + 1}}</view>
+      <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" data-src="{{item.image}}" bindtap="previewGuide" />
+      <view wx:if="{{item.description}}">{{item.description}}</view>
+    </view>
   </view>
 </view>

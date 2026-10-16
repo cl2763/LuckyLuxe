@@ -13,7 +13,7 @@ import { ensureGiftSchema, normalizeGiftItems, readGiftItems, giftSnapshotOfPack
 import { createPackageWrite } from './package-write.mjs'
 import { createScheduleWrite } from './schedule-write.mjs'
 import { ensureCustomerCreateSchema, createCustomerCreator } from './customer-create.mjs'
-import { bindingIdentity, createVerifiedPhoneCompletion } from './archive-binding.mjs'
+import { bindingIdentity, createVerifiedPhoneCompletion } from './archive-binding.mjs'; import { requireBoundCustomer } from './customer-phone-gate.mjs'
 import { createScanIdentity } from './scan-identity.mjs'
 import { ensureServiceImageViewSchema, storedImageView, serviceImageFields } from './image-view.mjs'
 import { validateBusinessHours, writeBusinessHours } from './business-hours-write.mjs'
@@ -113,7 +113,7 @@ import { createPlatformSessions } from './platform-session.mjs'       // 平台�
 import { createAdminAuth } from './admin-auth.mjs'                    // 商家端账号与会话(口令哈希/一次性口令/签票/认票)
 import { createAccountRefund } from './account-refund.mjs'            // N-5 退卡口(退卡≠手动耗卡:不碰收入)
 import { ensureRefundSchema } from './account-refund-schema.mjs'
-import { createHeroSlides, ensureHeroSlidesSchema, HERO_SLIDE_MAX } from './hero-slides.mjs'   // D78 顾客首页轮播按租户出数据(零回落)
+import { subscriptionScope } from './subscription-scope.mjs'; import { createStoreGuide } from './store-guide.mjs'; import { createHeroSlides, ensureHeroSlidesSchema, HERO_SLIDE_MAX } from './hero-slides.mjs'   // D78 顾客首页轮播按租户出数据(零回落)
 import { contentImage } from './image-placeholder.mjs'   // 占位零回落:内容图的唯一出口
 import { createDepositAudit } from './deposit-audit.mjs'   // 定金守恒定时自检(店主 08-29 两票之一)
 import { createCashNotes, ensureCashNotesSchema, CASH_NOTE_KINDS, CASH_NOTE_KIND_LABELS } from './cash-notes.mjs'   // D79 线下现金腿手记
@@ -1435,7 +1435,7 @@ function requireCustomer(req) {
   const auth = req.headers.authorization || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   const miniUser = customerFromMiniToken(token)
-  if (miniUser) return miniUser
+  if (miniUser) return requireBoundCustomer(req, miniUser, WECHAT_AUTH_SCOPE_NAME, apiError, process.env.WECHAT_PHONE_BINDING_REQUIRED === 'true')
   // 顾客侧演示令牌与商家侧同一把闸(生产恒关)。理由见 ./admin-auth.mjs
   const email = DEMO_LOGIN_ALLOWED ? demoEmailFromToken(token, 'customer') : ''
   if (email) return registerEmailUser({ email, displayName: email.split('@')[0] })
@@ -6733,7 +6733,7 @@ const refundApi = createAccountRefund({
   formatMoneyCents: (c, t, m) => formatMoneyCents(c, t, m),
   storeDateOf: (at, tid) => localParts(new Date(at), tenantTimezone(tid)).date
 })
-const heroSlidesApi = createHeroSlides({ db, apiError, iso, randomId, currentTenantId })
+const storeGuideApi = createStoreGuide({db,apiError}); storeGuideApi.ensureSchema(); const heroSlidesApi = createHeroSlides({ db, apiError, iso, randomId, currentTenantId })
 const cashNotesApi = createCashNotes({ db, apiError, iso, randomId, currentTenantId, formatMoneyCents: (v, t, m) => formatMoneyCents(v, t, m) })
 const appVersion = createAppVersion({ readFileSync, statSync, join, webRoot, fingerprintHtml })
 const kbRoutes = createKbRoutes({
@@ -6797,7 +6797,7 @@ const scheduleBoard = createScheduleBoard({
   backfillPlanFor
 })
 const dashboardPulse = createDashboardPulse({ db, currentTenantId, tenantTimezone, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked: (tid) => financeLockEnabled(tid), todayBoardOf: (tid, date) => scheduleBoard.dayCounts(tid, date), storeClosedOn: (tid, date) => { try { return isClosedDay(defaultStoreId(), date) } catch { return false } }, storeClockText: (tid) => localParts(new Date(), tenantTimezone(tid)).time, aiRetouchCard: (tid) => aiRetouchGate.card(tid) })   /* 主页大屏三接口(图 v3.1 §四);口径两问答案在模块抬头;「此刻」与台面同一条规则 */
-const bookingSubscriptions=createBookingSubscriptions({db,apiError,json,readBody,requireCustomer,resolveTenant,localParts,tenantTimezone,enabled:process.env.WECHAT_SUBSCRIBE_ENABLED==='true',send:createSubscribeSender({appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET,miniprogramState:process.env.WECHAT_SUBSCRIBE_STATE||'formal'})}); const merchantMessages = createMerchantMessages({db,apiError,json,localParts,tenantTimezone}); const notifyScheduler = createNotifyScheduler({
+const bookingSubscriptions=createBookingSubscriptions({db,apiError,json,readBody,requireCustomer,resolveTenant,localParts,tenantTimezone,...subscriptionScope(),send:createSubscribeSender({appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET,miniprogramState:process.env.WECHAT_SUBSCRIBE_STATE||'formal'})}); const merchantMessages = createMerchantMessages({db,apiError,json,localParts,tenantTimezone}); const notifyScheduler = createNotifyScheduler({
   db, randomId, iso, apiError, json, readBody, parseJson: parseJson2, localParts, tenantTimezone,
   DEFAULT_TENANT_ID, dataScope: DATA_SCOPE
 })
@@ -10647,7 +10647,7 @@ async function route(req, res) {
     const user = registerEmailUser({ ...body, tenantId: resolveTenant(req, query) })
     return json(res, path.endsWith('register') ? 201 : 200, { user, auth: demoAuthFor(user.email || body.email), mode: 'demo' })
   }
-  if (req.method === 'POST' && path === '/auth/wechat/mini-login') return json(res, 200, await signInWechatMiniUser(await readBody(req)))
+  if (req.method === 'GET' && path === '/auth/wechat/mini-phone-status') return json(res, 200, {needPhone:needsPhone(requireCustomer(req))}); if (req.method === 'POST' && path === '/auth/wechat/mini-login') return json(res, 200, await signInWechatMiniUser(await readBody(req)))
   if (req.method === 'POST' && path === '/auth/wechat/mini-phone') return json(res, 200, await bindMiniPhone({ body: await readBody(req), req, completePhone:completeVerifiedPhone, db, apiError, requireCustomer, fetchJsCode2Session: (await import('./wechat-code-stub.mjs')).fetchJsCode2Session, appid: WECHAT_MINI_APPID, secret: WECHAT_MINI_SECRET, scopeName: WECHAT_AUTH_SCOPE_NAME }))   // 授权手机号:整段在 ./mini-phone.mjs(裁#89 摘出去)
   // 商家入驻申请(公开表单,无需登录):留资给平台客服联系
   if (req.method === 'POST' && path === '/merchant-leads') {
@@ -10867,7 +10867,7 @@ async function route(req, res) {
     if (!user) throw apiError(404, 'NOT_FOUND', 'User not found.')
     return json(res, 200, { user: serializeUser(user, resolveTenant(req, query)) })
   }
-  if (req.method === 'GET' && path === '/stores') {
+  if(storeGuideApi.imageRoute(req,res,{path,query}))return; if (req.method === 'GET' && path === '/stores') {
     // 附带每周营业时间(hours),供顾客端首页店卡展示"今日营业时间/营业中"。加字段向后兼容。
     const tid = resolveTenant(req, query)
     const storeRows = db.prepare('SELECT * FROM stores WHERE is_active = 1 AND tenant_id = ?').all(tid)
@@ -10906,7 +10906,7 @@ async function route(req, res) {
          注意位面:顾客端读的是**这个公开 /stores**,不是 /admin/stores —— 只加在 admin 那边等于没加。 */
       stores: storeRows.map((s) => Object.assign({}, withStoreNavigation(s), {
         hours: hourStmt.all(s.id),
-        todayHours: { zh: storeTodayHours(s, 'zh'), en: storeTodayHours(s, 'en') }
+        todayHours: { zh: storeTodayHours(s, 'zh'), en: storeTodayHours(s, 'en') }, arrivalGuide: storeGuideApi.presentation(tid,s.id).steps
       }))
     })
   }
@@ -11347,7 +11347,7 @@ async function route(req, res) {
   /* D90(店主 08-31 裁,推翻 v1.1③ 的财务门半边):账调四 tab(充值/赠送/退卡/冲销)门禁一致 ——
      **仅老板,不挂财务钥匙门**(与充值同权;财务页整体门禁不变)。
      案底:门只拦了读流水那半,充值 tab 却直通 —— 两半不一致,还把门禁态装成空态(O-fin1)。 */
-  if (req.method === 'GET' && path === '/admin/store/mini-code') {
+  if(await storeGuideApi.route(req,res,{path,query,admin:adminSession,tid:currentTenantId(),json,readBody}))return; if (req.method === 'GET' && path === '/admin/store/mini-code') {
     if (adminSession.role !== 'owner') throw apiError(403,'FORBIDDEN','仅店主可获取门店码。')
     return json(res,200,storeCodeInfo(db,currentTenantId(),miniCodeScope(DATA_SCOPE_NAME),apiError))
   }

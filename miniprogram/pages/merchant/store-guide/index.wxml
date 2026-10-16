@@ -1,0 +1,23 @@
+<include src="../../../templates/media-privacy.wxml" />
+<view class="page guide-editor {{themeClass}}">
+ <view wx:if="{{loading}}">正在读取到店指引…</view>
+ <block wx:else>
+  <view class="guide-intro">{{preview ? '顾客预览：保存后才会对顾客展示' : '添加入口、停车或上楼路线，让顾客更容易找到你。'}}</view>
+  <view wx:if="{{error}}" class="guide-error">{{error}}<button wx:if="{{!dirty}}" bindtap="load">重新加载</button></view>
+  <view class="card guide-card">
+   <view wx:for="{{steps}}" wx:key="index" class="guide-step">
+    <view class="guide-heading"><text class="guide-number">{{index + 1}}</text><text>步骤 {{index + 1}}</text><block wx:if="{{!preview}}"><button size="mini" data-i="{{index}}" bindtap="pick" disabled="{{busy}}">替换图片</button><button class="guide-delete" size="mini" data-i="{{index}}" bindtap="remove" disabled="{{busy}}">删除</button></block></view>
+    <view class="guide-fields {{preview ? 'guide-preview' : ''}}">
+     <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" data-src="{{item.image}}" bindtap="photo" />
+     <view wx:if="{{!preview}}" class="guide-input"><textarea value="{{item.description}}" maxlength="50" placeholder="填写这一步的说明（可选）" data-i="{{index}}" bindinput="change" disabled="{{busy}}"/><text>{{item.description.length}}/50</text></view>
+     <text wx:else class="guide-description">{{item.description}}</text>
+     <view wx:if="{{!preview}}" class="guide-sort"><button size="mini" data-i="{{index}}" data-dir="-1" bindtap="move" disabled="{{busy || index === 0}}">↑</button><button size="mini" data-i="{{index}}" data-dir="1" bindtap="move" disabled="{{busy || index === steps.length - 1}}">↓</button></view>
+    </view>
+   </view>
+   <button wx:if="{{loaded && !preview && steps.length < 6}}" class="guide-add" bindtap="pick" disabled="{{busy}}">＋ 添加图片与说明</button>
+   <view wx:if="{{!steps.length && preview}}" class="guide-intro">暂无到店指引，顾客端会隐藏此区域。</view>
+  </view>
+  <view class="guide-intro">最多 6 步，每步可填写 50 字描述。</view>
+  <view class="guide-footer"><button class="btn btn-ghost" bindtap="preview" disabled="{{busy}}">{{preview ? '返回编辑' : '预览'}}</button><button class="btn btn-primary" bindtap="save" loading="{{busy}}" disabled="{{busy || !loaded}}">保存</button></view>
+ </block>
+</view>
