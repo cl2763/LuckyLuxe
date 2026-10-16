@@ -1,47 +1,48 @@
 {
-  "checkedAt": "2026-10-15T05:01:20.329428+00:00",
+  "checkedAt": "2026-10-16T22:16:55.858626+00:00",
   "authorization": "用户允许现有 miniprogram-automator，仅三项本机布局测试",
-  "scope": "独立端口9438、隔离回归临时库4322；不写生产或真实本机库",
-  "projectPath": "/tmp/youji-review-final-native",
-  "projectVerifiedBy": "CLI auto明确指定隔离项目和9438端口并成功；源码逐文件比较",
-  "candidateFingerprint": "8ddb4b2f69c7a455",
+  "scope": "隔离端口9439、临时库4322；不写生产",
+  "projectPath": "/tmp/youji-msg-native-20261015/miniprogram",
+  "projectVerifiedBy": "CLI auto 指定9439隔离项目；候选非测试配置文件逐文件一致",
+  "candidateFingerprint": "ee4b33baecd93dc8",
   "sourceComparison": {
     "matchedFiles": 502,
     "missingFiles": [],
     "testOnlyConfigDifferences": [
       "project.config.json",
+      "project.private.config.json",
       "utils/api.js",
       "utils/deploy.js",
       "utils/devhost.js"
     ],
     "testConfiguration": "本机4322隔离库、lucky-luxe夹具；导航测试夹具单独公开；正式源码仍为生产HTTPS、空默认租户"
   },
-  "baseLibrary": "3.15.2（与正式项目配置一致）",
+  "baseLibrary": "3.15.2（隔离测试配置；3.17.3自动化页面桥接无响应）",
   "suites": [
     {
       "suite": "mp-placeholder-size",
       "assertions": 3,
       "status": "passed",
       "sha256": "75462dbda4733ee656417ca724a38b2400c9af391d3a1cd740af0b5e07e3bc2f",
-      "log": "handoff/messages-20261012/mp-placeholder-size-20261015.log"
+      "log": "handoff/messages-20261012/mp-placeholder-size-20261016.log"
     },
     {
       "suite": "mp-overlap",
       "assertions": 4,
       "status": "passed",
       "sha256": "0c346650cd138081ceb5bca5f9ba77449748c23c91024ac3deeb7e910871fbff",
-      "log": "handoff/messages-20261012/mp-overlap-20261015.log"
+      "log": "handoff/messages-20261012/mp-overlap-20261016.log"
     },
     {
       "suite": "mp-home-sections",
       "assertions": 9,
       "status": "passed",
-      "sha256": "9bc05c965c509cae9dfdb7b276a7822c4972d929b8189fc62de2eb1a62ea066c",
-      "log": "handoff/messages-20261012/mp-home-sections-20261015.log"
+      "sha256": "eab458f8e2bfaf89a5d79fcbdabf06881ee85b959032ebc1e06df895ae3da627",
+      "log": "handoff/messages-20261012/mp-home-sections-20261016.log"
     }
   ],
   "files": {
-    "miniprogram/app.json": "6943fa07ef533c8d6997be52aa5dadc10ef3baa394641cd37255402bda05b273",
+    "miniprogram/app.json": "a445119b9d7823e2a4603f1540f4dc09a601a5de8b57cc68ec5ad2ae20254ffc",
     "miniprogram/project.config.json": "4478d97d73976075482cb562830bc3e9b5899865e84984aece85bef0ddda389e",
     "miniprogram/app.wxss": "72516b68b71cf4e95f5f60d623f3137ffd58564e529640eb3258fc7e766942af",
     "miniprogram/sitemap.json": "3552173b6e45a4127d0377edd9262bbbac300490f9af3dca75f22029f0b120be",
@@ -76,8 +77,8 @@
     "miniprogram/utils/privacy-policy.js": "05d3910c3253126bc81891c01c440989a6ef77b01c150a151c401339793a5659",
     "miniprogram/utils/test-scan-code.cjs": "a5be25f7b2f6122f30771b7f60299ee7cc350cc8bd2f12f0fb0fe493a6bfd8e8",
     "miniprogram/utils/scan-code.js": "d5633d0bbd280528fb73c1deb08b32c0be32814b76a2ea7c849e0d97db0c4273",
-    "miniprogram/utils/api.js": "b949ac1d4539ee7d3b2bbb5fb935ef4094be8be9ffbd70af6555444a1f1fd52f",
-    "miniprogram/utils/phone-auth.js": "43b42a9b51bc7f697a00e0e827cccc704d46c2c77bd2721ebfa6b9b65e6d68d1",
+    "miniprogram/utils/api.js": "b79a2e2a23101b902b517ced8ae50e398f45fbf4abde502199fdd21f1777d91a",
+    "miniprogram/utils/phone-auth.js": "4b731ae9a8589b991a2d7119c1656a82ff646fd62f00e6568a711b635f17042d",
     "miniprogram/utils/package-build.js": "d8166b7045051344add33b3ff0c3c98b3f3cbcfe6ac378829927eea1c6efb917",
     "miniprogram/utils/i18n.js": "95d24d3da0b06127b16c1afe51e3507cab135408a743c5e27b8dae93b28cdbf9",
     "miniprogram/utils/test-scan-actions.cjs": "9278c9df9f61748e9df3f6ae1858bee586c49a1285ef6f5663cbe53f7934e485",
@@ -93,9 +94,9 @@
     "miniprogram/pages/home/index.js": "8842079b4ec87b2ecc81c1ea3c6bd57cfa70081f3c6c0bc1773a1035375b9f0b",
     "miniprogram/pages/home/index.wxss": "f9648fea9f0015cdcccd7b3fe3a4f915bef905911893578163eb0c8c954a5252",
     "miniprogram/pages/home/index.json": "b3b285e72b27ce1943ac22274a9edbbcd17381e3ca5a7e39e3659560dec26d64",
-    "miniprogram/pages/store-location/index.wxml": "126222b35de6857769bdc6de8e776d2e599c49a8ce913b1c30df77e6c15f411f",
-    "miniprogram/pages/store-location/index.js": "a1a8bfcb1f007abf434730d22ab7f3ce57de46d506fe0d19b5d13de7db630887",
-    "miniprogram/pages/store-location/index.wxss": "3762757e7c7ef3b607deff29ae2f2433f9e452fbde13d0d2f3139b64eaf167ec",
+    "miniprogram/pages/store-location/index.wxml": "2d71f1afea7f21c08ba4494678f30c9e936248ee6ca0f6d3b80690442d8219d1",
+    "miniprogram/pages/store-location/index.js": "d009ca1cef9f81ee4f930d6c5f63beca67245689855ca1635be05eb2e7709578",
+    "miniprogram/pages/store-location/index.wxss": "b806d1862c29b579cde19cff77dc1beaf5eb3c1c53c167a979b226336df8f286",
     "miniprogram/pages/store-location/index.json": "653db4d813e3f252dd7294195c237c68df5bafd822acee4b6e1afe19fbc55b1a",
     "miniprogram/pages/booking-draft/index.wxml": "3807becdfa555e945f18da8ce8fd66c81701c45683b2b6498b3517e8461412ed",
     "miniprogram/pages/booking-draft/index.js": "3fb91e8577dc3393039952519c5846a7c5f4b09e77997c2cd01f3a08203bc0c7",
@@ -165,8 +166,8 @@
     "miniprogram/pages/booking-done/index.js": "d6133d2182835f21d1f96aa307277968aed96df8e9e9cde039c72d4ed6bae2cb",
     "miniprogram/pages/booking-done/index.wxss": "8c506f57ba03bf24d3c5b9e8c47d31ab4a6055aae882bbb757e91a37bde8a429",
     "miniprogram/pages/booking-done/index.json": "c0f6207c8efe10318538e92bd91509f42b6765f55208042d9c007486f872ff74",
-    "miniprogram/pages/me/index.wxml": "60351b6d58d482ea666f48308320526644bb840d8454337330e326c811e1b43c",
-    "miniprogram/pages/me/index.js": "81b3f80b61720424ee02fc979d8ea571afbfabd950e2a1a146191ed2bbb9b823",
+    "miniprogram/pages/me/index.wxml": "a3305e7ee1f06681a8c6f2b9a70da36525824dee74b90618312370089dc2ed04",
+    "miniprogram/pages/me/index.js": "31d75036c731ebf9f3821e323299f9d0d2325b497799c9fab900b58b5ea5afa7",
     "miniprogram/pages/me/index.wxss": "fb55948f76965230a069969c45c22f5b4a049377363c688c5d55b9dc6f201c2c",
     "miniprogram/pages/me/index.json": "44c538785b70653a43a21771d6e32cdba2afa7fa9ab955f528b95693bd05b68f",
     "miniprogram/pages/service-detail/index.wxml": "8e060adb4a0fab07fbd7e4bffc443bd0f2b50003aa36c5e99779680afc1903bf",
@@ -396,8 +397,8 @@
     "miniprogram/pages/merchant/analytics/index.js": "1cfa4a1425355dcab1f17947c45dadb1bb503ffafa54239c96b33044594eea70",
     "miniprogram/pages/merchant/analytics/index.wxss": "484aa7ab554ea20ee708f01eed59020c007ce9631405b718f93d902319ab4f2b",
     "miniprogram/pages/merchant/analytics/index.json": "fa160e6b38d0234fbcfe07e4ac89ce97660a20a4cdfa5ee9c75314a3c7db24ad",
-    "miniprogram/pages/merchant/store/index.wxml": "b9837bb93fe972655528a96e90718e3efd40eb556181aa256ba22c20b3209a00",
-    "miniprogram/pages/merchant/store/index.js": "e468a48582e971efe20c4eabdd40cef8519eecf36970944f6d28bae6255fc064",
+    "miniprogram/pages/merchant/store/index.wxml": "c6e9150d86803530e304c24daaad583ea64e185abaff62f3cebffbae73a1f34c",
+    "miniprogram/pages/merchant/store/index.js": "6c268643a12683e4b7eef2bcf8557326c9100d4985a8805907cdd0a9bcc17d8a",
     "miniprogram/pages/merchant/store/index.wxss": "b49fd6183f63aaef18a1ee6d36c41714f9854988b2ba250c7397e8d98f5b3e85",
     "miniprogram/pages/merchant/store/index.json": "08f5aafccc30832db2fe3fec2fbf3c8a68521604a61a744af61a7083c32dc297",
     "miniprogram/pages/merchant/conversation/index.wxml": "6a01628b70fb3fa3e9b6a53d19b556580ff4753a96668f22f8cd67521454dd22",
