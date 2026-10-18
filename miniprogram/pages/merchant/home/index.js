@@ -12,7 +12,9 @@ const ROTATE_MS = 4000
 const HINT_KEY = 'll-dh-carousel-hint'   // 「自动轮播中」那句提示,每台设备只出一次
 
 Page({
+  ...require('./acceptance'),
   data: {
+    pendingBookings: [], acceptanceError: '', acceptingId: '',
     greeting: '嗨,老板 👋',
     roleLabel: '老板',
     isOwner: true,
@@ -75,7 +77,7 @@ Page({
     this.load()
     this.refreshNudges()
     clearInterval(this._nudgeTimer)
-    this._nudgeTimer = setInterval(() => this.refreshNudges(), 30000)
+    this._nudgeTimer = setInterval(() => { this.refreshNudges(); if(this.data.isOwner)this.loadAcceptances() }, 30000)
   },
 
   /* 业绩大屏:三条接口与网页端**同一份数据**(一份数据两端渲染律)。
@@ -412,7 +414,7 @@ Page({
     try {
       const me = await api.adminMe()
       isOwner = me && me.role === 'owner'
-      if (isOwner) this.loadPulse(); else this.loadStaff()   // 首页只读已生成摘要；模型仅由“生成 AI 日报”按钮触发
+      if (isOwner) { this.loadPulse(); this.loadAcceptances() } else this.loadStaff()   // 首页只读已生成摘要；模型仅由“生成 AI 日报”按钮触发
       this.setData({
         isOwner,
         myTechId: (me && me.technicianId) || '',

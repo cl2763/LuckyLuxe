@@ -10,6 +10,7 @@
     <view class="status-line">
       <text wx:if="{{order.listBadgeText}}" class="status badge-{{order.listBadgeKind}}">{{order.listBadgeText}}</text>
       <text wx:else>{{order.statusText}}</text>
+      <view wx:if="{{order.merchantConfirmationText}}">{{order.merchantConfirmationText}}</view>
     </view>
     <view class="service-name">{{order.serviceInfo.serviceName}}</view>
     <view class="muted">{{t.orderNo}} {{order.orderNo}}</view>

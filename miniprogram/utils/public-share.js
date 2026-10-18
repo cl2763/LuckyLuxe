@@ -3,7 +3,7 @@ const i18n = require('./i18n')
 function share(page, title, params) {
   const tenantId = api.currentTenantId()
   if (!tenantId) return { title: '有迹', path: '/pages/entry/index', query: '' }
-  if (!['home', 'services', 'service-detail', 'portfolio'].includes(page)) return { title: '有迹', path: '/pages/entry/index', query: '' }
+  if (!['home', 'services', 'service-detail', 'portfolio', 'store-location'].includes(page)) return { title: '有迹', path: '/pages/entry/index', query: '' }
   const fields = { tenantId }
   const key = page === 'service-detail' ? 'id' : page === 'portfolio' ? 'workId' : ''
   if (key && params && params[key]) fields[key] = params[key]

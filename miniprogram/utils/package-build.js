@@ -1,2 +1,2 @@
 // Generated before upload; identifies the mini-program bundle, not the API.
-module.exports = {"build":"7bbbe9020e2337a7"}
+module.exports = {"build":"4944b813e4a4b90f"}

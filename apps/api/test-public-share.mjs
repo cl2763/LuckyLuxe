@@ -15,10 +15,10 @@ test('share restores explicit store and escapes content identifiers',()=>{
 test('store switch uses current store, not prior share',()=>{tenant='store-b';assert.match(share('home').path,/tenantId=store-b/)})
 test('no chosen store shares neutral public entry',()=>{tenant='';assert.equal(share('home').path,'/pages/entry/index');assert.equal(share('home').query,'')})
 test('public share never adds session or private order fields',()=>{tenant='store-a';const q=new URLSearchParams(share('portfolio','作品',{workId:'public-1',tenantId:'other',accessToken:'secret',bookingId:'private'}).query);assert.deepEqual([...q.keys()],['tenantId','workId'])})
-for(const page of ['home','services','service-detail','portfolio']){
+for(const page of ['home','services','service-detail','portfolio','store-location']){
  test(`${page} friend and timeline callbacks retain matching query`,()=>{
   let opts;vm.runInNewContext(fs.readFileSync(new URL(`pages/${page}/index.js`,root),'utf8'),{Page:o=>opts=o,require:n=>n.includes('public-share')?{share}:n.includes('i18n')?i18n:n.includes('api')?api:{},wx:{}})
-  const ctx={data:{lang:'zh',shopName:'门店',service:{name:'服务'},preview:{id:'work-1'}},serviceId:'svc-1'};ctx.onShareAppMessage=opts.onShareAppMessage.bind(ctx)
+  const ctx={data:{lang:'zh',shopName:'门店',store:{storeName:'门店'},service:{name:'服务'},preview:{id:'work-1'}},serviceId:'svc-1'};ctx.onShareAppMessage=opts.onShareAppMessage.bind(ctx)
   const friend=ctx.onShareAppMessage(),timeline=opts.onShareTimeline.call(ctx);assert.equal(friend.query,timeline.query);assert.match(friend.path,/tenantId=store-a/)
  })
 }

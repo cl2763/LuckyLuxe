@@ -1030,6 +1030,7 @@ module.exports = {
   getBookingDraft: id => request(`/booking-drafts/${encodeURIComponent(id)}`),
   acceptCustomerSession,
   getSignLink,
+  subscriptionOnboarding: () => request('/my/subscription-onboarding'),
   subscriptionConfig: id => request('/my/bookings/'+encodeURIComponent(id)+'/subscription'),
   subscriptionConsent: data => request('/my/subscription-consent','POST',data),
   getMessages: () => request('/my/messages'),

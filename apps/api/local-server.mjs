@@ -1,3 +1,4 @@
+import {userBookingStats as readBookingStats} from './booking-read-model.mjs'
 import { mountWebHtml } from './web-mount.mjs'
 import { createPortfolioMedia } from './portfolio-media.mjs'
 import { effectivePlanPolicy } from './free-personal-policy.mjs'
@@ -113,6 +114,7 @@ import { createPlatformSessions } from './platform-session.mjs'       // 平台�
 import { createAdminAuth } from './admin-auth.mjs'                    // 商家端账号与会话(口令哈希/一次性口令/签票/认票)
 import { createAccountRefund } from './account-refund.mjs'            // N-5 退卡口(退卡≠手动耗卡:不碰收入)
 import { ensureRefundSchema } from './account-refund-schema.mjs'
+import { createBookingAcceptance } from './booking-acceptance.mjs';
 import { subscriptionScope } from './subscription-scope.mjs'; import { createStoreGuide } from './store-guide.mjs'; import { createHeroSlides, ensureHeroSlidesSchema, HERO_SLIDE_MAX } from './hero-slides.mjs'   // D78 顾客首页轮播按租户出数据(零回落)
 import { contentImage } from './image-placeholder.mjs'   // 占位零回落:内容图的唯一出口
 import { createDepositAudit } from './deposit-audit.mjs'   // 定金守恒定时自检(店主 08-29 两票之一)
@@ -5202,17 +5204,7 @@ function visitDaysCount(userId, tenantId = currentTenantId()) {
   return customerVisitDaysCount(db, userId, tenantId, tenantTimezone(tenantId), localParts)
 }
 
-function userBookingStats(userId, tenantId = DEFAULT_TENANT_ID) {
-  if (!userId) return { total_spent_cents: 0, visits: 0 }
-  // 每店独立会员:消费/到店只算这家店(tenant)
-  return db.prepare(`
-    SELECT
-      COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN service_price_cents ELSE 0 END), 0) AS total_spent_cents,
-      COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END), 0) AS visits
-    FROM bookings
-    WHERE user_id = ? AND tenant_id = ?
-  `).get(userId, tenantId) || { total_spent_cents: 0, visits: 0 }
-}
+function userBookingStats(userId,tenantId=DEFAULT_TENANT_ID) { return readBookingStats(db,userId,tenantId) }
 
 // 统一身份解析（留接口纪律 #4）：任何渠道身份 → 内部用户。未来微信客服/企微/网页渠道都走这两个函数。
 /* 会员=用户×店:身份解析必须带租户 —— 不带就会把 A 店那一行认成 B 店的顾客(跨店串号根子)。
@@ -5251,6 +5243,7 @@ function serializeBooking(row, lang = 'zh') {
     id: row.id,
     publicCode: row.public_code,
     status: row.status,
+    merchantConfirmationText: db.prepare('SELECT 1 FROM booking_acceptances WHERE tenant_id=? AND booking_id=?').get(row.tenant_id,row.id) ? (lang==='en'?'Accepted by store':'商家已确认预约') : (['CONFIRMED','PENDING_PAYMENT'].includes(row.status)&&!row.arrived_at&&row.appointment_start>new Date().toISOString() ? (lang==='en'?'Awaiting store confirmation':'等待商家确认预约') : ''),
     /* 补录小合同(01v 合同二):归属日与服务日不同 → 单上注明那一句(后端出,两端同句) */
     backfillNote: (row.backfill_service_date && row.backfill_service_date !== startLocal.date)
       ? `服务发生于 ${mdText(row.backfill_service_date)}` : '',
@@ -6797,7 +6790,7 @@ const scheduleBoard = createScheduleBoard({
   backfillPlanFor
 })
 const dashboardPulse = createDashboardPulse({ db, currentTenantId, tenantTimezone, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked: (tid) => financeLockEnabled(tid), todayBoardOf: (tid, date) => scheduleBoard.dayCounts(tid, date), storeClosedOn: (tid, date) => { try { return isClosedDay(defaultStoreId(), date) } catch { return false } }, storeClockText: (tid) => localParts(new Date(), tenantTimezone(tid)).time, aiRetouchCard: (tid) => aiRetouchGate.card(tid) })   /* 主页大屏三接口(图 v3.1 §四);口径两问答案在模块抬头;「此刻」与台面同一条规则 */
-const bookingSubscriptions=createBookingSubscriptions({db,apiError,json,readBody,requireCustomer,resolveTenant,localParts,tenantTimezone,...subscriptionScope(),send:createSubscribeSender({appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET,miniprogramState:process.env.WECHAT_SUBSCRIBE_STATE||'formal'})}); const merchantMessages = createMerchantMessages({db,apiError,json,localParts,tenantTimezone}); const notifyScheduler = createNotifyScheduler({
+const bookingSubscriptions=createBookingSubscriptions({db,apiError,json,readBody,requireCustomer,resolveTenant,localParts,tenantTimezone,...subscriptionScope(),send:createSubscribeSender({appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET,miniprogramState:process.env.WECHAT_SUBSCRIBE_STATE||'formal'})}); const bookingAcceptance=createBookingAcceptance({db,apiError,json,localParts,tenantTimezone,onConfirmed:(tid,b,at)=>bookingSubscriptions.confirmed(tid,b,at)}); bookingAcceptance.ensureSchema(); const merchantMessages = createMerchantMessages({db,apiError,json,localParts,tenantTimezone}); const notifyScheduler = createNotifyScheduler({
   db, randomId, iso, apiError, json, readBody, parseJson: parseJson2, localParts, tenantTimezone,
   DEFAULT_TENANT_ID, dataScope: DATA_SCOPE
 })
@@ -11347,6 +11340,7 @@ async function route(req, res) {
   /* D90(店主 08-31 裁,推翻 v1.1③ 的财务门半边):账调四 tab(充值/赠送/退卡/冲销)门禁一致 ——
      **仅老板,不挂财务钥匙门**(与充值同权;财务页整体门禁不变)。
      案底:门只拦了读流水那半,充值 tab 却直通 —— 两半不一致,还把门禁态装成空态(O-fin1)。 */
+  if(await bookingAcceptance.route(req,res,{path,tid:currentTenantId(),admin:adminSession}))return;
   if(await storeGuideApi.route(req,res,{path,query,admin:adminSession,tid:currentTenantId(),json,readBody}))return; if (req.method === 'GET' && path === '/admin/store/mini-code') {
     if (adminSession.role !== 'owner') throw apiError(403,'FORBIDDEN','仅店主可获取门店码。')
     return json(res,200,storeCodeInfo(db,currentTenantId(),miniCodeScope(DATA_SCOPE_NAME),apiError))

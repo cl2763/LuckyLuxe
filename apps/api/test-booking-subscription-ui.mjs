@@ -10,3 +10,15 @@ page.subscribeBooking();await prompt.success({one:'reject',two:'ban',errMsg:'ok'
 await page.loadSubscription('b');page.subscribeBooking();tenant='other';await prompt.success({one:'accept',two:'accept'});assert.equal(posted,1);assert.equal(page._subscribing,false)
 tenant='a';await page.loadSubscription('b');box.wx.requestSubscribeMessage=()=>{throw Error('unsupported')};page.subscribeBooking();assert.equal(page._subscribing,false);assert.match(page.data.subscriptionFeedback,/不受影响/)
 console.log('ok 1 - consent tap-only, refusal safe, tenant switch guard and unsupported API recovery')
+// Login guidance presents a choice; native authorization remains an explicit tap.
+api.subscriptionOnboarding=api.subscriptionConfig
+const loginBox={module:{exports:{}},require:()=>box.module.exports}
+vm.runInNewContext(readFileSync(new URL('../../miniprogram/utils/login-subscription.js',import.meta.url),'utf8'),loginBox)
+const login={...loginBox.module.exports,data:{},setData(x){Object.assign(this.data,x)}}
+prompt=undefined
+box.wx.requestSubscribeMessage=o=>{prompt=o}
+await login.offerSubscription();assert.equal(login.data.subscriptionWelcome,true);assert.equal(prompt,undefined)
+login.closeSubscriptionWelcome();assert.equal(login.data.subscriptionWelcome,false)
+await login.offerSubscription();login.subscribeBooking();assert.ok(prompt)
+login.onHide();await prompt.success({one:'accept',two:'accept'});assert.equal(posted,1,'leaving page must not save stale consent')
+console.log('ok 2 - login guidance is skippable, tap-only and ignores stale callbacks after leaving')

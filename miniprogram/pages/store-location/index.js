@@ -12,6 +12,8 @@ Page({
     t: i18n.pageCopy('store', 'zh')
   },
 
+  onShareAppMessage() { return require('../../utils/public-share').share('store-location', (this.data.store.storeName || '门店') + (this.data.lang === 'en' ? ' · Getting here' : ' · 到店指引')) },
+  onShareTimeline() { const s=this.onShareAppMessage(); return {title:s.title,query:s.query} },
   onShow() {
     this.load()
   },
@@ -38,6 +40,7 @@ Page({
     })
   },
 
+  guideImageFailed() { wx.showToast({title:'指引图片加载失败，请刷新重试',icon:'none'}) },
   previewGuide(e) { require('../../utils/guide-preview')(e.currentTarget.dataset.src) },
   copyAddress() {
     if (!this.data.store.address) return

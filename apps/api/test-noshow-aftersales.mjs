@@ -3484,7 +3484,7 @@ const main = async () => {
             !/comingSoon/.test(custStrip) && !/renderPlaceholderWeb/.test(custStrip)
             && !/'settings'/.test(custStrip), custStrip.split('\n').filter((l) => /comingSoon|renderPlaceholderWeb|'settings'/.test(l)).join(' | ').slice(0, 160))
           check('㋨⑬ 门店卡说实话(它是真页面:店名/联系方式/营业时间)',
-            /地址 · 营业时间/.test(custD77) && /function renderStoreWeb/.test(custD77))
+            /全部时间 · 到店指引/.test(custD77) && /function renderStoreWeb/.test(custD77))
         }
 
         /* 🔴 ㋧ D76(店主 2026-08-25):**可见性与账本判据解耦**。
