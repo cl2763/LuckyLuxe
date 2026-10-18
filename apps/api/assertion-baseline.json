@@ -193,9 +193,9 @@
     "release18-behavior": 42,
     "membership-summary-ui": 12,
     "media-privacy-review": 128,
-    "public-share": 12,
+    "public-share": 13,
     "customer-messages": 6,
-    "booking-subscription-ui": 1,
+    "booking-subscription-ui": 2,
     "merchant-messages": 1,
     "wechat-subscribe": 2,
     "booking-subscriptions": 2,
@@ -204,7 +204,8 @@
     "native-phone-login": 3,
     "store-guide": 3,
     "subscription-scope": 2,
-    "hero-upload": 1
+    "hero-upload": 1,
+    "booking-acceptance": 2
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
