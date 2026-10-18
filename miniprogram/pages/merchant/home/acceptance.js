@@ -1,4 +1,4 @@
-const api=require('./api')
+const api=require('../../../utils/api')
 module.exports={
   async loadAcceptances() {
     try { const r=await api.adminGet('/admin/booking-acceptances'); this.setData({pendingBookings:r.items||[],acceptanceError:''}) }

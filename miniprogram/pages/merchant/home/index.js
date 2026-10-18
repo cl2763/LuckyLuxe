@@ -12,7 +12,7 @@ const ROTATE_MS = 4000
 const HINT_KEY = 'll-dh-carousel-hint'   // 「自动轮播中」那句提示,每台设备只出一次
 
 Page({
-  ...require('../../../utils/merchant-acceptance'),
+  ...require('./acceptance'),
   data: {
     pendingBookings: [], acceptanceError: '', acceptingId: '',
     greeting: '嗨,老板 👋',
