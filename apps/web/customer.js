@@ -1492,7 +1492,7 @@ function renderMe() {
             const sub = live === 'points'
               ? (user.redeemablePrizeText || (state.lang === 'zh' ? '用积分换券' : 'Redeem with points'))
               : live === 'store'
-                ? (state.lang === 'zh' ? '地址 · 营业时间' : 'Address · hours')
+                ? (state.lang === 'zh' ? '全部时间 · 到店指引' : 'Hours · Getting here')
                 : (state.lang === 'zh' ? '次卡 · 优惠券 · 储值' : 'Passes · Coupons · Balance')
             // 其它格是实拍照(铺满),积分格现在放的是线条图标(要留白居中);
             // 将来换成奖品缩略图时把 icon-art 去掉即可,版面不动。
@@ -1744,7 +1744,7 @@ function renderOrderDetailWeb() {
     <section class="order-detail-web">
       <button class="ghost back-btn" data-view-target="orders" type="button">← ${t('orders')}</button>
       <div class="detail-card-web card">
-        <span class="status">${escapeHtml(orderStatusText(order))}</span>
+        <span class="status">${escapeHtml(orderStatusText(order))}</span>${order.merchantConfirmationText ? `<p>${escapeHtml(order.merchantConfirmationText)}</p>` : ''}
         <h1>${order.service.name}</h1>
         <p class="subtle">${t('orderNo')} ${order.publicCode}</p>
         ${window.ImgPlaceholder.tag(order.service.imageUrl, { alt: order.service.name, zh: state.lang !== 'en' })}

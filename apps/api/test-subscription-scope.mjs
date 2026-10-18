@@ -22,6 +22,7 @@ queue.ensureSchema()
 for(let i=0;i<55;i++){
  const uid=i===54?'u':'excluded',id='b'+i,at='2099-12-12T10:00:00Z'
  queueDb.prepare('INSERT INTO bookings VALUES(?,?,?,?,?,NULL,?,?)').run(id,'t',uid,'CONFIRMED',at,'s','st')
+ queueDb.prepare('INSERT INTO booking_acceptances VALUES(?,?,?,?)').run('t',id,'2018-01-01','owner')
  queueDb.prepare('INSERT INTO reminder_tasks VALUES(?,?,?,?,?,?,?,?)').run('task'+String(i).padStart(3,'0'),'t',uid,id,'arrival_reminder','SENT','2020-01-01T00:00:00Z','t|arrival_reminder|'+id+'|'+at)
  queueDb.prepare('INSERT INTO booking_subscription_grants VALUES(?,?,?,?,?,?,?,NULL)').run('g'+i,'r'+i,'t',uid,id,'arrival_reminder','2019-01-01')
 }

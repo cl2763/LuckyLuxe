@@ -21,6 +21,7 @@ m.consent('a','u',{requestId:c.requestId,results});m.consent('a','u',{requestId:
 assert.equal(db.prepare('SELECT COUNT(*) n FROM booking_subscription_grants').get().n,1)
 const rejected=m.config('a','u','b');m.consent('a','u',{requestId:rejected.requestId,results:{[SUBSCRIBE_TEMPLATES.arrival_reminder.id]:'reject'}})
 assert.equal(db.prepare('SELECT COUNT(*) n FROM booking_subscription_grants').get().n,1)
+db.exec("INSERT INTO booking_acceptances VALUES('a','b','2026-01-01','owner')")
 const put=db.prepare('INSERT INTO reminder_tasks VALUES(?,?,?,?,?,?,?,?)')
 put.run('old','a','u','b','arrival_reminder','SENT','2000-01-01T00:00:00Z','a|arrival_reminder|b|2026-12-12T10:00:00Z')
 await m.tick();assert.equal(sends,0)
@@ -37,6 +38,7 @@ await failed.tick();assert.equal(db.prepare('SELECT COUNT(*) n FROM booking_subs
 assert.equal(createBookingSubscriptions({...deps,enabled:false}).config('a','u','b').enabled,false)
 console.log('subscription grants/outbox: ownership, replay, refusal, no historic sends, concurrent tick, dedupe and uncertain delivery tests passed')
 
+db.exec("INSERT INTO booking_acceptances VALUES('a','b2','2026-01-01','owner')")
 // Confirmation is queued once only after a customer explicitly accepts its template.
 const confirm=m.config('a','v','b2');m.consent('a','v',{requestId:confirm.requestId,results:{[SUBSCRIBE_TEMPLATES.booking_status.id]:'accept'}})
 assert.equal(db.prepare('SELECT COUNT(*) n FROM booking_subscription_events').get().n,1)
@@ -47,5 +49,5 @@ await m.tick();assert.equal(sends,1,'superseded confirmation must not send')
 console.log('ok - confirmation opt-in dedupe and stale cancellation guards')
 
 db.prepare("UPDATE bookings SET status='PENDING_PAYMENT' WHERE id='b2'").run()
-assert.equal(m.config('a','v','b2').enabled,false,'unconfirmed booking must not advertise a confirmation subscription')
+assert.equal(m.config('a','v','b2').enabled,true,'pending booking may opt in before merchant acceptance')
 console.log('ok - pending bookings wait for confirmation before offering subscription')

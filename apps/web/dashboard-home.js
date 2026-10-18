@@ -16,7 +16,7 @@
    休息日**只替换**此刻四格与下一位卡,大数/小牌/要处理照出。
 
    ══ 不做(图 §八)══
-   图表页 / 导出 / 自定义指标 / 快捷格 / 多店汇总 / 首页轮询(全屏态归段 11,本批只占位)。
+   图表页 / 导出 / 自定义指标 / 快捷格 / 多店汇总 / 财务首页轮询(2026-10-17新增待接单提示单独刷新)。
    月目标那一行**不出** —— 门店还没有「月目标」这个配置项,编一个 62% 就是假数(回执已登记)。 */
 window.DashboardHome = (function () {
   const PERIODS = [
@@ -215,13 +215,16 @@ window.DashboardHome = (function () {
     </section>`
   }
 
+  function acceptanceCard() { return `<section class="card dh-card" data-booking-acceptances><h3>新预约待确认</h3><p>确认接单不代表顾客到店或已收款</p>
+      ${st.acceptanceError ? '<p>待确认预约加载失败，请刷新重试</p>' : (st.acceptances||[]).map(b=>`<div class="dh-row"><span>${esc(b.timeText)} · ${esc(b.customer)} · ${esc(b.service)}</span><button class="primary slim" data-accept-booking="${esc(b.id)}">${esc(b.action.label)}</button></div>`).join('') || '<p>暂无待确认预约</p>'}</section>` }
   function paint() {
     if (!st.host) return
     if (st.phase === 'loading') { st.host.innerHTML = skeleton(); return }
-    if (st.phase === 'failed') { st.host.innerHTML = failed(); bind(); return }
+    if (st.phase === 'failed') { st.host.innerHTML = failed()+acceptanceCard(); bind(); return }
     /* 今日一句在大屏下方,入口指向已有的 AI 日报生成动作。 */
     st.host.innerHTML = `${hero()}
       ${aiLine()}
+      ${acceptanceCard()}
       <div class="dh-bottom" data-dh-bottom>
         <section class="card dh-card dh-board" data-dh-board></section>
         ${todoBlock()}
@@ -285,6 +288,13 @@ window.DashboardHome = (function () {
   }
 
   function bind() {
+    st.host.querySelectorAll('[data-accept-booking]').forEach(el=>el.addEventListener('click',async()=>{
+      if(st.accepting)return
+      st.accepting=true; el.disabled=true
+      try { await st.deps.request('/admin/bookings/'+encodeURIComponent(el.dataset.acceptBooking)+'/accept',{method:'POST',body:JSON.stringify({})}); await load() }
+      catch(e) { el.disabled=false; el.textContent='确认失败，点击重试' }
+      finally { st.accepting=false }
+    }))
     st.host.querySelectorAll('[data-dh-period]').forEach((el) => {
       el.addEventListener('click', () => { st.period = el.dataset.dhPeriod; load() })
     })
@@ -318,6 +328,8 @@ window.DashboardHome = (function () {
   async function load() {
     st.phase = 'loading'
     paint()
+    const pending=await st.deps.request('/admin/booking-acceptances').catch(() => ({error:true}))
+    st.acceptances=pending.items||[]; st.acceptanceError=!!pending.error
     try {
       const [p, nw, td, al] = await Promise.all([
         st.deps.request(`/admin/dashboard/pulse?period=${encodeURIComponent(st.period)}`),
@@ -340,9 +352,20 @@ window.DashboardHome = (function () {
   }
 
   function mountInto(host, deps) {
+    const generation=st.mountGeneration=(st.mountGeneration||0)+1
     st.host = host
     st.deps = deps
     load()
+    clearInterval(st.acceptanceTimer)
+    st.acceptanceTimer=setInterval(async()=>{
+      if(!host.isConnected){clearInterval(st.acceptanceTimer);return}
+      if(st.accepting||st.phase!=='ready')return
+      try {
+        const r=await deps.request('/admin/booking-acceptances')
+        if(st.host!==host||st.mountGeneration!==generation)return
+        if(st.acceptanceError||JSON.stringify(r.items)!==JSON.stringify(st.acceptances)){st.acceptances=r.items||[];st.acceptanceError=false;paint()}
+      } catch(e) { if(st.host===host&&st.mountGeneration===generation&&!st.acceptanceError){st.acceptanceError=true;paint()} }
+    },30000)
   }
 
   return { mountInto, load, _state: () => st }

@@ -1,5 +1,5 @@
 (() => {
-  const views=['home','services','detail','portfolio']
+  const views=['home','services','detail','portfolio','store']
   function restore(state,toast) {
     const p=new URLSearchParams(location.search),v=p.get('publicView')
     if(!views.includes(v))return

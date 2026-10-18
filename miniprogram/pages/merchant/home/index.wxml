@@ -10,6 +10,15 @@
   <!-- ============ 老板视角 · 业绩大屏(图 v3.2 §一,段 9)============
        三条接口与网页端**同一份数据**;这一页零计算、零拼串,句子都由 utils/dashboard-view.js 出。 -->
   <block wx:if="{{isOwner}}">
+      <view class="dh-card" wx:if="{{pendingBookings.length || acceptanceError}}">
+        <view class="dh-h">新预约待确认 · {{pendingBookings.length}}</view>
+        <view class="dh-empty">确认接单不代表顾客到店或已收款</view>
+        <view wx:if="{{acceptanceError}}" bindtap="loadAcceptances">{{acceptanceError}}</view>
+        <view wx:for="{{pendingBookings}}" wx:key="id" class="dh-row">
+          <view class="dh-who">{{item.timeText}} · {{item.customer}} · {{item.service}}</view>
+          <button size="mini" data-id="{{item.id}}" bindtap="confirmBooking" disabled="{{!!acceptingId}}" loading="{{acceptingId === item.id}}">{{item.action.label}}</button>
+        </view>
+      </view>
     <!-- 加载中 / 取数失败 / 正常,三态互斥 -->
     <view wx:if="{{dhState==='loading'}}" class="dh-card" data-dh-state="loading">
       <view class="dh-skel"></view><view class="dh-skel short"></view>

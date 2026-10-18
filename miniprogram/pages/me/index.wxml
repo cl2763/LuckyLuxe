@@ -259,4 +259,13 @@
       </view>
     </view>
   </view>
+  <view wx:if="{{subscriptionWelcome}}" class="auth-mask">
+    <view class="auth-panel subscription-welcome">
+      <view class="auth-title">{{lang === 'en' ? 'Signed in · WeChat reminders' : '登录完成 · 微信预约提醒'}}</view>
+      <view class="auth-desc">{{lang === 'en' ? 'Receive booking notifications outside this mini program. Each permission has a limited number of sends. Declining does not affect booking.' : '允许后，可在退出小程序后收到微信预约通知。每次授权的可用次数有限，拒绝不影响预约。'}}</view>
+      <button wx:if="{{subscription}}" class="finish-button" bindtap="subscribeBooking">{{lang === 'en' ? 'Choose WeChat reminders' : '选择接收微信提醒'}}</button>
+      <view class="auth-desc">{{subscriptionFeedback}}</view>
+      <button bindtap="closeSubscriptionWelcome">{{subscription ? (lang === 'en' ? 'Not now' : '暂不开启') : (lang === 'en' ? 'Done' : '完成')}}</button>
+    </view>
+  </view>
 </view>

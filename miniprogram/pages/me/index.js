@@ -6,6 +6,7 @@ const phoneAuth = require('../../utils/phone-auth')
 const tabbar = require('../../utils/tabbar')
 const DEFAULT_AVATAR = ''
 Page({
+  ...require('../../utils/login-subscription'),
   data: {
     member: {},
     cardPackBadge: null,   // null=还没拿到(黑卡格显示「—」);拿到才写数字,不猜数

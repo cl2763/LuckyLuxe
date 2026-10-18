@@ -5,6 +5,7 @@ async function finish(page) {
   page.setData({authModalVisible:false,phoneStep:false})
   wx.showToast({title:page.data.lang==='en'?'Signed in':'登录成功',icon:'success'})
   await page.onShow()
+  if(page.offerSubscription)await page.offerSubscription()
 }
 async function beginLogin(page) {
   if (page.data.phoneBusy) return

@@ -43,19 +43,12 @@ check('② 金额只走注入进来的 `money()` 出口,页面里零币符',
 check('②b 拿不到币种就出「—」,不出裸数字(D140 fail-closed)',
   /!cur\) return '—'/.test(home))
 
-/* ③ 图 §八 明确不做:首页**不轮询**(全屏态除外,那是段 11)
-
-   🔴 05t 段 3 修订判据(说明为什么改):图 §八 说「首页不轮询」,而图 §一 第 1 条同时要求
-   「**轮播换指标**时数字滚动 600ms」—— 轮播必须有计时器。两条不矛盾:
-   §八 禁的是**自动重取数据**,不是画面动。所以判据从「文件里不许出现 setInterval」
-   改成**按语义**守两条:①任何计时器回调里不许出现 `load(`/`request(`(那才是轮询)
-   ②代码里(去掉注释后)零 `setInterval` —— 轮播只许 `setTimeout` 一次一排,
-   挂一个 interval 上去等于给页面留一条永不停的线。 */
+/* 2026-10-17 店主新增需求：新预约待处理提示应刷新；财务大屏仍不轮询。
+   仅允许待接单列表30秒刷新，离开页面释放计时器。 */
 const homeCode = home.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-check('③ 🔴 首页不许轮询接口:计时器回调里没有 load( / request(',
-  !/set(Interval|Timeout)\([^;]{0,200}?(load\(|request\()/.test(homeCode), '计时器里在重取数据')
-check('③b 轮播只许 setTimeout 一次一排,代码里零 setInterval',
-  !/setInterval/.test(homeCode), '出现了 setInterval')
+const timer=homeCode.slice(homeCode.indexOf('st.acceptanceTimer=setInterval'),homeCode.indexOf('},30000)')+9)
+check('③ 仅刷新待接单列表，不轮询财务大屏', timer.includes("deps.request('/admin/booking-acceptances')") && !/load\(|dashboard\//.test(timer))
+check('③b 离开页面释放待接单计时器', timer.includes('!host.isConnected') && timer.includes('clearInterval(st.acceptanceTimer)'))
 
 /* ④ 旧的那几块真的退役了(图 §三:营收只留大屏一处出口) */
 check('④ 🔴「本月收入(账本)」那一格已从旧汇总行退役(两处各算各的正是这次要治的)',
@@ -87,8 +80,8 @@ check('⑥b 开关默认关,只有显式 true 才开(fail-closed)',
   && /catch \{ showMoney = false \}/.test(home))
 check('⑥c 轮播 6 秒 / 重取 60 秒 / 屏保 5 分钟(图 §五 三个数)',
   /ROTATE_MS = 6000/.test(fs) && /REFRESH_MS = 60000/.test(fs) && /SAVER_MS = 5 \* 60000/.test(fs))
-check('⑥d 🔴 轮询**只许在这块屏上**:首页代码零 setInterval,全屏态那一枚在',
-  !/setInterval/.test(homeCode) && /setInterval\(refresh, REFRESH_MS\)/.test(fs))
+check('⑥d 首页仅一枚待接单刷新计时器，全屏刷新保持独立',
+  (homeCode.match(/setInterval/g)||[]).length===1 && /setInterval\(refresh, REFRESH_MS\)/.test(fs))
 check('⑥e 三条退出路都在(Esc / 点任意处 / 退出全屏)',
   /e\.key === 'Escape'/.test(fs) && /addEventListener\('click', stop\)/.test(fs) && /exitFullscreen\(\)/.test(fs))
 check('⑥f 财务锁一律遮成 ••••(与首页同口径,不在大屏另判一次)', /if \(m\.locked\) return '••••'/.test(fs))

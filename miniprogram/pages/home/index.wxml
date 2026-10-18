@@ -62,7 +62,7 @@
         <view class="shop-card-row" bindtap="goStore">
           <text class="shop-row-icon">◷</text>
           <text class="shop-row-text">{{todayHoursText}}</text>
-          <text class="shop-row-act">{{lang === 'en' ? 'All hours ›' : '全部时间 ›'}}</text>
+          <text class="shop-row-act">{{lang === 'en' ? 'Hours · Getting here ›' : '全部时间 · 到店指引 ›'}}</text>
         </view>
         <view class="shop-card-row" wx:if="{{store.phone}}" bindtap="callStore">
           <text class="shop-row-icon">✆</text>

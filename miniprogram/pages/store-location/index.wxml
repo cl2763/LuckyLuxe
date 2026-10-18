@@ -16,6 +16,7 @@
       </view>
     </view>
     <view class="store-desc" wx:if="{{store.description}}">{{store.description}}</view>
+    <button class="btn btn-ghost" open-type="share">{{lang === 'en' ? 'Share directions' : '分享门店与到店指引'}}</button>
     <view class="action-grid">
       <button class="btn btn-ghost" bindtap="openLocation">{{t.nav}}</button>
       <button class="btn btn-ghost" wx:if="{{store.phone}}" bindtap="callStore">{{t.call}}</button>
@@ -27,7 +28,7 @@
     <view class="guide-title">{{lang === 'en' ? 'Getting here' : '到店指引'}}</view>
     <view wx:for="{{store.arrivalGuide}}" wx:key="index" class="arrival-step">
       <view class="arrival-heading"><text>{{index + 1}}</text>{{lang === 'en' ? 'Step' : '步骤'}} {{index + 1}}</view>
-      <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" data-src="{{item.image}}" bindtap="previewGuide" />
+      <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" binderror="guideImageFailed" data-src="{{item.image}}" bindtap="previewGuide" />
       <view wx:if="{{item.description}}">{{item.description}}</view>
     </view>
   </view>

@@ -405,7 +405,7 @@ else say "死判据住在跑不到的套件里" "⚠️ 提醒(不拦):$NONSUITE
 #    这一条**拦**(FAIL 置位):隐形文件会让后面所有扫描面结论都不作数,不是提醒级。
 UNTRACKED=$(cd "$(dirname "$0")/.." && git ls-files --others --exclude-standard -- 'tools/*.mjs' 'tools/*.sh' 'apps/api/*.mjs' 'apps/api/*.sh' 2>/dev/null | tr '\n' ' ')
 if [ -z "$UNTRACKED" ]; then say "新文件都已入册" "✅ tools/ 与 apps/api/ 下没有未 git add 的 .mjs/.sh"
-else say "有未入册的新文件" "🔴 $UNTRACKED—— 先 git add(没入册的文件对每一把护栏刀都是隐形的)"; FAIL=1; fi
+else say "有未入册的新文件" "🔴 ${UNTRACKED}—— 先 git add(没入册的文件对每一把护栏刀都是隐形的)"; FAIL=1; fi
 
 echo ""
 if [ "$FAIL" = "1" ]; then echo "❌ 预检红 —— **先修这些再起全量**(它们不用等 15 分钟就知道)"; exit 1; fi

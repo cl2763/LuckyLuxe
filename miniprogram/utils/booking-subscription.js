@@ -7,7 +7,7 @@ module.exports={
   const tenant=api.currentTenantId(),token=api.getAuth()?.accessToken
   this.setData({subscription:null,subscriptionFeedback:''})
   if(!api.isLoggedIn())return
-  try{const c=await api.subscriptionConfig(id);if(generation===this._subscriptionLoad&&current(this,tenant,token))this.setData({subscription:c})}
+  try{const c=await (id?api.subscriptionConfig(id):api.subscriptionOnboarding());if(generation===this._subscriptionLoad&&current(this,tenant,token))this.setData({subscription:c})}
   catch(e){if(current(this,tenant,token))this.setData({subscriptionFeedback:'提醒设置暂不可用，预约不受影响。'})}
  },
  subscribeBooking(){

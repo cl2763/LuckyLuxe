@@ -1160,3 +1160,5 @@
 .member-qr-close{background:var(--hero);color:var(--heroink);border-radius:999rpx;font-size:28rpx;font-weight:700}
 
 .privacy-policy-link{margin:14rpx 0;color:var(--brandd);font-size:24rpx;text-decoration:underline;text-align:center;padding:10rpx}
+
+.subscription-welcome { min-height:0; padding:40rpx 32rpx 64rpx; gap:24rpx; }
