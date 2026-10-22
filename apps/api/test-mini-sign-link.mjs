@@ -35,7 +35,7 @@ t=setup();await t.page.onLoad({})
 check('无单号不请求接口、显示原因',!t.calls.length&&!t.page.data.url&&t.toasts[0]?.title==='缺少服务单号')
 // 使用真正的 API 模块，验证长期会话只走请求头，未进入 URL 或请求体。
 const sessionToken=randomBytes(24).toString('hex');const requests=[],storage={lucky_tenant:'mini-sign-test',lucky_mini_auth:{accessToken:sessionToken,_tenant:'mini-sign-test'}}
-const context={module:{exports:{}},require:p=>p.includes('public-catalog-cache')?realRequire('../../miniprogram/utils/public-catalog-cache.js'):p.includes('devhost')?{port:4349,lanHost:'127.0.0.1'}:p.includes('deploy')?{defaultTenantId:''}:{realValue:x=>x},wx:{getDeviceInfo:()=>({platform:'devtools'}),getStorageSync:k=>storage[k],request:o=>{requests.push(o);o.success({statusCode:200,data:{url:'https://app.example.test/sign?t=short'}})}}}
+const context={module:{exports:{}},require:p=>p==='./inflight'?realRequire('../../miniprogram/utils/inflight.js'):p.includes('public-catalog-cache')?realRequire('../../miniprogram/utils/public-catalog-cache.js'):p.includes('devhost')?{port:4349,lanHost:'127.0.0.1'}:p.includes('deploy')?{defaultTenantId:''}:{realValue:x=>x},wx:{getDeviceInfo:()=>({platform:'devtools'}),getStorageSync:k=>storage[k],request:o=>{requests.push(o);o.success({statusCode:200,data:{url:'https://app.example.test/sign?t=short'}})}}}
 vm.runInNewContext(readFileSync(new URL('../../miniprogram/utils/api.js',import.meta.url),'utf8'),context)
 await context.module.exports.getSignLink('A/01');const request=requests[0]
 check('API 请求用会话头和门店头，不泄露长期令牌到地址',request.method==='POST'&&request.url.endsWith('/my/settlements/A%2F01/sign-link')&&request.header.authorization===`Bearer ${sessionToken}`&&request.header['x-tenant-id']==='mini-sign-test'&&!JSON.stringify([request.url,request.data]).includes(sessionToken))

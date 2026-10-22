@@ -1,6 +1,7 @@
 const api=require('../../../utils/api')
 module.exports={
-  async loadAcceptances() {
+  openPendingBooking(e) { const id=e.currentTarget.dataset.id; if(id)require('../../../utils/nav').to('/pages/merchant/orders/index?bookingId='+encodeURIComponent(id)) },
+ async loadAcceptances() {
     try { const r=await api.adminGet('/admin/booking-acceptances'); this.setData({pendingBookings:r.items||[],acceptanceError:''}) }
     catch(e) { this.setData({acceptanceError:'待确认预约加载失败，请重试'}) }
   },

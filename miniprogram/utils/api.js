@@ -173,7 +173,11 @@ function publicRead(path) {
   const tid = currentTenant()
   return publicCatalogCache.read(API_BASE + '|' + tid + '|' + path, () => { if (tid !== currentTenant()) throw contextChanged(); return request(path) })
 }
+const inflight = require('./inflight')
 function request(path, method = 'GET', data, _retried) {
+  return inflight.run(JSON.stringify(['c',currentTenant(),getAuth()?.accessToken,path,data,_retried]),method==='GET',()=>customerRequest(path,method,data,_retried))
+}
+function customerRequest(path, method, data, _retried) {
   return new Promise((resolve, reject) => {
     const tid = currentTenant()
     if (!tid && !TENANT_FREE_PATHS.some((p) => path.indexOf(p) === 0)) {
@@ -224,6 +228,9 @@ function request(path, method = 'GET', data, _retried) {
 }
 
 function adminRequest(path, method = 'GET', data) {
+  return inflight.run(JSON.stringify(['a',getAdminAuth()?.accessToken,wx.getStorageSync('lucky_finance_key'),path,data]),method==='GET',()=>merchantRequest(path,method,data))
+}
+function merchantRequest(path, method, data) {
   return new Promise((resolve, reject) => {
     const auth = getAdminAuth()
     const header = { 'content-type': 'application/json' }
@@ -253,8 +260,7 @@ function adminRequest(path, method = 'GET', data) {
   })
 }
 
-/* R5:门店定金额(元)。读 /stores 缓存下来的配置;没有就回 0,
-   宁可不显示,也不拿旗舰店的 50 冒充本店配置。 */
+/* Store deposit is tenant scoped; never substitute another shop. */
 // Historical rationale: handoff/messages-20261012/api历史开发说明.md #6
 function storeDepositAmount() {
   try {
@@ -842,10 +848,8 @@ async function refreshMember() {
   try {
     const data = await request(`/users/${uid}`)
     const fresh = miniMember(data.user)
-    const prev = wx.getStorageSync('lucky_member') || {}
     // D40(换店残留第 3 案):昵称/头像/资料完善度这类「档案身份字段」只在**同一家店**内保留;
     // 跨店快照一律以当前店档案为准 —— 快照带租户戳(_tenant)界定归属
-    const sameStore = prev._tenant === currentTenant()
     wx.setStorageSync('lucky_member', Object.assign({}, fresh, {
       _tenant: currentTenant(),
       nickname: fresh.nickname,

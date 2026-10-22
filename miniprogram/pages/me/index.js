@@ -87,7 +87,7 @@ Page({
   },
   debugAuth(label) { console.log(`[LuckyLuxe][auth] ${label}`) },
   async onShow() {
-    try { await api.refreshPhoneRequirement() } catch (_) { /* Keep the last confirmed state; business APIs enforce binding. */ }
+    api.refreshPhoneRequirement().catch(() => {}) // Independent check; business APIs still enforce binding.
     /* D33 单源:资产区余额实时后端,不吃 lucky_member 缓存 */
     if (api.isLoggedIn && api.isLoggedIn()) {
       api.myBalance().then((b) => this.setData({ liveBalance: b.yuan })).catch(() => {})

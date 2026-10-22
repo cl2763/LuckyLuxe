@@ -6,11 +6,7 @@ const api = require('../../utils/api')
 
 Page({
   behaviors: [require('../../utils/media-privacy')],
-  ...require('../../utils/booking-subscription'),
-  onHide(){this._subscriptionHidden=true},
-  onUnload(){this._subscriptionHidden=true},
   onShow() {
-    if(this._orderId)this.loadSubscription(this._orderId)
     ensureCurrencyCached()
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
     // 返回本页时重新读取状态机动作：签署后旧列表缓存仍是「待签」，会吞掉售后入口。

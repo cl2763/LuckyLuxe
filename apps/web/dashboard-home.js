@@ -216,7 +216,7 @@ window.DashboardHome = (function () {
   }
 
   function acceptanceCard() { return `<section class="card dh-card" data-booking-acceptances><h3>新预约待确认</h3><p>确认接单不代表顾客到店或已收款</p>
-      ${st.acceptanceError ? '<p>待确认预约加载失败，请刷新重试</p>' : (st.acceptances||[]).map(b=>`<div class="dh-row"><span>${esc(b.timeText)} · ${esc(b.customer)} · ${esc(b.service)}</span><button class="primary slim" data-accept-booking="${esc(b.id)}">${esc(b.action.label)}</button></div>`).join('') || '<p>暂无待确认预约</p>'}</section>` }
+      ${st.acceptanceError ? '<p>待确认预约加载失败，请刷新重试</p>' : (st.acceptances||[]).map(b=>`<div class="dh-row"><button type="button" class="ghost slim" data-pending-detail="${esc(b.id)}">${esc(b.timeText)} · ${esc(b.customer)} · ${esc(b.service)} · 查看详情 ›</button><button class="primary slim" data-accept-booking="${esc(b.id)}">${esc(b.action.label)}</button></div>`).join('') || '<p>暂无待确认预约</p>'}</section>` }
   function paint() {
     if (!st.host) return
     if (st.phase === 'loading') { st.host.innerHTML = skeleton(); return }
@@ -288,6 +288,7 @@ window.DashboardHome = (function () {
   }
 
   function bind() {
+    st.host.querySelectorAll('[data-pending-detail]').forEach(el=>el.addEventListener('click',()=>st.deps.openPendingBooking(el.dataset.pendingDetail)))
     st.host.querySelectorAll('[data-accept-booking]').forEach(el=>el.addEventListener('click',async()=>{
       if(st.accepting)return
       st.accepting=true; el.disabled=true

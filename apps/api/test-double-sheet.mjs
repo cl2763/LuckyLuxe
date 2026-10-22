@@ -345,7 +345,7 @@ async function checkMiniMappingLayer(asRow) {
   const { readFileSync: rfApi } = await import('node:fs')
   const apiSrc = rfApi(new URL('../../miniprogram/utils/api.js', import.meta.url), 'utf8')
   const FALLBACK_ALLOW = {
-    request: '底座本身:catch 里做的是 401 重登与错误归一,不产出业务数据',
+    customerRequest: '底座本身(原 request，现由并发合并包装调用):catch 里做的是 401 重登与错误归一,不产出业务数据',
     refreshMember: '未登录/取不到 auth 时 return null,调用方按"没登录"处理;不编造会员信息',
     refreshMerchantAi: '失败时回**上一次缓存过的**开通状态(不是编一个),只影响 AI 入口显不显示'
   }

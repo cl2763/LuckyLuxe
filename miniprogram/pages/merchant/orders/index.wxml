@@ -1,4 +1,13 @@
 <view class="page {{themeClass}}">
+  <view wx:if="{{focusedBooking}}" class="card">
+    <view class="oname">预约详情 · {{focusedBooking.customer}}</view>
+    <view>服务项目：{{focusedBooking.serviceName}}</view>
+    <view>预约时间：{{focusedBooking.date}} {{focusedBooking.time}}</view>
+    <view>服务技师：{{focusedBooking.tech || '未分配'}}</view>
+    <view>预约状态：{{focusedBooking.statusLabel}}</view>
+    <view>备注：{{focusedBooking.notes}}</view>
+  </view>
+
   <view class="seg">
     <view class="seg-i {{mode==='today'?'on':''}}" hover-class="tap-feedback" data-m="today" bindtap="switchMode">今日台面</view>
     <view class="seg-i {{mode==='all'?'on':''}}" hover-class="tap-feedback" data-m="all" bindtap="switchMode">全部订单</view>

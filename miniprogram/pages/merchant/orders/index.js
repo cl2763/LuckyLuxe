@@ -124,7 +124,7 @@ Page(Object.assign({
   switchMode(e) {
     this._messageBookingId=null
     const m = e.currentTarget.dataset.m
-    this.setData({ mode: m })
+    this.setData({ mode: m, focusedBooking: null })
     if (m === 'today') this.loadDayView(this.data.selDate || todayStr())
     else this.loadList()
   },
@@ -135,6 +135,8 @@ Page(Object.assign({
       const r = await api.adminGet('/admin/bookings')
       const raw = r.bookings || []
       this.setData({ raw })
+      const focused=raw.find(b=>b.id===this._messageBookingId)
+      this.setData({focusedBooking:focused ? {...vm(focused),notes:focused.notes||'无'} : null})
       this.buildAll(raw)
       // 合同⑤:「售后」列表改按售后字段筛(主状态已不再是 AFTER_SALES,原判据会筛出空列表)
       this.setData({ aftersalesList: raw.filter((b) => Boolean(b.afterSalesStatus)).map(vm).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)) })

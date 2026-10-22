@@ -15,7 +15,7 @@
         <view class="dh-empty">确认接单不代表顾客到店或已收款</view>
         <view wx:if="{{acceptanceError}}" bindtap="loadAcceptances">{{acceptanceError}}</view>
         <view wx:for="{{pendingBookings}}" wx:key="id" class="dh-row">
-          <view class="dh-who">{{item.timeText}} · {{item.customer}} · {{item.service}}</view>
+          <view class="dh-who" data-id="{{item.id}}" bindtap="openPendingBooking" hover-class="tap-feedback">{{item.timeText}} · {{item.customer}} · {{item.service}}<view>查看预约详情 ›</view></view>
           <button size="mini" data-id="{{item.id}}" bindtap="confirmBooking" disabled="{{!!acceptingId}}" loading="{{acceptingId === item.id}}">{{item.action.label}}</button>
         </view>
       </view>

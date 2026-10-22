@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261017-guide-booking'
+const ADMIN_BUILD = '20261022-booking-detail'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -286,11 +286,9 @@ const SUB_STATUS = {
 function cents(value) {
   return Number(value / 100).toFixed(0)
 }
-
 function dollarsToCents(value) {
   return Math.round(Number(value || 0) * 100)
 }
-
 const escapeHtml = window.UIDialog.escapeHtml
 
 function technicianColor(id = '') {
@@ -571,14 +569,7 @@ async function loadAll() {
   owner.role = meData.admin?.role || owner.auth?.admin?.role || 'owner'; owner.hoursUnset = Boolean(meData.hoursUnset); owner.hoursGateText = meData.hoursGateText   // D84 旗标(图 v1.0)
   owner.storeName = meData.admin?.storeName || ''   // D156:顶栏那行的唯一来源,取不到就空着让它出「—」
   renderBrandSubtitle()
-  const [serviceData, customerData] = isOwnerRole()
-    ? await Promise.all([request('/admin/services'), request('/admin/customers')])
-    : [{ services: [] }, { customers: [] }]
-  owner.bookings = bookingData.bookings
-  owner.services = serviceData.services
-  owner.technicians = techData.technicians
-  owner.customers = customerData.customers
-  const [wechatStatus, wechatConversations, quoteRequests, reminderTasks, businessHours, tenantPlan, tenantKb, scheduleWeek, scheduleRequests, compEstimate, staffAccounts] = await Promise.allSettled([
+  const relatedData = Promise.allSettled([
     request('/admin/wechat/status'),
     request('/admin/wechat/conversations'),
     request('/admin/quote-requests'),
@@ -591,6 +582,14 @@ async function loadAll() {
     isOwnerRole() ? Promise.resolve({ estimate: null }) : request('/admin/salary/my-estimate'),
     isOwnerRole() ? request('/admin/staff-accounts') : Promise.resolve({ accounts: [] })
   ])
+  const [serviceData, customerData] = isOwnerRole()
+    ? await Promise.all([request('/admin/services'), request('/admin/customers')])
+    : [{ services: [] }, { customers: [] }]
+  owner.bookings = bookingData.bookings
+  owner.services = serviceData.services
+  owner.technicians = techData.technicians
+  owner.customers = customerData.customers
+  const [wechatStatus, wechatConversations, quoteRequests, reminderTasks, businessHours, tenantPlan, tenantKb, scheduleWeek, scheduleRequests, compEstimate, staffAccounts] = await relatedData
   owner.wechatStatus = wechatStatus.status === 'fulfilled' ? wechatStatus.value.wechat : null
   owner.wechatConversations = wechatConversations.status === 'fulfilled' ? wechatConversations.value.conversations : []
   owner.quoteRequests = quoteRequests.status === 'fulfilled' ? quoteRequests.value.quoteRequests : []
@@ -1016,6 +1015,7 @@ function renderDashboard() {
     escapeHtml,
     money, moneyParts,           // 币种红线:金额只走全仓那一个出口,页面里不许出现币符(moneyParts 拆段带千分位)
     /* 今日台面**原样嵌入**(自画=两处真相);AI 一句只读已生成的,首页不新起模型调用(日报没落库,故恒空→「今天还没有一句」,已登记待裁) */
+    openPendingBooking: async (id) => { try { owner.bookings = (await request('/admin/bookings')).bookings || []; if(!owner.bookings.some(b=>b.id===id)) { toast('预约已不可用，请刷新'); return } owner.bookingSearch=''; jumpToBooking(id) } catch { toast('预约详情加载失败，请重试') } },
     boardDeps: () => ({ request, escapeHtml, toast, storeToday, openBooking: (id) => jumpToBooking(id),
       refreshBookings: async () => { try { const d = await request('/admin/bookings'); owner.bookings = d.bookings || owner.bookings } catch { /* 列表口失败不拦排单 */ } },
       followBooking: (id) => jumpToBooking(id) }),
