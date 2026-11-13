@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 import {mkdtempSync,rmSync,openSync,closeSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
@@ -6,7 +7,7 @@ import {DatabaseSync} from 'node:sqlite'
 import {loginStaffViaFrontDoor,loginCustomerViaFrontDoor} from './customer-login-fixture.mjs'
 const dir=mkdtempSync(join(tmpdir(),'ll-ci-data.manual-draft-')),base='http://127.0.0.1:4338',owner='manual-test-owner',log=openSync(join(dir,'server.log'),'w')
 const demoMode=process.env.DEMO_GATE_MODE||'true'
-const child=spawn(process.execPath,['local-server.mjs'],{cwd:new URL('.',import.meta.url).pathname,env:{...process.env,DATA_DIR:dir,PORT:'4338',HOST:'127.0.0.1',OWNER_TOKEN:owner,WECHAT_MINI_TOKEN_SECRET:'manual-test-secret',NOTIFY_TICK:'off',ALLOW_DEMO_ADMIN_LOGIN:demoMode},stdio:['ignore',log,log]})
+const child=spawn(process.execPath,['local-server.mjs'],{cwd:localFilePath(new URL('.',import.meta.url)),env:{...process.env,DATA_DIR:dir,PORT:'4338',HOST:'127.0.0.1',OWNER_TOKEN:owner,WECHAT_MINI_TOKEN_SECRET:'manual-test-secret',NOTIFY_TICK:'off',ALLOW_DEMO_ADMIN_LOGIN:demoMode},stdio:['ignore',log,log]})
 let db,n=0
 function check(label,ok){console.log(`${ok?'ok':'not ok'} ${++n} - ${label}`);if(!ok)throw Error(label)}
 async function req(path,{token=owner,tid='manual-free',body,method=body?'POST':'GET'}={}){const r=await fetch(base+path,{method,headers:{'content-type':'application/json','x-tenant-id':tid,'x-admin-tenant-id':tid,...(token?{authorization:'Bearer '+token}:{})},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()}}

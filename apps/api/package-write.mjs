@@ -1,5 +1,5 @@
 import {normalizeGiftItems,readGiftItems} from './gifts.mjs'
-export function createPackageWrite({db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage}) {
+export function createPackageWrite({db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage,memberPricing}) {
   const number=(v,label,min=0)=>{if(!Number.isSafeInteger(v)||v<min||v>100000000)throw apiError(400,'BAD_REQUEST',`${label}须为有效整数，不能为负数或超出上限。`);return v}
   return async(req,res,{path,adminSession})=>{
     if(!(req.method==='POST'&&path==='/admin/packages')&&!(req.method==='PATCH'&&/^\/admin\/packages\/[^/]+$/.test(path)))return false
@@ -19,8 +19,14 @@ export function createPackageWrite({db,apiError,readBody,json,currentTenantId,ra
     const valid=get('validDays','valid_days',null);if(valid!==null&&valid!==''&&valid!==0)number(valid,'有效期',1)
     const active=get('isActive','is_active',true)?1:0,mall=get('mallVisible','mall_visible',true)?1:0
     const values=[kind,name,price,bonus,times,String(get('scope','scope','')).slice(0,200)||null,String(get('benefits','benefits','')).slice(0,400)||null,active,number(get('sortOrder','sort_order',0),'排序'),valid||null,group||null,mall,JSON.stringify(kind==='recharge'?giftItems:[])]
+    db.exec('SAVEPOINT package_with_discount')
+    try {
     if(editing)db.prepare('UPDATE membership_packages SET kind=?,name=?,price_cents=?,bonus_cents=?,times_count=?,scope=?,benefits=?,is_active=?,sort_order=?,valid_days=?,project_group=?,mall_visible=?,gift_items_json=? WHERE id=? AND tenant_id=?').run(...values,id,tid)
     else db.prepare('INSERT INTO membership_packages(kind,name,price_cents,bonus_cents,times_count,scope,benefits,is_active,sort_order,valid_days,project_group,mall_visible,gift_items_json,id,tenant_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(...values,id,tid,new Date().toISOString())
-    json(res,editing?200:201,{package:serializeMembershipPackage(db.prepare('SELECT * FROM membership_packages WHERE id=? AND tenant_id=?').get(id,tid))});return true
+    if(b.defaultPersonalDiscount!==undefined)memberPricing.setPackageDiscount(tid,id,b.defaultPersonalDiscount)
+    const result=serializeMembershipPackage(db.prepare('SELECT * FROM membership_packages WHERE id=? AND tenant_id=?').get(id,tid))
+    db.exec('RELEASE package_with_discount')
+    json(res,editing?200:201,{package:result});return true
+    }catch(e){db.exec('ROLLBACK TO package_with_discount; RELEASE package_with_discount');throw e}
   }
 }

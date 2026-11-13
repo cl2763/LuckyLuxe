@@ -1,6 +1,7 @@
 // 网页短时链接只授权当前单；长期小程序会话不可放进 URL。
-export function createSettlementAccess({db,apiError,requireCustomer,demoAllowed}) {
+export function createSettlementAccess({db,apiError,requireCustomer,demoAllowed,guardRow=()=>{}}) {
   function tokenRow(token, row) {
+    guardRow(row)
     const tk=db.prepare('SELECT * FROM settlement_sign_tokens WHERE token=?').get(String(token||''))
     if(!tk)throw apiError(401,'SIGN_AUTH_REQUIRED','请使用商家提供的签署链接，或从自己的小程序订单进入。')
     if(tk.status!=='active')throw apiError(410,'SIGN_TOKEN_SUPERSEDED','链接已被替换，请向商家获取最新签署链接。')
@@ -10,6 +11,7 @@ export function createSettlementAccess({db,apiError,requireCustomer,demoAllowed}
     return tk
   }
   function authorize(req,row,{signing=false,body={}}={}) {
+    guardRow(row)
     const token=req.headers['x-settlement-token']
     if(token){
       tokenRow(token,row)

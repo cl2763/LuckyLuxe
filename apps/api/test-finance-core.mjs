@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 // 财务记账底座回归(阶段3A):
 // 1. 手工记一笔(收入/支出)、汇总数学正确、红字冲销
 // 2. 订单完成自动入账(幂等)、取消自动冲销、净额归零
@@ -111,7 +112,7 @@ async function main() {
 
     // 5. 防篡改:数据库层拒绝 UPDATE/DELETE;哈希链校验完整
     const { DatabaseSync } = await import('node:sqlite')
-    const dbPath = process.env.TEST_DB_PATH || new URL('./local-data/lucky-luxe.sqlite', import.meta.url).pathname
+    const dbPath = process.env.TEST_DB_PATH || localFilePath(new URL('./local-data/lucky-luxe.sqlite', import.meta.url))
     const rawDb = new DatabaseSync(dbPath)
     let updateBlocked = false
     let deleteBlocked = false

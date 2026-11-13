@@ -145,7 +145,7 @@
     "onboarding-steps": 21,
     "plan-expiry": 36,
     "platform-expiry-ui": 10,
-    "onboarding-lamps": 429,
+    "onboarding-lamps": 435,
     "demo-kind-gate": 18,
     "phone2-gate": 9,
     "prod-ro-gate": 34,
@@ -195,7 +195,7 @@
     "media-privacy-review": 128,
     "public-share": 13,
     "customer-messages": 6,
-    "booking-subscription-ui": 2,
+    "booking-subscription-ui": 4,
     "merchant-messages": 1,
     "wechat-subscribe": 2,
     "booking-subscriptions": 2,
@@ -205,7 +205,10 @@
     "store-guide": 3,
     "subscription-scope": 2,
     "hero-upload": 1,
-    "booking-acceptance": 2
+    "booking-acceptance": 2,
+    "member-pricing-policy": 4,
+    "member-pricing-transactions": 1,
+    "member-pricing-http": 5
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

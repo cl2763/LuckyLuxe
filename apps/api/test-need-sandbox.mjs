@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 import {fileURLToPath} from 'node:url'
 export const SANDBOX_URL=process.env.TEST_SANDBOX_URL || 'http://127.0.0.1:4310'
 /* 依赖沙箱(4310)的套件共用前置(店主 02p 追问:别每把刀各打一个补丁)。
@@ -17,7 +18,7 @@ export const SANDBOX_DATA_DIR = process.env.SANDBOX_DATA_DIR || 'sandbox-data'
    锚在**本文件所在目录**上,cwd 是什么都不影响。 */
 export const SANDBOX_DB_PATH = (() => {
   if(process.env.TEST_SANDBOX_URL){if(!process.env.TEST_DB_PATH)throw Error('隔离目标必须给 TEST_DB_PATH');return process.env.TEST_DB_PATH}
-  const here = new URL('.', import.meta.url).pathname
+  const here = localFilePath(new URL('.', import.meta.url))
   const dir = SANDBOX_DATA_DIR.startsWith('/') ? SANDBOX_DATA_DIR : `${here}${SANDBOX_DATA_DIR}`
   return `${dir.replace(/\/+$/, '')}/lucky-luxe.sqlite`
 })()

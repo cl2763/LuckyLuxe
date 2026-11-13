@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 /* 环境变量清单 —— **从代码里量,不碰 Railway**(店主 09f)
  *
  * 分工写死(边界令②):**Code 量「代码要什么」,店主核「Railway 上有什么」,两边对。**
@@ -272,7 +273,7 @@ export async function fullInventory(root) {
 
 /* ══ probe(J-73:六种写法各一个靶子,两面)══ */
 if (process.argv[1] && process.argv[1].endsWith('env-inventory.mjs')) {
-  const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
+  const ROOT = localFilePath(new URL('..', import.meta.url)).replace(/\/$/, '')
   if (process.argv.includes('--probe')) {
     const { probe } = await import('./scanner-probe.mjs')
     const names = (t) => [...scanFile(String(t), 'x.mjs').names.keys()]

@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 /* 读写集分类器 —— **按判据读了什么给判据分类,不按它叫什么**
  *
  * 🔴 立此模块的案由(店主 07x §一 · **J-61 第三款**):
@@ -386,7 +387,7 @@ export function columnVerdict({ blockSrc, serverSrc, cutText, table }) {
 }
 
 if (process.argv[1] && process.argv[1].endsWith('readset.mjs') && process.argv.includes('--probe')) {
-  const serverSrc = serverSources(new URL('../apps/api/', import.meta.url).pathname)
+  const serverSrc = serverSources(localFilePath(new URL('../apps/api/', import.meta.url)))
   const cases = [
     { 名: '直接 SQL 读 settlements', 块: "one('SELECT status FROM settlements WHERE code = ?', c)", 该含: 'settlements', 该中: true },
     /* 🔴 J-55 更正(07x 现测):07w §一 我写的是「`auditDepositConservation()` **一个字都不碰

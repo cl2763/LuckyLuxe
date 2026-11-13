@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,7 +13,7 @@ const verify = (name, actual, expected) => { assert.equal(actual, expected, name
 const dir = mkdtempSync(join(tmpdir(), 'll-ci-data.demo-claim-'))
 const port = 47000 + Math.floor(Math.random() * 1000)
 const child = spawn(process.execPath, ['local-server.mjs'], {
-  cwd: new URL('.', import.meta.url).pathname,
+  cwd: localFilePath(new URL('.', import.meta.url)),
   env: { ...process.env, PORT:String(port), DATA_DIR:dir, OWNER_TOKEN:'demo-claim-test-token',
     WECHAT_MINI_TOKEN_SECRET:'demo-claim-test-secret', ALLOW_DEMO_ADMIN_LOGIN:'true', NOTIFY_TICK:'off' },
   stdio:'ignore'

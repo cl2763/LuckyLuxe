@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 // 员工端P0批回归:
 // 1. 管理端订单携带顾客标签/备注(customerCare)
 // 2. 排班申请:员工只能为自己发起;重复日期拒绝;老板审批 set-off 后当天变休息
@@ -159,7 +160,7 @@ async function main() {
   check('D91 畸形月份不炸:回落当月(正则闸)', badMonth.status === 200)
   const { readFileSync: rfs91 } = await import('node:fs')
   const { join: j91 } = await import('node:path')
-  const R91 = new URL('../..', import.meta.url).pathname
+  const R91 = localFilePath(new URL('../..', import.meta.url))
   const wbJs = rfs91(j91(R91, 'apps/web/staff-workbench.js'), 'utf8')
   check('D91 网页薪资卡:月切换取数走 ?month=(引号界定)', wbJs.includes('`/admin/salary/my-estimate${st.salMonth ? `?month=${st.salMonth}` : \'\'}`'))
   check('D91 网页薪资卡:前后箭头控件在(属性界定)', wbJs.includes('data-swb-mprev type="button"') && wbJs.includes('data-swb-mnext type="button"'))

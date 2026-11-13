@@ -1,3 +1,15 @@
+import {scopedCouponContext} from './member-pricing-coupons.mjs'
+import {createMemberPricingPresentation} from './member-pricing-presentation.mjs'
+import {ensureMemberDocumentSchema,createMemberServiceDocuments} from './member-service-documents.mjs'
+import {createMemberDocumentRoutes} from './member-document-routes.mjs'
+import {createMemberPricingPreview} from './member-pricing-preview.mjs'
+import {createMemberPricingTransactions} from './member-pricing-transactions.mjs'
+import {createStoredValueRechargeRoutes} from './stored-value-recharge-routes.mjs'
+import { createMemberPricingCalculation } from './member-pricing-calculation.mjs'
+import { createSettlementSigner } from './settlement-signing.mjs'
+import { createMembershipPackageSerializer } from './membership-package-serialize.mjs'
+import { PRICING_CONTEXT, ensureMemberPricingSchema, createMemberPricingPolicy } from './member-pricing-policy.mjs'
+import { createMemberPricingRoutes } from './member-pricing-routes.mjs'
 import {userBookingStats as readBookingStats} from './booking-read-model.mjs'
 import { mountWebHtml } from './web-mount.mjs'
 import { createPortfolioMedia } from './portfolio-media.mjs'
@@ -192,6 +204,8 @@ const db = new DatabaseSync(join(dataDir, 'lucky-luxe.sqlite'))
    没有这两行,两个进程同打一个库时输的那个直接 500 `database is locked` ——
    事务内那次可约复查压根轮不上说话,顾客拿不到人话 409。理由全文见 db-concurrency.mjs。 */
 const dbConcurrency = applyConcurrencyPragmas(db, { label: 'local-server' })
+ensureMemberDocumentSchema(db)
+ensureMemberPricingSchema(db)
 
 /* 订单状态机(D70):合法前置 / 能做什么动作 / 动作后去哪,全在 ./booking-state.mjs;
    路由只做「取参 → 调状态机 → 回结果」,不许在路由里写状态判断(店主 08-24 硬约束)。 */
@@ -1121,7 +1135,7 @@ function liveTenantFacts() {
       courseTimes: map.course ? (map.course.courseTimes || undefined) : undefined
     }
   }
-  const allItems = db.prepare("SELECT id, name_zh, name_en, price_cents, deposit_cents, base_duration_min, item_kind, category_id, unit, addon_scope_json, price_mode FROM services WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, rowid ASC").all(tid)
+  const allItems = db.prepare("SELECT id, name_zh, name_en, price_cents, deposit_cents, base_duration_min, item_kind, category_id, unit, addon_scope_json, price_mode FROM services WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, rowid ASC").all(tid).map(row=>memberPricingPresentation.serviceRow(row,tid))
   const services = allItems.filter((s) => (s.item_kind || 'main') !== 'addon')
   const addons = allItems.filter((s) => (s.item_kind || 'main') === 'addon')
   const priceList = services.length ? {
@@ -1160,9 +1174,9 @@ function liveTenantFacts() {
   // 计价规则摘要:用自然语言写进事实,AI 就不会把「足部加收」「本店免卸」答错
   const ruleState = getPricingRules(tid)
   const ruleTexts = []
-  if (ruleState.foot_surcharge.isActive) ruleTexts.push(`足部项目在最终金额上整单加收 ${priceOf(ruleState.foot_surcharge.config.amountCents)}(任何价格档都一样加)。`)
+  if (ruleState.foot_surcharge.isActive) ruleTexts.push(memberPricing.config(tid).active ? `足部项目原价加收 ${priceOf(ruleState.foot_surcharge.config.amountCents)}，结算时随收费服务一起应用会员本人的折扣。` : `足部项目在最终金额上整单加收 ${priceOf(ruleState.foot_surcharge.config.amountCents)}(任何价格档都一样加)。`)
   if (ruleState.single_finger.isActive) ruleTexts.push(`单指计费:按该单所用价格档的延长类主项目价的 ${ruleState.single_finger.config.pct || 10}% 每指计算。`)
-  if (ruleState.tip_reuse.isActive) ruleTexts.push(`甲片重利用固定收 ${priceOf(ruleState.tip_reuse.config.amountCents)},不分价格档。`)
+  if (ruleState.tip_reuse.isActive) ruleTexts.push(memberPricing.config(tid).active ? `甲片重利用原价 ${priceOf(ruleState.tip_reuse.config.amountCents)}，结算时随收费服务一起应用会员本人的折扣。` : `甲片重利用固定收 ${priceOf(ruleState.tip_reuse.config.amountCents)},不分价格档。`)
   const pricingRules = ruleTexts.length ? ruleTexts : null
   // 定金与取消规则:AI 必须按本店配置回答,不能再用旗舰店的口径(P1.2)
   const depositConfigForAi = getDepositConfig(tid)
@@ -5000,6 +5014,7 @@ function servicePayload(body, current = {}) {
 /* D49:详情页价格单源件 —— 可用价档明细(顺序固定 普通/分享/会员/疗程)。
    多档=「¥xxx 起」+档说明;单档才许「固定价/基础价」——「固定价」对多档项目是禁语(CI ㊴)。 */
 function availableTiersOf(serviceId, listCents) {
+  const display=memberPricingPresentation.tiers(serviceId);if(display)return display
   const NAMES = { list: ['普通', 'List'], share: ['分享', 'Share'], member: ['会员', 'Member'], course: ['疗程', 'Course'] }
   const rows = db.prepare('SELECT tier_key, price_cents FROM service_prices WHERE service_id = ? AND price_cents > 0').all(serviceId)
   const by = {}
@@ -5009,6 +5024,7 @@ function availableTiersOf(serviceId, listCents) {
 }
 
 function startingPriceCentsOf(serviceId, fallbackCents) {
+  const display=memberPricingPresentation.tiers(serviceId);if(display)return Math.min(...display.map(p=>p.cents))
   const rows = db.prepare('SELECT price_cents FROM service_prices WHERE service_id = ? AND price_cents > 0').all(serviceId)
   if (!rows.length) return fallbackCents || 0
   return Math.min(...rows.map((r) => r.price_cents))
@@ -5024,6 +5040,7 @@ function categoryNameOf(row) {
 }
 
 function serializeService(row, lang = 'zh') {
+  row=memberPricingPresentation.serviceRow(row)
   const type = String(row.type || '').toLowerCase()
   const serviceCurrency = tenantCurrencyCodeOrNull(row.tenant_id || currentTenantId())
   // 价格标签走币种映射表:CAD 仍是「CAD $198」逐字不变,CNY 变成「¥198」
@@ -5039,12 +5056,12 @@ function serializeService(row, lang = 'zh') {
   const isNail = type === 'nail'
   /* D49:价格说明按大类适配 —— 美甲=人工报价套话;美睫=固定报价套话;护理/其他=中性(不再拿美睫套话贴护理项)。 */
   const isLash = type === 'lash'
-  const priceExplanationZh = isNail
+  const priceExplanationZh = row.display_pricing ? '展示价格仅供参考，实际服务价格以本人服务确认单为准。会员优惠按本人有效折扣计算。' : isNail
     ? '显示价格为基础服务价。纯色、基础护理、基础法式等可按基础价执行；复杂手绘、延长、卸甲、特殊材料、3D 装饰、大面积钻饰或参考图差异较大的款式需要人工报价。'
     : (isLash
       ? '美睫款式为固定报价。页面价格已包含该款式标准嫁接服务；如有卸除、补睫、特殊敏感处理等附加需求，会在加项中明确显示，确认后即为最终报价。'
       : '按所选价格档位计价；如有附加项目会在结算前明确显示，确认后即为最终价格。')
-  const priceExplanationEn = isNail
+  const priceExplanationEn = row.display_pricing ? 'Displayed prices are references. Your service confirmation uses your eligible personal member discount.' : isNail
     ? 'Displayed price is the base service price. Solid color, basic care, and basic French designs can follow the base price. Complex hand painting, extensions, removal, special materials, 3D charms, heavy rhinestones, or designs that differ from the reference require manual quotation.'
     : (isLash
       ? 'Lash services use fixed pricing. The listed price includes the standard application for this style. Any removal, refill, or special sensitivity add-on will be shown clearly before checkout, and the confirmed total is the final quote.'
@@ -5060,6 +5077,7 @@ function serializeService(row, lang = 'zh') {
     : `${isNail ? 'Base price' : 'Fixed price'} ${serviceMoney(row.price_cents)}`
   return {
     id: row.id,
+    ...(row.display_pricing?{displayPricing:row.display_pricing,referenceOnly:true,priceSource:'display'}:{}),
     type,
     /* 🔴 分类唯一真相律(店主 2026-08-25 立):一个项目的分类**只有一处真相 = category_id → 大类字典**。
        `services.category` 这个自由文本列**退役为派生字段** —— 读的时候由 category_id join 出句,
@@ -5091,7 +5109,7 @@ function serializeService(row, lang = 'zh') {
     process: parseJson(row.process_json),
     notice: parseJson(row.notice_json),
     requiresManualQuote: isNail,
-    pricingType: isNail ? 'base_plus_quote' : 'fixed_final',
+    pricingType: row.display_pricing ? 'display_reference' : (isNail ? 'base_plus_quote' : 'fixed_final'),
     /* S1 顾客橱窗列表:「¥xxx 起」=最低可用价档(规则⑤)。独立字段——priceLabelZh/En 喂 AI 客服与详情页,
        动它=动已训练话术(红线),所以列表换源不改旧 label。 */
     priceFromLabelZh: `${serviceMoney(startingPriceCentsOf(row.id, row.price_cents))} 起`,
@@ -5100,8 +5118,8 @@ function serializeService(row, lang = 'zh') {
     priceLabelEn: `${isNail ? 'Base price' : 'Fixed price'} ${serviceMoney(row.price_cents)}`,
     priceDetailLabelZh,
     priceDetailLabelEn,
-    quoteHintZh: isNail ? '详细价格请联系客服获取报价' : '加项确认后即为最终报价',
-    quoteHintEn: isNail ? 'Contact us for detailed custom quote' : 'Add-ons confirmed before checkout are final',
+    quoteHintZh: row.display_pricing ? '实际价格以本人服务确认单为准' : isNail ? '详细价格请联系客服获取报价' : '加项确认后即为最终报价',
+    quoteHintEn: row.display_pricing ? 'Final prices appear on your service confirmation' : isNail ? 'Contact us for detailed custom quote' : 'Add-ons confirmed before checkout are final',
     priceExplanationZh,
     priceExplanationEn,
     sortOrder: row.sort_order,
@@ -5461,6 +5479,7 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     provider: user.google_id ? 'google' : user.wechat_open_id ? 'wechat' : 'email',
     profileComplete: !isGenericDisplayName(user.display_name, user.id),
     avatarUrl: user.avatar_url || '',   // 裁#94:没传过就是空 → 前端出占位(占位零回落律),**绝不拿别人的图顶**
+    ...(user.tenant_id===tenantId&&memberPricing.config(tenantId).active?{personalDiscount:memberPricing.discount(tenantId,user.id)}:{}),
     memberLevel: membership.memberLevel,
     memberTier: membership.memberTier,
     growthValue: membership.growthValue,
@@ -6746,9 +6765,15 @@ const businessHoursRoutes = createBusinessHoursRoutes({
   upcomingSpecialDates: (sid, d) => upcomingSpecialDates(sid, d),
   iso, hoursSavable, HOURS_GATE_TEXT
 })
+const memberPricing = createMemberPricingPolicy({db,apiError,isMemberOf,getMembershipConfig,balanceOf:(u,t)=>storedValueBalanceDetail(u,t).totalCents})
+const memberPricingPresentation=createMemberPricingPresentation({db,policy:memberPricing})
+const memberPricingCalculation = createMemberPricingCalculation({db,policy:memberPricing,apiError,balanceOf:(u,t)=>storedValueBalanceDetail(u,t).totalCents})
+const pricingTransactions=createMemberPricingTransactions({db,policy:memberPricing,apiError})
+const memberPricingPreview=createMemberPricingPreview({db,policy:memberPricing,calculation:memberPricingCalculation,computeSettlement,buildPaymentLegs,couponOptionsFor,apiError})
+const memberPricingRoutes = createMemberPricingRoutes({db,policy:memberPricing,preview:memberPricingPreview.preview,apiError,json,readBody,currentTenantId,isPlatformKey})
 const settlementRoutes = createSettlementRoutes({
   apiError, json, readBody, db, currentTenantId, tenantTimezone, localParts, formatMoneyCents, groupMainItemCount,
-  assertStaff: (a, row) => settlementAccess.assertStaff(a, row),
+  memberPricing, assertStaff: (a, row) => settlementAccess.assertStaff(a, row),
   computeSettlement: (a) => computeSettlement(a),
   createSettlementGroup: (a, b2) => createSettlementGroup(a, b2),
   serializeSettlement: (r) => serializeSettlement(r),
@@ -6766,10 +6791,10 @@ const storeContentRoutes = createStoreContentRoutes({
 const messageTemplatesApi = createMessageTemplates({ db, iso, randomId })
 const { MESSAGE_TEMPLATE_SCENES, MESSAGE_TEMPLATE_SCENE_LABELS, serializeMessageTemplate, ensureDefaultMessageTemplates } = messageTemplatesApi
 const svReversal = createStoredValueReversal({
-  db, apiError, insertStoredValueTransaction: (a) => insertStoredValueTransaction(a)
+  db, apiError, rechargePairFor:pricingTransactions.rechargePairFor, insertStoredValueTransaction: (a) => insertStoredValueTransaction(a)
 })
 const refundRoutes = createRefundRoutes({
-  apiError, json, readBody, refundApi, staffScope,
+  apiError, json, readBody, refundApi, staffScope, db, pricingTransactions,
   usableTimecardsOf: (uid) => usableTimecardsOf(uid), svReversal
 })
 const quoteState = createQuoteState({
@@ -6964,6 +6989,8 @@ function membershipSummaryRows(config, tenantId = currentTenantId(), lang = 'zh'
 // 单个项目的某档价格:缺档回落 list 档,再回落 services.price_cents(老数据零配置也能报价)
 function servicePriceCents(service, tierKey = 'list') {
   if (!service) return { priceCents: 0, courseTimes: null, tierUsed: tierKey, fallback: true }
+  const display=memberPricingPresentation.of(service.id)
+  if(display){const value=display[tierKey];if(!value)throw apiError(400,'DISPLAY_PRICE_UNAVAILABLE','没有启用这个展示价格类型。');return {...value,tierUsed:tierKey,fallback:false}}
   const pick = (tier) => db.prepare('SELECT * FROM service_prices WHERE service_id = ? AND tier_key = ?').get(service.id, tier)
   const row = pick(tierKey) || (tierKey === 'list' ? null : pick('list'))
   if (row) return { priceCents: row.price_cents || 0, courseTimes: row.course_times || null, tierUsed: row.tier_key, fallback: row.tier_key !== tierKey }
@@ -6971,6 +6998,7 @@ function servicePriceCents(service, tierKey = 'list') {
 }
 
 function servicePriceMap(serviceId) {
+  const display=memberPricingPresentation.of(serviceId);if(display)return display
   const out = {}
   for (const row of db.prepare('SELECT * FROM service_prices WHERE service_id = ?').all(serviceId)) {
     out[row.tier_key] = { priceCents: row.price_cents || 0, courseTimes: row.course_times || null }
@@ -7759,12 +7787,12 @@ function evaluateCouponGrant(grant, ctx) {
 }
 
 // 卡主券包里的全部券(可用在上、不可用在下并带原因),连同选中那张的抵扣额
-function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, categoryIds, selectedGrantId = '', excludeSettlementId = null, noEligibleReason = '' }) {
+function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, categoryIds, selectedGrantId = '', excludeSettlementId = null, noEligibleReason = '', readOnly = false, scopedLines = null }) {
   const out = { options: [], selectedGrantId: '', selected: null, discountCents: 0, usableCount: 0 }
   if (!userId) return out
   const now = iso(new Date())
   // 到期的券顺手落地成 expired,和 /my/coupons 同一套口径
-  db.prepare("UPDATE coupon_grants SET status = 'expired' WHERE user_id = ? AND tenant_id = ? AND status = 'active' AND expires_at IS NOT NULL AND expires_at < ?")
+  if(!readOnly) db.prepare("UPDATE coupon_grants SET status = 'expired' WHERE user_id = ? AND tenant_id = ? AND status = 'active' AND expires_at IS NOT NULL AND expires_at < ?")
     .run(userId, tenantId, now)
   const categoryNames = {}
   for (const c of db.prepare('SELECT id, name FROM service_categories WHERE tenant_id = ?').all(tenantId)) categoryNames[c.id] = c.name
@@ -7780,7 +7808,7 @@ function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, cat
   }
   const ctx = { tenantId, subtotalCents, maxDeductCents, categoryIds, categoryNames, now, noEligibleReason }
   const evaluated = rows.map((r) => {
-    const one = evaluateCouponGrant(r, ctx)
+    const one = evaluateCouponGrant(r, scopedLines?scopedCouponContext(couponScopeIds(r),ctx,scopedLines):ctx)
     if (one.usable && heldElsewhere[r.id]) {
       return { ...one, usable: false, discountCents: 0, discountText: '', reason: `不可用:已用在服务单 ${heldElsewhere[r.id]} 上(一单一张)` }
     }
@@ -7905,6 +7933,7 @@ function settlementCouponOptions(row) {
 function setSettlementCoupon(settlementId, grantId, { by = 'customer', actor = '' } = {}) {
   const row = db.prepare('SELECT * FROM settlements WHERE id = ?').get(settlementId)
   if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+  memberDocuments.guardComponent(row)
   if (row.status === 'signed') throw apiError(400, 'ALREADY_SIGNED', '这张单已经签署,券不能再改;要更正请走金额更正链。')
   const tenantId = row.tenant_id
   const wanted = String(grantId || '')
@@ -7997,12 +8026,14 @@ function setSettlementCoupon(settlementId, grantId, { by = 'customer', actor = '
 function computeSettlement(input = {}) {
   const tenantId = input.tenantId || currentTenantId()
   const tierKey = PRICE_TIERS.includes(input.tierKey) ? input.tierKey : 'list'
+  const pricingContext=input[PRICING_CONTEXT]
+  const priceOf=(svc,tier)=>pricingContext?memberPricingCalculation.priceOf(svc,tier,pricingContext):servicePriceCents(svc,tier)
   const rules = getPricingRules(tenantId)
   const getSvc = (id) => db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(id, tenantId)
 
   const rawItems = Array.isArray(input.items) ? input.items : []
   const mainRow = rawItems.map((it) => getSvc(it.serviceId)).find((svc) => svc && (svc.item_kind || 'main') === 'main')
-  const mainTierCents = mainRow ? servicePriceCents(mainRow, tierKey).priceCents : 0
+  const mainTierCents = mainRow ? priceOf(mainRow, tierKey).priceCents : 0
 
   const lines = []
   let no = 0
@@ -8014,14 +8045,14 @@ function computeSettlement(input = {}) {
     const count = unit === 'per_finger'
       ? Math.max(1, Math.round(Number(raw.fingers ?? raw.qty ?? 1) || 1))
       : Math.max(1, Math.round(Number(raw.qty ?? 1) || 1))
-    let tierUnit = servicePriceCents(svc, tierKey).priceCents
-    let listUnit = servicePriceCents(svc, 'list').priceCents
+    let tierUnit = priceOf(svc, tierKey).priceCents
+    let listUnit = priceOf(svc, 'list').priceCents
     let ruleApplied = null
     // 单指挂靠主项目按比例:两档都按各自档的主项目价算,否则原价合计会失真
     if (unit === 'per_finger' && svc.price_rule === 'pct_of_tier_price' && rules.single_finger.isActive) {
       const pct = Number(svc.price_rule_value) > 0 ? Number(svc.price_rule_value) : Number(rules.single_finger.config.pct || 10)
       tierUnit = Math.round(mainTierCents * pct / 100)
-      listUnit = Math.round((mainRow ? servicePriceCents(mainRow, 'list').priceCents : 0) * pct / 100)
+      listUnit = Math.round((mainRow ? priceOf(mainRow, 'list').priceCents : 0) * pct / 100)
       ruleApplied = 'single_finger'
     }
     lines.push({
@@ -8178,6 +8209,8 @@ function computeSettlement(input = {}) {
     rulesApplied.push({ key: 'foot_surcharge', label: '足部美甲(整单加收)', amountCents: amount })
   }
 
+  if(pricingContext) ({listTotalCents,subtotalCents}=memberPricingCalculation.apply(lines,rulesApplied,pricingContext))
+
   // 定金抵扣:只有本店 deposit_config 允许抵扣、且技师勾了「已付定金抵扣」才抵
   /* 抵扣依据＝**收取记录**,不是配置(《财务记账总逻辑》v1.2 §五 补拍①)。
      只配了定金规则、但这张预约从没标记收过钱的,结算时不出抵扣行 —— 店员可以当场补标再抵。
@@ -8209,7 +8242,7 @@ function computeSettlement(input = {}) {
     .map((id) => (getSvc(id) || {}).category_id).filter(Boolean))]
   const couponMaxDeductCents = Math.max(0, couponEligibleCents - depositDeductCents)
   const coupons = couponOptionsFor({
-    tenantId,
+    tenantId, readOnly:Boolean(pricingContext),
     userId: input.userId || input.payerUserId || '',
     subtotalCents: couponEligibleCents,
     maxDeductCents: couponMaxDeductCents,
@@ -8256,6 +8289,7 @@ function computeSettlement(input = {}) {
 
   return assertSettlementInvariants({
     tenantId,
+    personalPricing: pricingContext || null,
     tierKey,
     currency: tenantCurrencyCodeOrNull(tenantId),
     currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tenantId)),
@@ -8334,7 +8368,7 @@ function buildSettlementWarnings(lines) {
 /* 建结算组:一次结算一组,组内一位被服务者一张单。
    朋友不建档 —— 朋友的单 user_id 仍是卡主,served_person_name 记称呼,is_proxy_paid=1;
    全部单据推给卡主,逐张本人签,无代确认兜底(原稿第 1 条)。 */
-function createSettlementGroup(body = {}, adminSession = {}) {
+function createSettlementGroup(body = {}, adminSession = {}, options = {}) {
   const tenantId = currentTenantId()
   const cardOwnerUserId = String(body.cardOwnerUserId || body.userId || '').trim()
   if (!cardOwnerUserId) throw apiError(400, 'BAD_REQUEST', '缺少卡主(签字人)。')
@@ -8349,8 +8383,8 @@ function createSettlementGroup(body = {}, adminSession = {}) {
   for (const sheet of sheets) {
     const bid = String(sheet.bookingId || '').trim()
     if (!bid) continue
-    const live = db.prepare("SELECT code, status FROM settlements WHERE tenant_id = ? AND booking_id = ? AND status <> 'voided' ORDER BY rowid DESC LIMIT 1").get(tenantId, bid)
-    if (live) {
+    const live = db.prepare("SELECT code, status, group_id FROM settlements WHERE tenant_id = ? AND booking_id = ? AND status <> 'voided' ORDER BY rowid DESC LIMIT 1").get(tenantId, bid)
+    if (live && live.group_id!==options.sharedBookingGroupId) {
       throw apiError(409, 'BOOKING_ALREADY_SETTLED', live.status === 'signed'
         ? `这张预约已经有签好的结算单(${live.code})。要补消费请新建一条即时预约再开单,要改金额请走更正。`
         : `这张预约已经有一张待签结算单(${live.code}),先撤回改单再重开。`)
@@ -8365,7 +8399,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
      组级一张共享(一次开单=一次到店),与店主双服务单形态(一预约多张)同构。 */
   let instantBookingId = null
   const needInstant = sheets.some((sh) => !String(sh.bookingId || body.bookingId || '').trim())
-  db.exec('BEGIN IMMEDIATE')
+  db.exec(options.documentMode?'SAVEPOINT create_settlement_group':'BEGIN IMMEDIATE')
   try {
     if (needInstant) {
       // 与建组同事务:建组半途失败即回滚,不留孤儿「已完成」预约(幽灵订单卡)
@@ -8380,12 +8414,12 @@ function createSettlementGroup(body = {}, adminSession = {}) {
         const durMin = (svcRow && (svcRow.base_duration_min || svcRow.duration_min)) || 60
         db.prepare(`INSERT INTO bookings
           (id, tenant_id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, final_due_cents, total_duration_min, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'COMPLETED', ?, ?, '[]', '[]', 'settlement_instant', ?, ?, 0, 0, 0, 0, ?, ?, ?)`)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ${options.documentMode ? "'CONFIRMED'" : "'COMPLETED'"}, ?, ?, '[]', '[]', 'settlement_instant', ?, ?, 0, 0, 0, 0, ?, ?, ?)`)
           .run(instantBookingId, tenantId, publicCode(), cardOwnerUserId, defaultStoreId(), techId, svcId,
             now, iso(addMinutes(new Date(), durMin)), '即时预约(开单自动建)',
             (svcRow && svcRow.price_cents) || 0, durMin, now, now)
         db.prepare('INSERT INTO booking_status_history (id, booking_id, to_status, note, created_at) VALUES (?, ?, ?, ?, ?)')
-          .run(randomId('hist'), instantBookingId, 'COMPLETED', '即时预约(开单自动建,裁B 写方闭环)', now)
+          .run(randomId('hist'), instantBookingId, options.documentMode?'CONFIRMED':'COMPLETED', '即时预约(开单自动建,裁B 写方闭环)', now)
         /* D121:即时单自建的这条预约同样要盖章(为什么:见 ./demo-mark.mjs「即时单那条路」) */
         const __seed = body.__demoSeed || null
         if (__seed) db.prepare('UPDATE bookings SET demo_seed = ? WHERE id = ?').run(__seed, instantBookingId)
@@ -8401,7 +8435,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
        (与组级预览同一口径:预览=建单腿=签署,一条数)。 */
     let plannedStoredInGroup = 0
     let pendingAvailInGroup = 0   // D64:组内挂充未用余量前向传递(签字时序兑现)
-    for (const sheet of sheets) {
+    for (const [sheetIndex,sheet] of sheets.entries()) {
       // 一单一张,且同一张券不能被同组的两张单同时挂上(组内两张 + 别处待签的单都要拦)
       if (sheet.couponGrantId) {
         if (grantsUsedInGroup.has(String(sheet.couponGrantId))) {
@@ -8418,7 +8452,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
         }
         timecardsUsedInGroup.add(String(sheet.timecardId))
       }
-      const computed = computeSettlement({
+      const computed = options.computedSheets?.[sheetIndex] || computeSettlement({
         ...sheet, tenantId, userId: cardOwnerUserId, payerUserId: cardOwnerUserId,
         bookingId: sheet.bookingId || body.bookingId || instantBookingId, strictCoupon: true,
         /* B3-1 随单充值经手人=充值提成归属(与代充路由同口径):技师会话**强制=本人**,不认 body;
@@ -8502,9 +8536,9 @@ function createSettlementGroup(body = {}, adminSession = {}) {
       }
       created.push(id)
     }
-    db.exec('COMMIT')
+    db.exec(options.documentMode?'RELEASE create_settlement_group':'COMMIT')
   } catch (error) {
-    db.exec('ROLLBACK')
+    db.exec(options.documentMode?'ROLLBACK TO create_settlement_group; RELEASE create_settlement_group':'ROLLBACK')
     throw error
   }
   const rows = created.map((id) => db.prepare('SELECT * FROM settlements WHERE id = ?').get(id))
@@ -8520,222 +8554,14 @@ function createSettlementGroup(body = {}, adminSession = {}) {
 /* 签字:卡主本人签的那一刻即时扣卡。
    顺序 = 先烧迁移桶(不进财务收入)→ 再烧新桶(进财务收入)→ 线下腿标"待收款"。
    签前二次校验余额,不足直接拦回让技师改支付构成(原稿第 2 条)。 */
-async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
-  const tenantId = row.tenant_id
-  const legs = db.prepare("SELECT * FROM settlement_payments WHERE settlement_id = ? AND leg IN ('stored_value','migrate_stored') ORDER BY rowid ASC").all(row.id)
-  const needStored = legs.reduce((sum, l) => sum + l.amount_cents, 0)
-  const balance = storedValueBalanceDetail(row.user_id, tenantId)
-  /* B3-1 随单充值:签字时刻「充+赠」先入账再烧储值,余额校验按充后口径 */
-  const scRecharge = row.recharge_json ? (() => { try { return JSON.parse(row.recharge_json) } catch { return null } })() : null
-  const pendingRecharge = scRecharge ? Math.max(0, (scRecharge.amountCents || 0) + (scRecharge.bonusCents || 0)) : 0
-  if (needStored > balance.totalCents + pendingRecharge) {
-    throw apiError(400, 'INSUFFICIENT_BALANCE',
-      `储值余额不足(需 ${needStored / 100},现有 ${(balance.totalCents + pendingRecharge) / 100}${pendingRecharge ? '(含本单随签充值)' : ''}),请回到结算页改支付构成。`)
-  }
-  /* 规则⑤ 核销留痕:**签字成功那一刻**券才核销。签字前退出/改单,券一直是 active,
-     自然就回到券包里了 —— 不需要"释放"动作,也就不存在忘记释放这回事。
-     签的这一刻再校验一次:过期了或在别处核销了就拦下,不让顾客签一个抵不了的数。 */
-  let couponGrant = null
-  if (row.coupon_grant_id) {
-    couponGrant = db.prepare('SELECT * FROM coupon_grants WHERE id = ? AND tenant_id = ?').get(row.coupon_grant_id, tenantId)
-    if (!couponGrant || couponGrant.status !== 'active') {
-      throw apiError(400, 'COUPON_UNUSABLE', '所选优惠券已不可用(过期或已在别处核销),请回到服务单重新选券。')
-    }
-    if (couponGrant.expires_at && String(couponGrant.expires_at) < iso(new Date())) {
-      throw apiError(400, 'COUPON_UNUSABLE', '所选优惠券已过期,请回到服务单重新选券。')
-    }
-  }
-  const now = iso(new Date())
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    /* 预嘱②(幂等第二道闸):路由层 ALREADY_SIGNED 挡串行双击;这里在 BEGIN IMMEDIATE 串行化后
-       复读状态,挡并发双签——两道闸分立,双击/重试永远只扣一次(储值与次卡同受保护)。 */
-    const freshStatus = db.prepare('SELECT status FROM settlements WHERE id = ?').get(row.id)
-    if (!freshStatus || freshStatus.status !== 'pending_sign') {
-      throw apiError(400, 'ALREADY_SIGNED', '这张单已经签过了。')
-    }
-    /* B3 现场购卡:签字时刻按快照建卡(当场核销第 1 次=used_times 直落 1;新卡无并发面)。
-       购卡价=预收负债(卡行本身即负债记录,与充值同构不写收入行);核销第 1 次照常确认收入。 */
-    if (row.purchase_json) {
-      const pur = JSON.parse(row.purchase_json)
-      const exp = pur.validDays
-        ? (() => { const d = new Date(`${todayOf(tenantId)}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + Number(pur.validDays)); return d.toISOString().slice(0, 10) })()
-        : null
-      db.prepare(`INSERT INTO member_timecards (id, tenant_id, user_id, package_id, name, total_times, used_times, price_cents, project_group, expires_at, source_settlement_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`)
-        .run(randomId('tcard'), tenantId, row.user_id, pur.packageId, pur.name, pur.timesCount, pur.priceCents, pur.projectGroup || null, exp, row.id, now)
-      const purLeg = db.prepare("SELECT * FROM settlement_payments WHERE settlement_id = ? AND leg = 'times_card'").get(row.id)
-      if (purLeg) {
-        db.prepare("UPDATE settlement_payments SET status = 'paid' WHERE id = ?").run(purLeg.id)
-        insertFinanceTransaction({
-          type: 'income', source: 'settlement', category: '服务收入-次卡核销', tags: row.code,
-          amountCents: purLeg.amount_cents, payChannel: 'times_card', occurredOn: todayOf(tenantId),
-          note: `服务单 ${row.code} · ${purLeg.note || '现场购卡核销'}`, createdBy: signedBy || 'customer_sign', tenantId
-        })
-      }
-    }
-    /* B② 次卡扣次:签字时刻乐观锁(Cowork 预嘱并发形)——WHERE used_times = nth-1,
-       被别的单抢先用掉即 changes=0 → 409,单据不作废,改支付构成可再签(预嘱① 出路)。 */
-    if (row.timecard_id) {
-      const card = db.prepare('SELECT * FROM member_timecards WHERE id = ? AND tenant_id = ?').get(row.timecard_id, tenantId)
-      if (!card) throw apiError(400, 'TIMECARD_UNUSABLE', '这张次卡已不存在——请回到服务单改支付构成再签(单据不作废)。')
-      const migratedService = db.prepare("SELECT kind,review_json FROM migration_asset_activations WHERE id=? AND tenant_id=? AND kind IN ('service','paid_service')").get(card.id,tenantId)
-      if(migratedService){
-        const item=db.prepare("SELECT service_id FROM settlement_items WHERE settlement_id=? AND kind='timecard'").get(row.id)
-        if(!item || item.service_id!==JSON.parse(migratedService.review_json).serviceId) throw apiError(409,'TIMECARD_SERVICE_NOT_ALLOWED','赠卡对应服务不一致，请重新核对结算单。')
-      }
-      if (timecardExpired(card)) throw apiError(400, 'TIMECARD_EXPIRED', '这张次卡已过期——请回到服务单改支付构成再签(单据不作废)。')
-      // Draft validation is not enough: remaining rights can be refunded before signing.
-      if (card.user_id !== row.user_id) throw apiError(409, 'TIMECARD_NOT_OWNER', '次卡归属已变化，请重新核对本单顾客。')
-      // A draft records the expected use number. A later consumption invalidates it,
-      // even if that consumption also exhausts the card; refunds alone retain USED_UP.
-      if (card.used_times !== Number(row.timecard_nth) - 1) throw apiError(409, 'TIMECARD_RACE', '次卡在开单后已有新的核销，请返回服务单重新核对支付方式。')
-      if (timecardRemainingOf(card) <= 0) throw apiError(409, 'TIMECARD_USED_UP', '这张次卡的剩余次数已用完或已退，请返回服务单重新选择支付方式。')
-      const deduct = db.prepare('UPDATE member_timecards SET used_times = used_times + 1 WHERE id = ? AND tenant_id = ? AND user_id = ? AND used_times = ? AND total_times - used_times - COALESCE(refunded_times, 0) > 0')
-        .run(row.timecard_id, tenantId, row.user_id, Number(row.timecard_nth) - 1)
-      if (!deduct.changes) {
-        throw apiError(409, 'TIMECARD_RACE', '这张次卡的剩余次数刚被另一张单用掉——请回到服务单改支付构成再签(单据不作废)。')
-      }
-      const tcLeg = db.prepare("SELECT * FROM settlement_payments WHERE settlement_id = ? AND leg = 'times_card'").get(row.id)
-      if (tcLeg) {
-        db.prepare("UPDATE settlement_payments SET status = 'paid' WHERE id = ?").run(tcLeg.id)
-        // 规则⑦:核销=按折算单价确认收入(负债转收入),单列类目供日结;payChannel=times_card 不混现金实收。
-        // tenantId 必传:签署页=公开路由没进租户闸门,不传会记到旗舰店账上(insertFinanceTransaction 注释点名的坑,套件 ㊻ 咬过一次)
-        if (!migratedService || migratedService.kind==='paid_service') insertFinanceTransaction({
-          type: 'income', source: 'settlement', category: '服务收入-次卡核销', tags: row.code,
-          amountCents: tcLeg.amount_cents, payChannel: 'times_card', occurredOn: todayOf(tenantId),
-          note: `服务单 ${row.code} · ${tcLeg.note || '次卡核销'}`, createdBy: signedBy || 'customer_sign', tenantId
-        })
-      }
-    }
-    /* B3-1 随单充值(挂单随签):签字这一刻充值行才入账——顺序在烧储值之前,
-       「充完即抵本单」的钱先到再烧,余额永不瞬时为负。与单独代充同构:
-       充=预收负债不写收入行(规则④),赠=bonus 行营销让利(永不计实收/业绩/提成/积分);
-       tenantId 必传(D53:签署页=公开路由,不传记到旗舰店账上)。 */
-    if (scRecharge && scRecharge.amountCents > 0) {
-      insertStoredValueTransaction({
-        userId: row.user_id, type: 'recharge', amountCents: scRecharge.amountCents, giftItems:scRecharge.giftItems||[],
-        payChannel: scRecharge.payChannel || 'cash',
-        note: `随单充值 · 服务单 ${row.code}${scRecharge.packageName ? ' · ' + scRecharge.packageName : ''}`,
-        createdBy: signedBy || 'customer_sign', technicianId: scRecharge.technicianId || null, tenantId, createdAt: now,
-        customerConfirmedAt: now // 随单充值=顾客亲签,入账即确认(B3-3 回执确认只针对单独代充)
-      })
-      if (scRecharge.bonusCents > 0) {
-        insertStoredValueTransaction({
-          userId: row.user_id, type: 'bonus', amountCents: scRecharge.bonusCents,
-          payChannel: 'marketing',
-          note: `充值赠送(营销让利) · 服务单 ${row.code}`,
-          createdBy: signedBy || 'customer_sign', technicianId: scRecharge.technicianId || null, tenantId, createdAt: now
-        })
-      }
-    }
-    for (const leg of legs) {
-      if (leg.amount_cents <= 0) continue
-      db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bucket)
-        VALUES (?, ?, ?, 'consume', ?, 'stored_value', ?, ?, ?, ?)`)
-        .run(randomId('sv'), tenantId, row.user_id, -Math.abs(leg.amount_cents),
-          `服务单 ${row.code} 结算扣卡`, signedBy || row.user_id, now, leg.leg === 'migrate_stored' ? 'legacy' : 'normal')
-      db.prepare("UPDATE settlement_payments SET status = 'paid' WHERE id = ?").run(leg.id)
-      // 迁移桶是老店欠顾客的服务,不是本店收入 —— 只有新桶进财务
-      if (leg.leg === 'stored_value') {
-        /* D53(B② 施工中扫出的同病):此处原漏传 tenantId——签署页是公开路由,不传=耗卡收入记到旗舰店账上。
-           潜伏未炸:生产至今 0 签署单;套件此前未覆盖「非旗舰租户签储值单查本租户账」位面(㊻ 已补)。 */
-        insertFinanceTransaction({
-          type: 'income', source: 'settlement', category: '服务收入-耗卡', tags: row.code,
-          amountCents: leg.amount_cents, payChannel: 'stored_value', occurredOn: todayOf(tenantId),
-          note: `服务单 ${row.code}`, createdBy: signedBy || 'customer_sign', tenantId
-        })
-      }
-    }
-    db.prepare("UPDATE settlement_payments SET status = 'awaiting' WHERE settlement_id = ? AND leg = 'offline' AND status = 'pending'").run(row.id)
-    /* B3-1:充后余额在签字这一刻冻结进快照列——余额是活的,快照上的「充后余额」必须是签字瞬间那个数,
-       事后重渲染不许再算(同笔迹一个道理)。 */
-    if (scRecharge) {
-      const frozen = storedValueBalanceDetail(row.user_id, tenantId).totalCents
-      db.prepare('UPDATE settlements SET recharge_json = ? WHERE id = ?')
-        .run(JSON.stringify({ ...scRecharge, afterBalanceCents: frozen }), row.id)
-    }
-    if (couponGrant) {
-      db.prepare("UPDATE coupon_grants SET status = 'used', used_at = ?, settlement_id = ?, settlement_code = ? WHERE id = ? AND status = 'active'")
-        .run(now, row.id, row.code, couponGrant.id)
-      logCouponGrant({
-        tenantId, grantId: couponGrant.id, action: 'redeemed', settlementCode: row.code,
-        detail: `签署核销,抵扣 ${formatMoneyCents(row.coupon_discount_cents, tenantId, 'auto')}`, actor: signedBy || 'customer_sign'
-      })
-    }
-    db.prepare("UPDATE settlements SET status = 'signed', signature_data = ?, signed_at = ?, disclaimer_accepted = 1, updated_at = ? WHERE id = ?")
-      .run(String(signature).slice(0, 200), now, now, row.id)
-    // 结算 → 订单:签署驱动 COMPLETED(合同②「单据自动为已签署/已完成」)
-    if (row.booking_id) {
-      db.prepare("UPDATE bookings SET status = 'COMPLETED', updated_at = ? WHERE id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED')").run(now, row.booking_id)
-    }
-    /* 🔴 合同②(店主 08-24 拍 A 案):**入账唯一路径 = 签署**,全额到店单同样;按钮入账路径退役。
-       定金腿与储值腿在下面各自转收入;这里补的是**到店现金腿**——它原来签署时不记账本,
-       靠「已完成」按钮按**预约标价**记(所以才有 D70 那个重复入账的口子)。
-       口径含义(必须说清):签署即确认收入 = 现金还没实际收到也算当期收入(权责发生制);
-       金额按**结算单的到店应收**(offline 腿合计),不是预约标价 —— 与 D65 头条「本单到店支付」同源。
-       幂等:同一单已有未冲销的 booking/settlement 收入就不再记(与 recordBookingIncome 同一把闸)。 */
-    /* ⚠️ offline 腿里**混着三种钱**:服务现金 + 购卡现金 + 随单充值现金
-       (computeSettlement:totalCents = 服务小计 − 定金抵扣 − 券 + 购卡 + 充值,三者一起分腿)。
-       只有服务那部分是**收入**:充值是负债(耗卡时才转收入)、购卡也是预收 —— 这是店主的账本红线。
-       第一版我记了整条腿,套件 ㋀ 当场咬出来:一张随单充值单同时冒出「服务收入-到店 300」和「耗卡 301」。 */
-    const rechargeCash = (() => { try { const r = JSON.parse(row.recharge_json || 'null'); return Math.max(0, Math.round(r?.amountCents || 0)) } catch { return 0 } })()
-    const purchaseCash = (() => { try { const p2 = JSON.parse(row.purchase_json || 'null'); return Math.max(0, Math.round(p2?.priceCents || 0)) } catch { return 0 } })()
-    const offlineRaw = db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg = 'offline'").get(row.id).n
-    const offlineDue = Math.max(0, offlineRaw - rechargeCash - purchaseCash)
-    if (offlineDue > 0) {
-      const dup = db.prepare(`
-        SELECT 1 FROM finance_transactions t
-        WHERE t.booking_id IS ? AND t.tags = ? AND t.type = 'income' AND t.source = 'settlement'
-          AND NOT EXISTS (SELECT 1 FROM finance_transactions r WHERE r.reversal_of = t.id)
-        LIMIT 1
-      `).get(row.booking_id || null, row.code)
-      if (!dup) {
-        insertFinanceTransaction({
-          tenantId, type: 'income', source: 'settlement', tags: row.code,
-          category: '服务收入-到店', amountCents: offlineDue, payChannel: 'offline',
-          occurredOn: todayOf(tenantId), bookingId: row.booking_id || null,
-          note: `服务单 ${row.code} 签署入账(到店应收)`, createdBy: signedBy || 'customer_sign'
-        })
-      }
-    }
-    /* 定金兑现(拍板 A · §五):抵扣开的店定金已经在 computeSettlement 里抵掉应收了,
-       这里只把记录标成已兑现;抵扣关的店在这一刻把定金转成当期「定金收入」。
-       两种都不进业绩 —— 分成基数恒等于档位小计,与定金无关。 */
-    settleDepositReceiptsOnSign(row, signedBy || 'customer_sign')
-    // 组内全部签完,组才算完成
-    const unsigned = db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'signed'").get(row.group_id).n
-    db.prepare('UPDATE settlement_groups SET status = ?, updated_at = ? WHERE id = ?').run(unsigned === 0 ? 'signed' : 'pending_sign', now, row.group_id)
-    db.exec('COMMIT')
-  } catch (error) {
-    db.exec('ROLLBACK')
-    throw error
-  }
-  // 快照:签完立刻把整张单连同笔迹渲染成 SVG。这是唯一签署凭证 ——
-  // 结算数据随时可重渲染,笔迹只在签的这一瞬间存在,过后补不了,所以必须在这里生成。
-  const signedRow = db.prepare('SELECT * FROM settlements WHERE id = ?').get(row.id)
-  const snapshotSvg = renderSettlementSnapshotSvg(serializeSettlement(signedRow, { includeSignature: true }), { strokes, signedAt: now })
-  const objectKey = `settlements/${tenantId}/${signedRow.code}.svg`
-  const url = await cosPutObject(objectKey, snapshotSvg, 'image/svg+xml')
-  // COS 没配 / 上传失败 → inline 入库标 storage=inline,后续可迁移,绝不因存储故障拦签署
-  db.prepare('UPDATE settlements SET snapshot_url = ?, snapshot_inline = ?, snapshot_storage = ?, snapshot_at = ? WHERE id = ?')
-    .run(url || null, url ? null : snapshotSvg, url ? 'cos' : 'inline', now, row.id)
-
-  const fresh = db.prepare('SELECT * FROM settlements WHERE id = ?').get(row.id)
-  return {
-    settlement: serializeSettlement(fresh),
-    snapshot: { storage: fresh.snapshot_storage, url: settlementRead.url(fresh.code), at: fresh.snapshot_at, bytes: snapshotSvg.length },
-    storedDeductedCents: needStored,
-    groupAllSigned: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'signed'").get(row.group_id).n === 0
-  }
-}
 
 /* 更正:已签单据永不修改,只追加 amendments(改前/改后/谁/何时)。
    储值支付的单被更正后,系统按差额自动补配余额 —— 纯系统行为,人工不可改这一笔(原稿第 6 条)。 */
-function amendSettlement(settlementId, body = {}, adminSession = {}) {
+function amendSettlement(settlementId, body = {}, adminSession = {}, options = {}) {
   const tenantId = currentTenantId()
   const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(settlementId, tenantId)
   if (!row) throw apiError(404, 'NOT_FOUND', 'Settlement not found.')
+  if(!options.personDocument)memberDocuments.guardComponent(row)
   if (row.status !== 'signed') throw apiError(400, 'BAD_REQUEST', '未签署的单直接改就行,不需要走更正。')
   /* 原因必填(08-27 起硬拦在后端):更正从今天开始会**动账本与业绩** ——
      没原因就等于改了钱却没留痕。原来只有网页前端拦,小程序/接口直调一律放行。 */
@@ -8792,7 +8618,7 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
   const serviceDay = settlementServiceDate(row, tenantId)
   const closeOfDay = db.prepare('SELECT status FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tenantId, serviceDay)
   const perfMode = closeOfDay && closeOfDay.status === 'confirmed' ? 'deduct' : 'base'
-  db.exec('BEGIN IMMEDIATE')
+  db.exec(options.personDocument?'SAVEPOINT amend_settlement':'BEGIN IMMEDIATE')
   try {
     db.prepare(`INSERT INTO settlement_amendments (id, tenant_id, settlement_id, before_json, after_json, reason, amount_delta_cents, auto_balance_adjust_cents, amended_by, amended_at, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -8846,9 +8672,9 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
         VALUES (?, ?, ?, 'adjust', ?, 'stored_value', ?, 'system_amendment', ?, 'normal')`)
         .run(randomId('sv'), tenantId, row.user_id, autoAdjust, `服务单 ${row.code} 更正差额自动补配`, now)
     }
-    db.exec('COMMIT')
+    db.exec(options.personDocument?'RELEASE amend_settlement':'COMMIT')
   } catch (error) {
-    db.exec('ROLLBACK')
+    db.exec(options.personDocument?'ROLLBACK TO amend_settlement; RELEASE amend_settlement':'ROLLBACK')
     throw error
   }
   return {
@@ -10015,7 +9841,7 @@ function customerBindShape(row) {
 }
 
 // 一次性签署码与体验服务链接的唯一出口。
-const { issueSignToken, activeSignToken, signTokenUrl } = createSignTokenHelpers({ db, iso, publicAppUrl,
+const { issueSignToken, activeSignToken, signTokenUrl } = createSignTokenHelpers({ db, iso, publicAppUrl, guardRow:r=>memberDocuments.guardComponent(r),
   scopeName: DATA_SCOPE_NAME, appPublicUrl: APP_PUBLIC_URL })
 
 /* 屏 S3 状态行(规则④):等待顾客进入 → 顾客核对中 → 已签署。
@@ -10099,6 +9925,7 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
   const booking = row.booking_id ? db.prepare('SELECT appointment_start FROM bookings WHERE id = ?').get(row.booking_id) : null
   return {
     id: row.id,
+    serviceDocument:db.prepare('SELECT d.id,d.status,d.beneficiary_key AS beneficiaryKey FROM member_document_components c JOIN member_service_documents d ON d.id=c.document_id WHERE c.settlement_id=?').get(row.id)||null,
     code: row.code,
     // 原始开单身份；只读显示，不回填历史，不以当前查看者替代经手人。
     operatorText: row.created_by || '历史未记录',
@@ -10265,20 +10092,28 @@ const conversationRoutes = createConversationRoutes({
   conversationRow: wecomRouting.conversationRow, redactConversation,
 })
 
-const packageWrite=createPackageWrite({db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage})
+const serializeMembershipPackage = createMembershipPackageSerializer(giftSnapshotOfPackage,row=>row.tenant_id&&row.kind==='recharge'&&memberPricing.config(row.tenant_id).active?memberPricing.packageDiscount(row.tenant_id,row.id):null)
+const packageWrite=createPackageWrite({db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage,memberPricing})
 const createCustomer = createCustomerCreator({db,apiError,randomId,maskPhone})
 const completeVerifiedPhone = createVerifiedPhoneCompletion({db,apiError,claim:claimUserByOpenId,serialize:serializeUser,auth:miniAuthFor,unboundSql:notBoundByLoginIdentitySql})
 const scanEntryRoute = createScanEntryRoute({db,apiError,json,readBody,
   fetchJsCode2Session: options => fetchJsCode2Session({...options, scopeName: WECHAT_AUTH_SCOPE_NAME}),claimUserByOpenId,serializeUser,miniAuthFor,userIdFromMemberCode,
   verifiedCustomerForScan,appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET,scopeName:miniCodeScope(DATA_SCOPE_NAME)})
-const settlementAccess = createSettlementAccess({db,apiError,requireCustomer,demoAllowed:()=>DEMO_LOGIN_ALLOWED})
+const settlementAccess = createSettlementAccess({db,apiError,requireCustomer,guardRow:r=>memberDocuments.guardComponent(r),demoAllowed:()=>DEMO_LOGIN_ALLOWED})
 const settlementRead = createSettlementReadAccess({secret:WECHAT_MINI_TOKEN_SECRET,apiError,requireAdmin,writeAccess:settlementAccess,demoAllowed:()=>DEMO_LOGIN_ALLOWED})
+const {signLedger,signSettlement}=createSettlementSigner({db,apiError,iso,randomId,cosPutObject,storedValueBalanceDetail,insertFinanceTransaction,timecardExpired:(...a)=>timecardExpired(...a),timecardRemainingOf:(...a)=>timecardRemainingOf(...a),insertStoredValueTransaction,logCouponGrant,formatMoneyCents,settleDepositReceiptsOnSign,renderSettlementSnapshotSvg,serializeSettlement,todayOf,settlementRead})
+const storedValueRechargeRoutes=createStoredValueRechargeRoutes({db,apiError,readBody,json,currentTenantId,isUserBound,DATA_SCOPE_NAME,giftSnapshotOfPackage,actorOf:a=>actorOf(a),insertStoredValueTransaction,storedValueOverview,storedValueBalanceCents,pricingTransactions})
+const memberDocuments=createMemberServiceDocuments({db,policy:memberPricing,preview:memberPricingPreview,apiError,currentTenantId,createSettlementGroup,signLedger,
+  balanceOf:storedValueBalanceDetail,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,amendSettlement:(id,b,a)=>amendSettlement(id,b,a,{personDocument:true}),amendmentShape,assertStaff:(a,r)=>settlementAccess.assertStaff(a,r)})
+const memberDocumentRoutes=createMemberDocumentRoutes({db,policy:memberPricing,documents:memberDocuments,json,readBody,currentTenantId,apiError,requireCustomer})
+
 
 async function route(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {})
   const url = new URL(req.url, `http://${req.headers.host}`)
   const path = url.pathname
   const query = Object.fromEntries(url.searchParams.entries())
+  if(!path.startsWith('/admin/')&&await memberDocumentRoutes(req,res,{path,query}))return;
 
   if (req.method === 'GET' && path === '/') return serveFile(res, webRoot, 'index.html')
   if (req.method === 'GET' && path === '/admin') return serveFile(res, webRoot, 'admin.html')
@@ -11340,6 +11175,9 @@ async function route(req, res) {
   /* D90(店主 08-31 裁,推翻 v1.1③ 的财务门半边):账调四 tab(充值/赠送/退卡/冲销)门禁一致 ——
      **仅老板,不挂财务钥匙门**(与充值同权;财务页整体门禁不变)。
      案底:门只拦了读流水那半,充值 tab 却直通 —— 两半不一致,还把门禁态装成空态(O-fin1)。 */
+  if(await storedValueRechargeRoutes(req,res,{path,adminSession}))return;
+  if(await memberDocumentRoutes(req,res,{path,query,adminSession}))return;
+  if(await memberPricingRoutes(req,res,{path,adminSession}))return;
   if(await bookingAcceptance.route(req,res,{path,tid:currentTenantId(),admin:adminSession}))return;
   if(await storeGuideApi.route(req,res,{path,query,admin:adminSession,tid:currentTenantId(),json,readBody}))return; if (req.method === 'GET' && path === '/admin/store/mini-code') {
     if (adminSession.role !== 'owner') throw apiError(403,'FORBIDDEN','仅店主可获取门店码。')
@@ -11758,6 +11596,7 @@ async function route(req, res) {
     const id = path.split('/')[3]
     const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    memberDocuments.guardComponent(row)
     if (row.status === 'signed') throw apiError(400, 'ALREADY_SIGNED', '这张单顾客已经签了,不能撤回;要改请走金额更正。')
     if (row.status === 'voided') return json(res, 200, { voided: true, code: row.code, note: '这张单之前已经撤回过了。' })
     const now = iso(new Date())
@@ -12144,6 +11983,7 @@ async function route(req, res) {
           name: row.display_name,
           phone: row.phone || '',
           isMember: isMemberOf(row.id, tid),
+          ...(memberPricing.config(tid).active?{personalDiscount:memberPricing.discount(tid,row.id)}:{}),
           isFirstRecharge: isFirstRecharge(row.id, tid),
           isMigrated: Boolean(row.is_migrated),
           balanceCents: balance.totalCents,
@@ -12235,6 +12075,7 @@ async function route(req, res) {
     return json(res, 200, {
       packages: rows.filter((r) => r.price_cents > 0).map((r) => ({
         id: r.id, giftItems:giftSnapshotOfPackage(r), name: r.name, priceCents: r.price_cents, bonusCents: r.bonus_cents || 0,
+        ...(memberPricing.config(r.tenant_id).active?{defaultPersonalDiscount:memberPricing.packageDiscount(r.tenant_id,r.id)}:{}),
         label: `${r.name} · 充 ${formatMoneyCents(r.price_cents, r.tenant_id, 'auto')}${r.bonus_cents ? ` 赠 ${formatMoneyCents(r.bonus_cents, r.tenant_id, 'auto')}` : ''}`
       }))
     })
@@ -13408,71 +13249,6 @@ async function route(req, res) {
      门禁扫描器同批改成连 `*-routes.mjs` 一起读 —— 搬家不许把接口从扫描面上搬没了。 */
   if (await refundRoutes.route(req, res, { path, query, adminSession, requireRefundRight, tenantId: currentTenantId() })) return
   if (await merchantMessages.route(req,res,{path,adminSession,tenantId:currentTenantId()}) || await notifyScheduler.route(req, res, { path, query, adminSession, tenantId: currentTenantId() })) return
-  if (req.method === 'POST' && path === '/admin/stored-value/recharge') {
-    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') {
-      throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
-    }
-    const body = await readBody(req)
-    const userId = String(body.userId || '').trim()
-    const user = db.prepare('SELECT id, display_name FROM users WHERE id = ? AND tenant_id = ?').get(userId, currentTenantId())
-    if (!user) throw apiError(404, 'NOT_FOUND', 'Member not found.')
-    /* D25(《财务总逻辑》3-1b,店主 2026-08-12 拍板):未绑定微信的轻档案不可充值 ——
-       防"空充值"挂在无主档案上;技师/老板同受约束,两端入口的禁用态只是体验,这里才是闸。 */
-    if (!isUserBound(userId) && !((DATA_SCOPE_NAME === 'sandbox' || DATA_SCOPE_NAME === 'ci') && db.prepare('SELECT kind FROM tenants WHERE id = ?').get(currentTenantId())?.kind === 'demo' && /^demo-openid-[a-z0-9-]+$/i.test(String(db.prepare('SELECT wechat_open_id FROM users WHERE id = ?').get(userId)?.wechat_open_id || '')) && body.note === '演示储值')) {
-      throw apiError(400, 'UNBOUND_NO_RECHARGE', '请先让顾客扫码绑定(会员码/签署码)再充值。')
-    }
-    const selectedPackage=body.packageId?db.prepare("SELECT * FROM membership_packages WHERE id=? AND tenant_id=? AND kind='recharge' AND is_active=1").get(String(body.packageId),currentTenantId()):null
-    if(body.packageId&&!selectedPackage)throw apiError(404,'PACKAGE_NOT_FOUND','充值套餐不存在或已下架。')
-    const giftItems=giftSnapshotOfPackage(selectedPackage)
-    const amountCents = selectedPackage ? selectedPackage.price_cents : Number(body.amountCents ?? Number(body.amount || 0) * 100)
-    if (!Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > 100000000) throw apiError(400, 'BAD_REQUEST', '充值金额须大于 0，最多两位小数，且不超过 100 万。')
-
-    // 经手技师:这笔充值/耗卡算谁促成,薪资的充值/耗卡提成据此计算。
-    // 技师会话:经手人**强制=当前技师**(留痕口径,不认 body 传谁)
-    const svTech = adminSession.role === 'staff'
-      ? String(adminSession.technicianId || '')
-      : String(body.technicianId || '').trim()
-    if (svTech && !db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(svTech, currentTenantId())) {
-      throw apiError(404, 'NOT_FOUND', '经手技师不存在。')
-    }
-    /* S2批①(规则④ 赠送口径):充 X 赠 Y —— 赠送=营销让利,独立 bonus 行入储值负债,
-       单独列示;永不计实收(本就不进 finance)/业绩与提成(按 type='recharge' 统计,bonus 天然排除)/积分基数。
-       🔴 2026-08-27 事务扫查出来的:这两行原来是**两次裸 INSERT,中间没有事务** ——
-       第二行要是挂了(触发器 ABORT、磁盘满、进程被杀),顾客钱收了、赠送没到账,
-       而且账面上看不出少了什么。按《动钱多步写律》包成一个事务:要么两行都在,要么一行都没有。 */
-    const bonusCents = selectedPackage ? selectedPackage.bonus_cents : Number(body.bonusCents || 0)
-    if(!Number.isSafeInteger(bonusCents)||bonusCents<0||bonusCents>100000000)throw apiError(400,'BAD_REQUEST','赠送金额无效。')
-    const svOperator = actorOf(adminSession)   // J-105 第一批:储值操作人
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      insertStoredValueTransaction({
-        userId,
-        type: 'recharge', giftItems,
-        amountCents,
-        payChannel: String(body.payChannel || 'unknown'),
-        note: String(body.note || ''),
-        createdBy: svOperator,
-        technicianId: svTech || null
-      })
-      if (bonusCents > 0) {
-        insertStoredValueTransaction({
-          userId,
-          type: 'bonus',
-          amountCents: bonusCents,
-          payChannel: 'marketing',
-          note: `充值赠送(营销让利)${body.note ? ' · ' + String(body.note) : ''}`.slice(0, 200),
-          createdBy: svOperator,
-          technicianId: svTech || null
-        })
-      }
-      db.exec('COMMIT')
-    } catch (error) {
-      db.exec('ROLLBACK')
-      throw error
-    }
-
-    return json(res, 201, { storedValue: storedValueOverview(), balanceCents: storedValueBalanceCents(userId) })
-  }
   if (req.method === 'POST' && path === '/admin/finance/insights') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     requireAi()
@@ -13864,8 +13640,8 @@ async function route(req, res) {
     const tid = currentTenantId()
     const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(query.month || '')) ? String(query.month) : todayOf(tid).slice(0, 7)
     const tz = tenantTimezone(tid)
-    const rows = db.prepare(`SELECT s.code, s.signed_at, s.coupon_discount_cents, s.coupon_name, g.grant_kind, g.granted_by, g.grant_reason
-      FROM settlements s LEFT JOIN coupon_grants g ON g.id = s.coupon_grant_id
+    const rows = db.prepare(`SELECT s.code, s.signed_at, s.coupon_discount_cents, COALESCE(s.coupon_name,(SELECT name FROM coupons WHERE id=g.coupon_id)) AS coupon_name, a.document_id, g.grant_kind, g.granted_by, g.grant_reason
+      FROM settlements s LEFT JOIN member_document_coupon_allocations a ON a.settlement_id=s.id LEFT JOIN coupon_grants g ON g.id = COALESCE(s.coupon_grant_id,a.grant_id)
       WHERE s.tenant_id = ? AND s.status = 'signed' AND s.coupon_discount_cents > 0 AND s.signed_at IS NOT NULL`).all(tid)
       .filter((r) => localParts(r.signed_at, tz).date.slice(0, 7) === month)
     const customCents = rows.filter((r) => (r.grant_kind || 'template') === 'custom').reduce((n, r) => n + r.coupon_discount_cents, 0)
@@ -13876,7 +13652,7 @@ async function route(req, res) {
       currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tid)),
       couponDiscounts: {
         month,
-        count: rows.length,
+        count: new Set(rows.map(r=>r.document_id||r.code)).size,
         totalCents: customCents + templateCents,
         customCents,
         templateCents,
@@ -16191,24 +15967,6 @@ function cardPackOf(userId, tenantId = currentTenantId()) {
    会员=serializeUser 的等级),本函数不新算一分钱、不新拼一句话;今后新资产类型(含 S15 抽奖奖品)
    一律挂这里,不许再在「我的」页并列新入口。 */
 
-function serializeMembershipPackage(row) {
-  return {
-    giftItems:giftSnapshotOfPackage(row),
-    id: row.id,
-    kind: row.kind,
-    name: row.name,
-    priceCents: row.price_cents,
-    bonusCents: row.bonus_cents,
-    timesCount: row.times_count,
-    scope: row.scope || '',
-    benefits: row.benefits || '',
-    isActive: Boolean(row.is_active),
-    sortOrder: row.sort_order,
-    validDays: row.valid_days || null,
-    projectGroup: row.project_group || '',
-    mallVisible: row.mall_visible === undefined ? true : Boolean(row.mall_visible)
-  }
-}
 
 function serializeCoupon(row) {
   return {

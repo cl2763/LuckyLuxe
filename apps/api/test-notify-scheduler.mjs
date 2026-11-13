@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 import { pendingCustomerFixture } from './test-migration-fixture.mjs'
 /* P3 通知调度器回归(店主 2026-08-30g 开工令件5)
    判据清单(指令原文):队列生成(各触发事由至少一形)/ 幂等(同事由重跑零重复)/
@@ -100,7 +101,7 @@ let bk1
     const want93 = `${g93('month')}-${g93('day')} ${g93('hour')}:${g93('minute')}`
     check('🔴 D93 whenText=店时区人读句(不是 ISO 裸切的 UTC)', rem.whenText === want93, `${rem.whenText} vs ${want93}`)
     const { readFileSync: rf93 } = await import('node:fs')
-    const R93 = new URL('../..', import.meta.url).pathname
+    const R93 = localFilePath(new URL('../..', import.meta.url))
     const web93 = rf93(`${R93}apps/web/notify-settings.js`, 'utf8')
     const mini93 = rf93(`${R93}miniprogram/pages/merchant/notify-settings/index.js`, 'utf8')
     check('D93 两端零裸切残留(L2 机械扫尽:scheduledAt 不再被 slice)', !web93.includes(".slice(5, 16)") && !mini93.includes(".slice(5, 16)") && web93.includes('t.whenText') && mini93.includes('t.whenText'))

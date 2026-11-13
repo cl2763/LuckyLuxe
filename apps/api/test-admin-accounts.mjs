@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 // 账号体系回归:
 // 前置条件:需要"干净自举"——运行前清空 admin_accounts/admin_sessions 并删除 local-data/初始老板账号.txt,再启动服务器:
 //   node -e "const{DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('./local-data/lucky-luxe.sqlite');db.exec('DELETE FROM admin_sessions; DELETE FROM admin_accounts;');db.close()"
@@ -48,7 +49,7 @@ async function main() {
      现测后果两面都有:本机上那份文件在 → 三条跑;CI 上不在 → 走 else,
      **`checks += 3` 却一行 `ok` 都不打** ⇒ 断言凭空少 3 条,而且是**静默**的(判据五正好治这个)。
      改成跟着本轮 `DATA_DIR` 走;没设才回落到 local-data(单跑时的老行为)。 */
-  const credDir = process.env.DATA_DIR || new URL('./local-data', import.meta.url).pathname
+  const credDir = process.env.DATA_DIR || localFilePath(new URL('./local-data', import.meta.url))
   const credFile = `${String(credDir).replace(/\/+$/, '')}/初始老板账号.txt`
   let bossToken = OWNER
   if (existsSync(credFile)) {

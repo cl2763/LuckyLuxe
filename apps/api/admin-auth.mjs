@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 /* 商家端账号与会话(2026-08-25 从 local-server.mjs 搬出,公约②)。
 
    这一批动的正是"密码与会话"这个领域(平台侧新增了**重置商家老板密码**:
@@ -8,7 +9,7 @@ export function createAdminAuth({ db, randomId, iso, createHash, defaultTenantId
   /* 自举:平台交付的老板主账号。初始密码写进 local-data/初始老板账号.txt,首次改密后自动删除该文件。
      返回那个文件路径 —— 改密路由要用它删文件。 */
   function bootstrapOwnerAccount({ writeFileSync }) {
-    const file = new URL('./local-data/初始老板账号.txt', import.meta.url).pathname
+    const file = localFilePath(new URL('./local-data/初始老板账号.txt', import.meta.url))
     if (db.prepare("SELECT id FROM admin_accounts WHERE role = 'owner'").get()) return file
     const initialPassword = randomPassword()
     /* 🔴 D131(店主 04b §二):原来不写 tenant_id,靠列默认 `lucky-luxe` 凑对。

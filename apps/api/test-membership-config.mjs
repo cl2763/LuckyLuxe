@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 // P0 会员可配回归(2026-08-06):
 // 1. 四种会员资格模式(any_recharge / balance_gt_0 / total_spend / manual)各判定一例
 // 2. 首充判定 = 从未有过 recharge 流水(清零后复充 ≠ 首充)
@@ -96,7 +97,7 @@ async function recharge(token, userId, amountCents) {
 async function consume(token, userId, amountCents) {
   // S2批①(规则⑥):手动耗卡 HTTP 口=410;fixture 改直插库(引擎签字扣卡写法),语义不变
   const { DatabaseSync } = await import('node:sqlite')
-  const dbPath = process.env.TEST_DB_PATH || new URL('./local-data/lucky-luxe.sqlite', import.meta.url).pathname
+  const dbPath = process.env.TEST_DB_PATH || localFilePath(new URL('./local-data/lucky-luxe.sqlite', import.meta.url))
   const raw = new DatabaseSync(dbPath)
   const tid = raw.prepare('SELECT tenant_id FROM users WHERE id = ?').get(userId)?.tenant_id
   raw.prepare("INSERT INTO stored_value_transactions (id,tenant_id,user_id,type,amount_cents,pay_channel,note,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?)")

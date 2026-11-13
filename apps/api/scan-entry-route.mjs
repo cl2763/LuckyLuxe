@@ -3,8 +3,9 @@ import { storeForScene } from './store-code.mjs'
 import { getMiniCode, codeEnvironment } from './wechat-mini-code.mjs'
 import { randomUUID } from 'node:crypto'
 
-export function createSignTokenHelpers({ db, iso, publicAppUrl, scopeName, appPublicUrl }) {
+export function createSignTokenHelpers({ db, iso, publicAppUrl, scopeName, appPublicUrl , guardRow=()=>{}}) {
   function issueSignToken(settlement, { actor = 'admin', ttlHours = 24 } = {}) {
+    guardRow(settlement)
     const now = new Date()
     db.prepare("UPDATE settlement_sign_tokens SET status = 'superseded' WHERE settlement_id = ? AND status = 'active'").run(settlement.id)
     const token = `sg_${randomUUID().replaceAll('-', '')}${randomUUID().replaceAll('-', '')}`

@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 /* D203 常驻判据:**密钥不进任何输出。**
  *
  * 立案(店主 09o §一,硬挡推):开机把 `platform-admin` 的一次性口令**明文打进启动日志**。
@@ -19,7 +20,7 @@ import { join, relative } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 
-const ROOT = new URL('../../', import.meta.url).pathname
+const ROOT = localFilePath(new URL('../../', import.meta.url))
 let checks = 0
 const fail = []
 function check(name, cond, detail = '') {

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {fileURLToPath as localFilePath} from 'node:url'
 /* 裁 #22 判据 · 小程序**三档 × 三个面**:量 computed 底色,必须等于当档令牌的值
  *
  * ══ 为什么是量 computed,不是看 class 挂没挂 ══
@@ -226,7 +227,7 @@ if (!AUTO || AUTO === 'skip') {
 /* ── ④ 覆盖率:站内三档靠**页面根 view 上那个 class** 生效,所以没挂类的页面切档一点反应都没有。
    这是 05w §三 之外我自己量出来的第二半病根,数字摆在这儿,只许升不许降(待裁 #25)。 */
 const { execFileSync } = await import('node:child_process')
-const ROOT = new URL('..', import.meta.url).pathname
+const ROOT = localFilePath(new URL('..', import.meta.url))
 const withTheme = execFileSync('bash', ['-lc',
   `grep -rl themeClass ${ROOT}miniprogram/pages --include=*.wxml | wc -l`], { encoding: 'utf8' }).trim()
 const totalPages = execFileSync('bash', ['-lc',

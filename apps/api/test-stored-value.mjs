@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 // 储值卡回归(阶段3D):
 // 1. 充值=负债(不产生收入流水);耗卡=确认收入(支付方式=储值卡)
 // 2. 余额不足拒绝耗卡;账户列表含沉睡天数并排序
@@ -126,7 +127,7 @@ async function main() {
     // 引擎写法直插一笔耗卡,继续验负债下降与逐笔视图(模拟签字扣卡结果)
     {
       const { DatabaseSync } = await import('node:sqlite')
-      const dbPath0 = process.env.TEST_DB_PATH || new URL('./local-data/lucky-luxe.sqlite', import.meta.url).pathname
+      const dbPath0 = process.env.TEST_DB_PATH || localFilePath(new URL('./local-data/lucky-luxe.sqlite', import.meta.url))
       const raw0 = new DatabaseSync(dbPath0)
       raw0.prepare("INSERT INTO stored_value_transactions (id,tenant_id,user_id,type,amount_cents,pay_channel,note,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
         .run(`sv_ci_${RUN_ID}`, 'lucky-luxe', userId, 'consume', -16800, 'stored_value', `耗卡测试-${RUN_ID}(直插=引擎写法)`, 'ci-sv', new Date().toISOString())
@@ -146,7 +147,7 @@ async function main() {
 
     // 5. 储值账本只追加
     const { DatabaseSync } = await import('node:sqlite')
-    const dbPath = process.env.TEST_DB_PATH || new URL('./local-data/lucky-luxe.sqlite', import.meta.url).pathname
+    const dbPath = process.env.TEST_DB_PATH || localFilePath(new URL('./local-data/lucky-luxe.sqlite', import.meta.url))
     const rawDb = new DatabaseSync(dbPath)
     let blocked = false
     try { rawDb.prepare('DELETE FROM stored_value_transactions WHERE user_id = ?').run(userId) } catch (error) { blocked = /append-only/.test(String(error.message)) }

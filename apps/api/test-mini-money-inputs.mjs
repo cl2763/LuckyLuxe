@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 /* 小程序钱输入框全量审计(店主 2026-08-28 排进批次二第③件)。
 
    起因:店主 08-27 在**网页端**实测「打了 1 就被重画一次,5 和 0 丢了」,当天立了族规:
@@ -207,7 +208,7 @@ check('④ 一眼是金额的框,键盘必须带小数点(type="digit")', moneyN
      两者必须相等(或 line-height:normal)—— 行高矮于框高=placeholder 又要截半 */
   const { readdirSync: rd, statSync: st2 } = await import('node:fs')
   const { join: j2 } = await import('node:path')
-  const ROOT2 = new URL('../../miniprogram/', import.meta.url).pathname
+  const ROOT2 = localFilePath(new URL('../../miniprogram/', import.meta.url))
   const wxmls = []
   const walk2 = (d) => { for (const f of rd(d)) { const p = j2(d, f); if (st2(p).isDirectory()) walk2(p); else if (/\.wxml$/.test(f)) wxmls.push(p) } }
   walk2(j2(ROOT2, 'pages')); walk2(j2(ROOT2, 'components'))

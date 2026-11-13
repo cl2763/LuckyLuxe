@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 /* 🔴 J-71(店主 07z §四)· **合同要守在它能被违反的那一层。**
  *
  * 案由:裁 #103 的合同是「网页顾客端不是新顾客的入口」,而我们守的判据是
@@ -89,7 +90,7 @@ export function violations(rows) {
 }
 
 if (process.argv[1] && process.argv[1].endsWith('user-write-census.mjs')) {
-  const ROOT = new URL('..', import.meta.url).pathname
+  const ROOT = localFilePath(new URL('..', import.meta.url))
   const serverSrc = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
   const { serverSources } = await import('./readset.mjs')
   const modSrc = serverSources(join(ROOT, 'apps/api'))

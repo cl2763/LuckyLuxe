@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 /* 爽约定金处置 + 售后完成态 + D19/D20 红线回归(2026-08-11 图 A/B 部,店主已确认)。
    corner case 为主:
    ① A⑤ 无收取记录的爽约单处置=拒绝;未爽约的单处置=拒绝
@@ -292,7 +293,7 @@ const main = async () => {
   check('⑩ D19 跨租户 storeId 下单=400 STORE_TENANT_MISMATCH', r.status === 400 && r.data.error.code === 'STORE_TENANT_MISMATCH', JSON.stringify(r.data))
 
   // ===== ⑪ D20 文案扫描:顾客可见文案禁「支付成功」 =====
-  const ROOT = new URL('../../', import.meta.url).pathname
+  const ROOT = localFilePath(new URL('../../', import.meta.url))
   const scanDirs = ['miniprogram/pages', 'miniprogram/utils', 'apps/web']
   const allow = new Set([])   // 白名单精确到文件;当前应为空
   const bad = []
@@ -488,7 +489,7 @@ const main = async () => {
 
     // ===== ⑱ D28:showModal 按钮文案 4 汉字上限机械扫描(超限=整窗静默 fail,「递给顾客签」惨案) =====
     {
-      const ROOT2 = new URL('../../', import.meta.url).pathname
+      const ROOT2 = localFilePath(new URL('../../', import.meta.url))
       const bad2 = []
       const walk2 = (dir) => {
         for (const f of readdirSync(dir)) {
@@ -832,7 +833,7 @@ const main = async () => {
       check('㉛ 越权后开关未动(顾客端仍可见)', (await pubList(shop.tenantId)).some((sv) => sv.id === shop.serviceId))
 
       // 规则③ 次卡剥离:现库无次卡行可走行为断言,先机械断言两条编辑路由都装了拦截(S2 有数据后升级为行为断言)
-      const ROOT31 = new URL('../../', import.meta.url).pathname
+      const ROOT31 = localFilePath(new URL('../../', import.meta.url))
       const srv = readFileSync(join(ROOT31, 'apps/api/local-server.mjs'), 'utf8')
       check('㉛ 规则③ 次卡编辑拒绝装在两条路由(TIMECARD_MIGRATED×2)', (srv.match(/TIMECARD_MIGRATED/g) || []).length >= 2)
       check('㉛ 规则⑥ 迁移块在(幂等标记 s1_storefront)', srv.includes("s1_storefront"))
@@ -862,7 +863,7 @@ const main = async () => {
     // → TDZ ReferenceError,生产顾客页整页白屏 5 天,没有任何断言兜它(currency-scan 只扫写死币符,不跑运行时)。
     // 护栏:node 里 stub 最小 DOM 加载 customer.js / share.js,顶层抛任何异常=红。上次靠疏忽能再来一遍的路,这次焊死。
     {
-      const ROOT32 = new URL('../../', import.meta.url).pathname
+      const ROOT32 = localFilePath(new URL('../../', import.meta.url))
       const { execFileSync } = await import('node:child_process')
       for (const f of ['apps/web/customer.js', 'apps/web/share.js']) {
         const stub = `
@@ -923,7 +924,7 @@ const main = async () => {
       // 加项永不入大类列表(规则①已有 ok128 双租户;这里对全量再断一次含 platformCategory 的响应)
       check('㊱ 加项/次卡 0 出现在大类列表', (pubJ.services || []).every((sv) => sv.itemKind !== 'addon' && !sv.isTimecard))
       // 空类不显示=前端行为:机械断言 visibleCategories 过滤逻辑在场
-      const ROOT36 = new URL('../../', import.meta.url).pathname
+      const ROOT36 = localFilePath(new URL('../../', import.meta.url))
       const cust36 = readFileSync(join(ROOT36, 'apps/web/customer.js'), 'utf8')
       check('㊱ 空大类不显示(visibleCategories 过滤在场)', cust36.includes('function visibleCategories()') && /state\.services\.some/.test(cust36))
     }
@@ -932,7 +933,7 @@ const main = async () => {
 
     // ===== ㊲ v1.4 服务 Tab 重构+网页切店(店主 08-16 三件批)=====
     {
-      const ROOT37 = new URL('../../', import.meta.url).pathname
+      const ROOT37 = localFilePath(new URL('../../', import.meta.url))
       const svcJs = readFileSync(join(ROOT37, 'miniprogram/pages/services/index.js'), 'utf8')
       const svcWxml = readFileSync(join(ROOT37, 'miniprogram/pages/services/index.wxml'), 'utf8')
       check('㊲ 小程序服务页:顶部段选已撤(type-switch 零残留)', !svcWxml.includes('type-switch') && !svcWxml.includes('switchType'))
@@ -948,7 +949,7 @@ const main = async () => {
 
     // ===== ㊳ D48:护理类详情打不开(getService 猜 id 前缀定类)=====
     {
-      const ROOT38 = new URL('../../', import.meta.url).pathname
+      const ROOT38 = localFilePath(new URL('../../', import.meta.url))
       const apiJs = readFileSync(join(ROOT38, 'miniprogram/utils/api.js'), 'utf8')
       check("㊳ D48 getService 不再猜 id 前缀定类(indexOf('lash') 禁令)", !apiJs.includes("indexOf('lash') === 0"))
       // 行为:CARE 类条目在全量公开列表可按 id 命中(修法=全量直查的后端前提)
@@ -971,7 +972,7 @@ const main = async () => {
       const careD = pubD.find((sv) => sv.platformCategory === 'care')
       if (careD) check('㊴ D49 护理项价格说明非美睫套话', !(careD.priceExplanationZh || '').includes('美睫'), careD.priceExplanationZh)
       // L2 四出口机械断言:列表=fromLabel/详情=detailLabel(两端引用在场)
-      const ROOT39 = new URL('../../', import.meta.url).pathname
+      const ROOT39 = localFilePath(new URL('../../', import.meta.url))
       const custD = readFileSync(join(ROOT39, 'apps/web/customer.js'), 'utf8')
       const miniDetail = readFileSync(join(ROOT39, 'miniprogram/pages/service-detail/index.js'), 'utf8')
       const miniList = readFileSync(join(ROOT39, 'miniprogram/pages/services/index.wxml'), 'utf8')
@@ -1775,18 +1776,18 @@ const main = async () => {
                        所以"幂等白名单"那两条判据的被测物不存在了 —— 断言跟着被测物走:
                        改为验**这条路径确实消失了**(函数不存在 = 不可能复活)。
                        签署入账的正确性由 ㋘ 组行为断言覆盖。 */
-                    const incMod = readFileSync(new URL('../../apps/api/booking-income.mjs', import.meta.url).pathname, 'utf8')
+                    const incMod = readFileSync(localFilePath(new URL('../../apps/api/booking-income.mjs', import.meta.url)), 'utf8')
                     check('㋗ 按钮入账函数已彻底删除(不是留着不调用,防日后"看到现成的就接上去")',
                       !/function recordBookingIncome/.test(incMod) && !/recordBookingIncome[,}]/.test(incMod))
                     check('㋗ 入账触点只剩冲销一个(取消/过期红字)', /function reverseBookingIncome/.test(incMod))
                     /* 公约② 护栏:搬出去的东西不许在旧文件里留一份 —— "同一件事两个家"比不拆更糟 */
-                    const srvMain = readFileSync(new URL('../../apps/api/local-server.mjs', import.meta.url).pathname, 'utf8')
+                    const srvMain = readFileSync(localFilePath(new URL('../../apps/api/local-server.mjs', import.meta.url)), 'utf8')
                     check('㋗ 搬出后旧文件零残留实现(售后域与入账触点只有一个家)',
                       !/^function (recordBookingIncome|reverseBookingIncome|bookingIncomeCategory|afterSalesState|afterSalesProgress)\b/m.test(srvMain)
                       && srvMain.includes("createAfterSales({ db") && srvMain.includes('createBookingIncome({ db'))
                     /* 签署入账那一刀的白名单判据(接替已删除的 recordBookingIncome 幂等):
                        只把充值/购卡排除在服务收入之外 —— 账本红线,由 ㋘ 组行为断言正面覆盖。 */
-                    const srvSign = readFileSync(new URL('../../apps/api/local-server.mjs', import.meta.url).pathname, 'utf8')
+                    const srvSign = readFileSync(localFilePath(new URL('../../apps/api/settlement-signing.mjs', import.meta.url)), 'utf8')
                     check('㋗ 签署入账扣掉充值与购卡(充值是负债不是收入)',
                       /offlineRaw - rechargeCash - purchaseCash/.test(srvSign))
                   }
@@ -2349,7 +2350,7 @@ const main = async () => {
 
     // ===== ㊶ D50:原生弹窗链返工 —— 会员与营销页 0 prompt+全文件基线只减不增 =====
     {
-      const ROOT41 = new URL('../../', import.meta.url).pathname
+      const ROOT41 = localFilePath(new URL('../../', import.meta.url))
       const adminJs = readFileSync(join(ROOT41, 'apps/web/admin.js'), 'utf8')
       const memberSeg = adminJs.slice(adminJs.indexOf('function renderMemberTabs'), adminJs.indexOf('// 发券表单是每次重画的'))
       const memberHits = (memberSeg.match(/window\.(prompt|confirm|alert)\(/g) || []).length
@@ -2368,7 +2369,7 @@ const main = async () => {
 
     // ===== A5 零读方断言(店主 08-21 终段令义务②):recharge_tiers 旧模型退役,防复活 =====
     {
-      const ROOTA5 = new URL('../../', import.meta.url).pathname
+      const ROOTA5 = localFilePath(new URL('../../', import.meta.url))
       const frontFiles = [
         'apps/web/admin.js', 'apps/web/admin.html', 'apps/web/customer.js', 'apps/web/sign.html',
         'miniprogram/pages/merchant/settlement/index.js', 'miniprogram/pages/stored-value/index.js'
@@ -2390,7 +2391,7 @@ const main = async () => {
 
     // ===== ㊷ 首日四小件机制护栏(2026-08-20 批② 首日):D51 前端在场+五页签+勾选框同行 =====
     {
-      const ROOT42 = new URL('../../', import.meta.url).pathname
+      const ROOT42 = localFilePath(new URL('../../', import.meta.url))
       const adminJs = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
       const adminHtml = readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8')
       const css = readFileSync(join(ROOT42, 'apps/web/styles.css'), 'utf8')

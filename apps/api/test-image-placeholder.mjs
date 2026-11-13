@@ -1,3 +1,4 @@
+import {fileURLToPath as localFilePath} from 'node:url'
 /* 占位零回落 · 全局判据(店主 2026-08-28 六立律)。
 
    **她的原话就是规格**:「只要没有上传过的图片,在图片占位的地方都应该显示一个图片占位,
@@ -323,7 +324,7 @@ check('⑥ 顾客端页面真加载了占位出口(带内容指纹)', /img-place
    自守:扫本文件自身源码,凡 check 名称里出现绝对词的,其条件必须是 === 0 / .length === 0。
    这条能一次咬住这一族,包括以后新写的。 */
 {
-  const selfSrc = readFileSync(new URL(import.meta.url).pathname, 'utf8')
+  const selfSrc = readFileSync(localFilePath(new URL(import.meta.url)), 'utf8')
   /* 绝对词表(02h 自查收窄):「不许减/只许减不许增」是**棘轮**的说法,它名实相符(≤ 就对),
      不能算绝对词;真正的绝对词是宣称"一个都没有"的那些。收窄后这条自守才只咬说谎的。 */
   const ABS = /硬零|不挂账|零残留|一律 0|= 0(?![0-9])|全部落进|逐个必须/

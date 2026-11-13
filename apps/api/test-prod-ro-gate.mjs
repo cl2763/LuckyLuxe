@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {fileURLToPath as localFilePath} from 'node:url'
 /* 生产只读闸判据(店主 2026-09-24 裁:「两次靠自觉都没守住,改机器闸」)
  *
  * 守的是 tools/prod-ro.mjs —— 生产查询的唯一入口。
@@ -46,7 +47,7 @@ ok(!/process\.argv\[2\]|process\.env/.test(buildPayload({ a: 'SELECT 1' })), '�
 console.log('── 反向守:不许有第二条进生产的路 ──')
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-const ROOT = new URL('../../', import.meta.url).pathname
+const ROOT = localFilePath(new URL('../../', import.meta.url))
 const hits = []
 for (const dir of ['tools', 'apps/api', 'apps/web']) {
   let fs2 = []

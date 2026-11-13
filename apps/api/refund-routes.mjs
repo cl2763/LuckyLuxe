@@ -10,7 +10,7 @@
    下次再有人把路由搬走却忘了让扫描器跟上,条数掉下来立刻红。 */
 import { makeActorOf } from './actor-name.mjs'   // J-105 唯一出口
 
-export function createRefundRoutes({ apiError, json, readBody, refundApi, staffScope, usableTimecardsOf, svReversal }) {
+export function createRefundRoutes({ apiError, json, readBody, refundApi, staffScope, usableTimecardsOf, svReversal, db, pricingTransactions }) {
   const actorOf = makeActorOf({ apiError })
   async function route(req, res, ctx) {
     const { path, query, adminSession, requireRefundRight } = ctx
@@ -19,12 +19,15 @@ export function createRefundRoutes({ apiError, json, readBody, refundApi, staffS
     const svRevMatch = path.match(/^\/admin\/stored-value\/txns\/([^/]+)\/reverse$/)
     if (req.method === 'POST' && svRevMatch) {
       requireRefundRight()
-      const r = svReversal.reverseRechargeTxn({
+      const b=await readBody(req),txnId=decodeURIComponent(svRevMatch[1])
+      const txn=db.prepare('SELECT user_id FROM stored_value_transactions WHERE id=? AND tenant_id=?').get(txnId,ctx.tenantId)
+      if(!txn) throw apiError(404,'NOT_FOUND','没有这笔储值流水。')
+      const r = pricingTransactions.run({tenantId:ctx.tenantId,userId:txn.user_id,body:{...b,txnId},admin:adminSession,source:'reversal',execute:()=>svReversal.reverseRechargeTxn({
         txnId: decodeURIComponent(svRevMatch[1]),
         tenantId: ctx.tenantId,
         operator: actorOf(adminSession),   // J-105 第一批:退款落对账,留痕必须是一个人
-        reason: (await readBody(req)).reason   // D122:事由必填,后端硬拦
-      })
+        reason: b.reason   // D122:事由必填,后端硬拦
+      })})
       json(res, 201, r)
       return true
     }
@@ -44,12 +47,12 @@ export function createRefundRoutes({ apiError, json, readBody, refundApi, staffS
     if (req.method === 'POST' && path === '/admin/stored-value/refund') {
       requireRefundRight()
       const b = await readBody(req)
-      json(res, 201, refundApi.refundStoredValue({
+      json(res, 201, pricingTransactions.run({tenantId:ctx.tenantId,userId:String(b.userId||'').trim(),body:b,admin:adminSession,source:'refund',execute:()=>refundApi.refundStoredValue({
         userId: String(b.userId || '').trim(),
         amountCents: b.amountCents ?? (b.amount === undefined ? undefined : Number(b.amount) * 100),
         payChannel: b.payChannel, reason: b.reason, requestId: b.requestId,
         operator: actorOf(adminSession)
-      }))
+      })}))
       return true
     }
     // v1.2 ④ 员工只读「我的客人」:实现在 ./staff-scope.mjs,这里只门禁 + 分发

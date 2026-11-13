@@ -12,7 +12,7 @@ import { requireReason, withReason } from './correction-reason.mjs'
       原两行经 reversal_of 反查标「已冲销」,永久保留。
    ④ 入口:客户档案→账户调整→冲销 tab(储值行与账本行同列一表);两端同批。
    ⑤ 判据:冲销后 四参考数/余额/抽屉/流水标记 全联动断言;变异刀=抽屉不联动→必红。 */
-export function createStoredValueReversal({ db, apiError, insertStoredValueTransaction }) {
+export function createStoredValueReversal({ db, apiError, insertStoredValueTransaction, rechargePairFor }) {
   function reverseRechargeTxn({ txnId, tenantId, operator, reason }) {
     /* 🔴 D122(店主 03c):纠错口一律事由必填(与账本冲销、金额更正同口径) */
     const why = requireReason({ reason }, apiError)
@@ -27,14 +27,16 @@ export function createStoredValueReversal({ db, apiError, insertStoredValueTrans
        🔴 刀A 挨刀时咬出:按 created_at 逐字相等找,两行差 1ms 就静默丢赠送(静默失败器族)——
        加固为 2 秒窗内最近一条,且窗内不得夹另一笔充值(防错认别笔的赠送)。 */
     const winEnd = new Date(new Date(txn.created_at).getTime() + 2000).toISOString()
-    const bonus = db.prepare(`SELECT * FROM stored_value_transactions
+    const linked=rechargePairFor?.(tenantId,txn.id)
+    const bonus = linked ? (linked.bonusId ? db.prepare("SELECT * FROM stored_value_transactions WHERE tenant_id=? AND user_id=? AND id=? AND type='bonus'").get(tenantId,txn.user_id,linked.bonusId) : null) : db.prepare(`SELECT * FROM stored_value_transactions
       WHERE tenant_id = ? AND user_id = ? AND type = 'bonus' AND created_at >= ? AND created_at <= ?
       ORDER BY created_at ASC LIMIT 1`).get(tenantId, txn.user_id, txn.created_at, winEnd)
-    if (bonus && db.prepare(`SELECT 1 FROM stored_value_transactions
+    if (!linked && bonus && db.prepare(`SELECT 1 FROM stored_value_transactions
       WHERE tenant_id = ? AND user_id = ? AND type = 'recharge' AND created_at > ? AND created_at <= ? LIMIT 1`)
       .get(tenantId, txn.user_id, txn.created_at, bonus.created_at)) {
       throw apiError(400, 'BONUS_AMBIGUOUS', '这笔充值与赠送的归属存在歧义(相邻另一笔充值),请在财务页人工核对后处理。')
     }
+    if(linked?.bonusId&&!bonus) throw apiError(409,'BONUS_LINK_MISSING','充值赠金记录不完整，请先核对。')
     /* ② 前置闸(裁定A 08-30f 放宽为「双水位证明」):
        实付余额 ≥ 该笔实付 且 赠送余额 ≥ 该笔赠送 —— 两侧各自足额,证明这笔钱还整个躺在池里,
        冲掉不可能把任何一侧打负;任一侧不足即拒。水位口径=refundFacts 同源(paidRefundable/bonusRemaining)。 */
@@ -50,7 +52,7 @@ export function createStoredValueReversal({ db, apiError, insertStoredValueTrans
     if (paidRefundable < txn.amount_cents || bonusRemaining < (bonus ? bonus.amount_cents : 0)) {
       throw apiError(400, 'CONSUMED_NO_REVERSAL', '余额已不足以证明这笔未消费,请走退卡。')
     }
-    db.exec('BEGIN IMMEDIATE')
+    db.exec('SAVEPOINT reverse_recharge')
     try {
       const rev = insertStoredValueTransaction({
         tenantId, userId: txn.user_id, type: 'reversal',
@@ -69,10 +71,10 @@ export function createStoredValueReversal({ db, apiError, insertStoredValueTrans
           createdBy: operator, reversalOf: bonus.id
         })
       }
-      db.exec('COMMIT')
+      db.exec('RELEASE reverse_recharge')
       return { reversal: rev, bonusReversal: revBonus, reversedAmountCents: txn.amount_cents, reversedBonusCents: bonus ? bonus.amount_cents : 0 }
     } catch (error) {
-      db.exec('ROLLBACK')
+      db.exec('ROLLBACK TO reverse_recharge; RELEASE reverse_recharge')
       throw error
     }
   }
