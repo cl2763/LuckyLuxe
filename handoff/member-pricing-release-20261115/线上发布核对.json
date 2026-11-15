@@ -1,0 +1,83 @@
+{
+  "checkedAt": "2026-11-15T17:33:38+08:00",
+  "liveCommit": "bba130f69857524550735dbc7c647854ec471079",
+  "productionNode": "22.11.0",
+  "deploymentId": "387103b1-1b63-41e3-a916-8ec624cd12de",
+  "deploymentStatus": "SUCCESS",
+  "health": {
+    "ok": true,
+    "demoLoginAllowed": false,
+    "guestIdUnsigned": false,
+    "pendingDatabase": false
+  },
+  "pullRequest": "https://github.com/cl2763/LuckyLuxe/pull/18",
+  "ci": {
+    "pullRequestRun": 43698292834,
+    "mainRun": 43698990226,
+    "both": "success"
+  },
+  "counts": {
+    "users": 674,
+    "bookings": 1246,
+    "settlements": 13,
+    "storedValueTransactions": 27,
+    "migrationRecords": 600,
+    "pendingImportBalances": 414,
+    "activatedImportBalances": 0,
+    "personalDiscounts": 0,
+    "personDocuments": 0
+  },
+  "enabled": [
+    {
+      "tenant_id": "demo-ai",
+      "active": 1,
+      "revision": 1
+    }
+  ],
+  "unchangedBusinessTenants": 7,
+  "postReleaseDataComparison": {
+    "originalTables": 115,
+    "originalRows": 12137,
+    "changedOrMissingOriginalRows": [],
+    "changedOriginalSchema": [],
+    "changedOriginalTriggers": [],
+    "changedOriginalIndexes": [],
+    "additionalRowsInOriginalTables": {
+      "tenant_settings": 1,
+      "user_identities": 1
+    },
+    "integrity": "ok",
+    "newTables": [
+      "booking_checkout_operations",
+      "booking_deposit_cancellations",
+      "booking_deposit_funding",
+      "member_discount_events",
+      "member_document_components",
+      "member_document_coupon_allocations",
+      "member_document_events",
+      "member_document_groups",
+      "member_document_tokens",
+      "member_personal_discounts",
+      "member_pricing_operations",
+      "member_pricing_settings",
+      "member_service_documents",
+      "recharge_package_discounts",
+      "service_price_systems"
+    ]
+  },
+  "webAssetHashesMatch": [
+    "admin.js",
+    "account-adjust.js",
+    "member-sign.js",
+    "member-pricing-editors.js"
+  ],
+  "publicWebAdminAssetMatches": true,
+  "miniProgram": {
+    "developerVersion": "1.4.0",
+    "bundle": "83b8e6acb50f9cec",
+    "uploaded": true,
+    "submittedForReview": false,
+    "published": false
+  },
+  "fullyEnabledForBusiness": false
+}
