@@ -594,7 +594,7 @@ ok 同名不合并
 ok 重复请求返回同一档
 ok 同号先返回本店候选
 ok 明确同号不同人后独立建档
-ok 异常建档不写入 
+ok 异常建档不写入
 ok 异常建档不写入 xxxx
 ok 异常建档不写入 异常
 ok 员工不能独立建档
@@ -1188,7 +1188,7 @@ ok 21 - quote without confirmed time should still be allowed for staff pricing
 ok 22 - booking draft should require confirmed date/time before creating link
 ok 23 - date-only intake should still create a quote request for staff review
 ok 24 - date-only intake should keep date, got 2026-07-05
-ok 25 - date-only intake should not invent booking time, got 
+ok 25 - date-only intake should not invent booking time, got
 ok 26 - date-only intake should not count date/time as fully complete
 ok 27 - date-only confirmed booking should return bookingTimeRequired
 ok 28 - date-only confirmed booking should ask for exact time

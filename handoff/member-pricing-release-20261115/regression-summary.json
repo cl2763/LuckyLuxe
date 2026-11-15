@@ -1,6 +1,6 @@
 {
   "log": "full-regression.log",
-  "sha256": "1295c9cdef75afa73695f5c32b74a8072869029d52b34cbff00c997d8162203e",
+  "sha256": "79c00f13e0e901d736ab8ed3720ce16ab129b0a695ef4202039c331e6a27fc09",
   "exitCode": 0,
   "mainSuites": 213,
   "mainAssertions": 6528,
@@ -16,5 +16,7 @@
     "finance lock migration and repeated startup",
     "full production-mode startup"
   ],
-  "retainedDataRehearsal": "存量升级核对.json"
+  "retainedDataRehearsal": "存量升级核对.json",
+  "rawLogSHA256": "1295c9cdef75afa73695f5c32b74a8072869029d52b34cbff00c997d8162203e",
+  "logNormalization": "Trim trailing whitespace only; original run retained locally"
 }
