@@ -1,77 +1,16 @@
-const api = require('../../../utils/api')
-
+const api=require('../../../utils/api')
 Page({
-  // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
-  onShow() { api.guardMerchant() },
-  data: {
-    id: '',
-    isNew: true,
-    typeIdx: 0,
-    types: [{ k: 'NAIL', label: '美甲' }, { k: 'LASH', label: '美睫' }, { k: 'CARE', label: '护理' }, { k: 'OTHER', label: '其他' }],
-    nameZh: '', nameEn: '', category: '',
-    price: '', duration: '', active: true,
-    saving: false
-  },
-
-  onLoad(opt) {
-    if (opt && opt.id) {
-      this.setData({ id: opt.id, isNew: false })
-      wx.setNavigationBarTitle({ title: '编辑服务' })
-      this.load(opt.id)
-    } else {
-      wx.setNavigationBarTitle({ title: '新增服务' })
-    }
-  },
-
-  async load(id) {
-    try {
-      const r = await api.adminGet('/admin/services')
-      const s = (r.services || []).find((x) => x.id === id)
-      if (!s) { wx.showToast({ title: '未找到', icon: 'none' }); return }
-      const ti = this.data.types.findIndex((t) => t.k === String(s.type || 'NAIL').toUpperCase())
-      this.setData({
-        typeIdx: ti >= 0 ? ti : 0,
-        nameZh: s.nameZh || '', nameEn: s.nameEn || '', category: s.category || '',
-        price: String((s.priceCents || 0) / 100),
-        duration: String(s.durationMin || ''),
-        active: s.isActive !== false
-      })
-    } catch (e) { wx.showToast({ title: '加载失败', icon: 'none' }) }
-  },
-
-  onType(e) { this.setData({ typeIdx: Number(e.detail.value) }) },
-  onZh(e) { this.setData({ nameZh: e.detail.value }) },
-  onEn(e) { this.setData({ nameEn: e.detail.value }) },
-  onCat(e) { this.setData({ category: e.detail.value }) },
-  onPrice(e) { this.setData({ price: e.detail.value }) },
-  onDur(e) { this.setData({ duration: e.detail.value }) },
-  onActive(e) { this.setData({ active: e.detail.value }) },
-
-  async save() {
-    if (this.data.saving) return
-    const { id, isNew, typeIdx, types, nameZh, nameEn, category, price, duration, active } = this.data
-    if (!nameZh.trim()) { wx.showToast({ title: '请输入中文名', icon: 'none' }); return }
-    const p = Number(String(price).replace(/[^\d.]/g, ''))
-    if (!p || p <= 0) { wx.showToast({ title: '请输入有效价格', icon: 'none' }); return }
-    const body = {
-      type: types[typeIdx].k,
-      nameZh: nameZh.trim(),
-      nameEn: (nameEn.trim() || nameZh.trim()),
-      category: category.trim() || '未分类',
-      priceCents: Math.round(p * 100),
-      baseDurationMin: Number(duration) || 120,
-      isActive: active
-    }
-    this.setData({ saving: true })
-    try {
-      if (isNew) await api.adminPost('/admin/services', body)
-      else await api.adminPatch(`/admin/services/${encodeURIComponent(id)}`, body)
-      wx.showToast({ title: '已保存', icon: 'success' })
-      setTimeout(() => wx.navigateBack(), 500)
-    } catch (err) {
-      wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' })
-    } finally {
-      this.setData({ saving: false })
-    }
-  }
+ data:{system:'display',id:'',isNew:true,loading:true,error:'',saving:false,priceUpdate:null,priceValid:false,categories:[],categoryIndex:0,nameZh:'',nameEn:'',duration:'60',active:true,storefront:true,priceMode:'fixed',unitIndex:0,units:[{key:'once',label:'按次'},{key:'per_finger',label:'按指'},{key:'per_session',label:'按疗程'}],itemKind:'main',type:'NAIL',typeIndex:0,types:[{key:'NAIL',label:'美甲'},{key:'LASH',label:'美睫'},{key:'CARE',label:'护理'},{key:'OTHER',label:'其他'}]},
+ onShow(){api.guardMerchant()},
+ onLoad(q){this.setData({id:q.id||'',isNew:!q.id,system:q.system==='settlement'?'settlement':'display'});wx.setNavigationBarTitle({title:this.data.system==='display'?'修改展示价格':'编辑结算价档'});this.load()},
+ async load(){this.setData({loading:true,error:''});try{const [items,cats]=await Promise.all([api.adminGet('/admin/pricing/items'),api.adminGet('/admin/pricing/categories')]);const categories=cats.categories||[],s=(items.items||[]).find(x=>x.id===this.data.id);if(this.data.id&&!s)throw Error('项目不存在，请返回列表重新选择');this._item=s;this.setData({categories,loading:false,...(s?{nameZh:s.nameZh,nameEn:s.nameEn||'',categoryIndex:Math.max(0,categories.findIndex(c=>c.id===s.categoryId)),duration:String(s.baseDurationMin),active:s.isActive,storefront:s.storefront,priceMode:s.priceMode||'fixed',unitIndex:Math.max(0,this.data.units.findIndex(u=>u.key===s.unit)),itemKind:s.itemKind,type:s.type,typeIndex:Math.max(0,this.data.types.findIndex(t=>t.key===s.type))}:{})})}catch(e){this.setData({loading:false,error:e.message||'加载失败'})}},
+ input(e){this.setData({[e.currentTarget.dataset.field]:e.detail.value})},
+ category(e){this.setData({categoryIndex:Number(e.detail.value)})},unit(e){this.setData({unitIndex:Number(e.detail.value)})},
+ cancel(){require('../../../utils/nav').back()},platformType(e){const typeIndex=Number(e.detail.value);this.setData({typeIndex,type:this.data.types[typeIndex].key})},shelf(e){this.setData({storefront:e.detail.value})},active(e){this.setData({active:e.detail.value})},quote(e){this.setData({priceMode:e.detail.value?'quote':'fixed'})},
+ onPrices(e){this.setData({priceUpdate:e.detail.update,priceValid:e.detail.valid})},
+ async save(){if(this.data.saving||this.data.loading)return;const d=this.data;if(!d.nameZh.trim()){this.setData({error:'请输入项目名称'});return}if(!d.priceValid){this.setData({error:'原价必填，请输入有效金额，最多两位小数。'});return}if(!/^\d+$/.test(d.duration)){this.setData({error:'请输入有效服务时长'});return}
+ const body={nameZh:d.nameZh.trim(),nameEn:d.nameEn.trim()||d.nameZh.trim(),categoryId:d.categories[d.categoryIndex]?.id||null,baseDurationMin:Number(d.duration),isActive:d.active,priceSystemUpdate:d.priceUpdate};
+ if(d.system==='display')Object.assign(body,{type:d.type,storefront:d.storefront});
+ if(d.system==='settlement')Object.assign(body,{unit:d.units[d.unitIndex].key,priceMode:d.priceMode,itemKind:d.itemKind,type:d.type,storefront:d.storefront});else if(d.isNew)Object.assign(body,{type:d.type,priceCents:d.priceUpdate.prices.list.priceCents});
+ this.setData({saving:true,error:''});try{const path=d.system==='settlement'?'/admin/pricing/items':'/admin/services';if(d.id)await api.adminPatch(path+'/'+encodeURIComponent(d.id),body);else await api.adminPost(path,body);wx.showToast({title:'已保存',icon:'success'});require('../../../utils/nav').back()}catch(e){this.setData({error:e.message||'保存失败，请重试'})}finally{this.setData({saving:false})}}
 })

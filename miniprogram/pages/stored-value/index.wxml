@@ -1,32 +1,32 @@
+<template name="receipt"><view class="rc-note"><block wx:if="{{r.kind==='recharge'}}"><view>充值回执 · {{r.receiptId}}</view><view>充值已到账</view><view>本金 / 赠金：{{r.principalText}} / {{r.bonusText}}</view></block><view>个人折扣：{{r.beforeText}} → {{r.afterText}}</view><view>办理人：{{r.actor}}</view><view>{{r.statusText}}</view><view wx:if="{{r.kind==='recharge'}}">本笔已到账，核对回执不会再次扣款。</view></view></template>
 <view class="pg {{themeClass}}">
+<member-pricing customer="{{true}}"/>
+
   <view class="hero">
     <view class="row"><text class="hl">储值余额</text><text class="lv" wx:if="{{level}}">{{level}}</text></view>
     <view class="hv">{{balanceText}}</view>
-    <!-- B1-1(店主拍板):储值卡页=充值套餐唯一出口;补件①:按钮不枚举支付方式(租户中立) -->
+
     <view class="charge" bindtap="goMall">去充值 ›</view>
   </view>
 
-  <!-- B3-3/4 代充回执:门店代充到账后的回执卡(金额/渠道/时间);确认=「我看到了」,不确认不影响余额 -->
+
   <block wx:if="{{pendingConfirm.length}}">
     <view class="t2">到账回执 · 待确认</view>
     <view class="card rc" wx:for="{{pendingConfirm}}" wx:key="id">
       <view class="rc-l">
         <view class="pn">门店已为你充值 {{item.amount}}</view>
         <view class="ps">{{item.at}}{{item.channel ? ' · ' + item.channel : ''}}{{item.note ? ' · ' + item.note : ''}}</view>
-        <view class="ps">当前余额见顶部;如金额有出入请联系门店。</view><view wx:if="{{item.giftItems.length}}" class="gift-list">
+        <view class="ps">当前余额见顶部;如金额有出入请联系门店。</view><template wx:if="{{item.discountReceipt}}" is="receipt" data="{{r:item.discountReceipt}}"/><view wx:if="{{item.giftItems.length}}" class="gift-list">
         <view class="gift-title">赠送物品</view>
         <view class="gift-line" wx:for="{{item.giftItems}}" wx:for-item="gift" wx:key="index"><text>{{gift.name}} × {{gift.quantity}}</text><text class="gift-unit">单件价值 {{gift.unitValueText}}</text></view>
         <view class="gift-note">物品领取请联系门店，此清单不代表已领取。</view>
       </view>
       </view>
-      <view class="buy" data-id="{{item.id}}" bindtap="confirmRecharge">确认到账</view>
+      <view class="buy" data-id="{{item.id}}" bindtap="confirmRecharge">确认已核对</view><view class="buy" bindtap="contactStore">联系门店</view>
     </view>
   </block>
 
-  <!-- 🔴 03u:①「购买」原来 bindtap="soon" 而页面**没有 soon 方法** —— 点了什么都不发生。
-       「摆着又不响」是永远错的那第三种,按钮整个拿掉(不换成「即将开放」:
-       线上自助购卡是 S2 的活,做出来再摆按钮)。
-       ② 这一整块是**样例**,只许在演示店出;真店出真空态,不拿假数当内容。 -->
+
   <block wx:if="{{isDemo}}">
     <view class="t2">充值套餐 <text class="demo">示例</text></view>
     <view class="card row sp" wx:for="{{packages}}" wx:key="id">
@@ -37,7 +37,7 @@
   <view class="t2">收支明细</view>
   <view wx:if="{{txns.length}}" class="list">
     <view class="li" wx:for="{{txns}}" wx:key="id">
-      <view class="li-main"><view class="li-t">{{item.title}}<text wx:if="{{item.needsConfirm}}" class="li-unconfirmed">待确认</text></view><view class="li-d">{{item.date}}</view><view wx:if="{{item.giftItems.length}}" class="gift-list">
+      <view class="li-main"><view class="li-t">{{item.title}}<text wx:if="{{item.needsConfirm}}" class="li-unconfirmed">待确认</text></view><view class="li-d">{{item.date}}</view><template wx:if="{{item.discountReceipt}}" is="receipt" data="{{r:item.discountReceipt}}"/><view wx:if="{{item.giftItems.length}}" class="gift-list">
         <view class="gift-title">赠送物品</view>
         <view class="gift-line" wx:for="{{item.giftItems}}" wx:for-item="gift" wx:key="index"><text>{{gift.name}} × {{gift.quantity}}</text><text class="gift-unit">单件价值 {{gift.unitValueText}}</text></view>
         <view class="gift-note">物品领取请联系门店，此清单不代表已领取。</view>

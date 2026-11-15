@@ -1,10 +1,10 @@
-/* 日结(屏 1 下半)+ 金额更正(屏 1b)的**唯一一份实现**。
-   设计图把日结画在「订单页 · 今日台面」网格下方,同时工资试算的「去日结」还要能直达 ——
-   两处渲染同一套逻辑,所以抽成 mixin:两边 Object.assign 进 Page 选项即可,
-   不会出现「改了一边忘了另一边」。
 
-   金额红线:这里不算钱。分成比例是店长填的输入,金额一律由后端算好回传;
-   进度/差额/合计全部照 /admin/daily-close 的返回值显示。 */
+
+
+
+
+
+
 const api = require('./api')
 const { storeToday } = require('./storeclock')
 const { formatMoney, displayOf } = require('./money')
@@ -15,13 +15,13 @@ function shiftDate(d, n) {
   return x.toISOString().slice(0, 10)
 }
 
-// 两处共用的初始 data(展开进各自 Page 的 data)
+
 const dailyCloseData = {
-  // D94 连带(01t):snapViewer 无初值 → 组件收 undefined,控制台属性类型警告×每次渲染;初值只住这一处
+
   snapViewer: { open: false, items: [], index: 0 },
   date: '', loading: true, isToday: true, v: null, open: {}, shares: {},
   correcting: null, newTotal: '', reason: '',
-  // D79 现金手记的表单态(金额/备注只进 data,不回写输入框 —— 敲的过程中不许重画)
+
   noteKind: '', noteKindIndex: 0, noteSignIndex: 0, noteAmount: '', noteText: ''
 }
 
@@ -29,7 +29,7 @@ const dailyCloseMixin = {
 
 
   async loadClose(date) {
-    // D3:当期才叫「今天」,翻到别的日子要叫「返回今天」(两个落点共用这一份 mixin,一处改两处生效)
+
     this.setData({ date, loading: true, isToday: date === storeToday() })
     try {
       const r = await api.adminGet(`/admin/daily-close?date=${encodeURIComponent(date)}`)
@@ -49,7 +49,7 @@ const dailyCloseMixin = {
       this.raw = dc
       this.setData({
         loading: false, open, shares,
-        v: {
+        v: {personDocuments:dc.personDocuments||[],
           date: dc.date,
           confirmed: dc.status === 'confirmed',
           confirmedAt: String(dc.confirmedAt || '').slice(0, 16).replace('T', ' '),
@@ -58,24 +58,24 @@ const dailyCloseMixin = {
           revenue: m(dc.revenueCents),
           canConfirm: dc.canConfirm,
           blockers: (dc.blockers || []).map((b) => b.message),
-          /* D57/D58(店主 08-21):未签单=独立可点行(不再是锁确认钮的死文本)——
-             点行进结算页出码重推;确认钮不被未签单阻塞(未签单只影响它自己)。 */
+
+
           unsigned: (dc.unsignedList || []).map((u) => ({
             id: u.settlementId, code: u.code,
-            // D65-b:金额=头条「本单到店支付」(cashDueCents),价值总额不再裸出
+
             label: `${u.timeText} ${u.customerName} · ${u.code} · 到店支付 ${m(u.cashDueCents)}`
           })),
-          /* D2:跨零点自解释 —— 台面「本日休息」空态要用同一句话(两处自洽);
-             R1:已确认但账目对不上时,这天要自己说出来,不许只显示「已确认」。 */
+
+
           crossDayCount: dc.crossDayCount || 0,
           lateSignNotice: dc.lateSignNotice || '',
           staleClose: Boolean(dc.staleClose),
           confirmedSnapshot: dc.confirmedSnapshot || null,
           pending: (dc.pendingAllocation || []).map((p) => ({
-            // 分成基数=业绩基数(券不扣技师);无券时与应收相等
+
             id: p.settlementId, code: p.code, timeText: p.timeText || '', crossDayNote: p.crossDayNote || '', total: m(p.perfBaseCents === undefined ? p.totalCents : p.perfBaseCents),
             couponNote: p.couponDiscountCents ? '业绩基数(不含券)' : '',
-            // D59 案二提示句(店主 08-22):待分配单含未归属充值=行上明说(句后端唯一)
+
             rechargeNote: p.rechargeUnassignedText || '',
             who: p.servedPersonName || p.customerName || '',
             techLabel: p.technicians.length > 1 ? '双技师' : '单技师',
@@ -87,7 +87,7 @@ const dailyCloseMixin = {
             })),
             hasSnapshot: (dc.settlements.find((s) => s.settlementId === p.settlementId) || {}).hasSnapshot
           })),
-          // 不需要分配、但同样要店长点确认的单(店主 08-09 口径:确认覆盖当日全部单)
+
           awaiting: (dc.awaitingConfirm || []).map((p) => ({
             id: p.settlementId, code: p.code, timeText: p.timeText || '', crossDayNote: p.crossDayNote || '',
             who: p.servedPersonName || p.customerName || '',
@@ -108,16 +108,16 @@ const dailyCloseMixin = {
           })),
           tierChanges: (dc.anomalies?.tierChanges || []).map((a) => `${a.code} ${a.from}→${a.to}`),
           freeRemoval: (dc.anomalies?.freeRemoval || {}).count || 0,
-          /* 业绩调整显式行(裁③:负数+关联单号,与网页日结同源同句)。
-             08-27 起这一族还包含**金额更正**的扣回/补记 —— 标题与正负号都后端给,这里零判断。 */
+
+
           deductTitle: dc.deductListTitle || '',
           deducts: (dc.afterSalesDeductions || []).map((d) => ({
             time: d.timeText || '', tech: d.technicianName, label: d.label, amt: d.amountText || `−${m(d.deductCents)}`
           })),
-          /* 🔴 N-5(店主 08-25 复核):退卡不进损益,但**现金必须扣** ——
-             不扣的话「今天收现 2000、退顾客 400 → 抽屉实际 1600、日结报 2000」,
-             店主晚上数钱对不上,而她不会怀疑退卡,会怀疑店员。句子后端给,这里零计算。 */
-          /* v1.2 ②:收据式 —— 抬头句 + 大数 + 算式 + 脚注,全部后端给(与网页同句) */
+
+
+
+
           drawer: dc.cashDrawer ? {
             title: dc.cashDrawer.title || dc.cashDrawer.label,
             should: dc.cashDrawer.shouldHaveText,
@@ -127,8 +127,8 @@ const dailyCloseMixin = {
             amendNote: dc.cashDrawer.amendNote || '',  // 更正后「营业额 ≠ 抽屉数」的那句解释(后端出句,双端同句)
             splitNote: dc.cashDrawer.splitNote || ''   // 「记一笔」与「现金手记」的分工(店主 08-28 六问的那件,后端出句)
           } : null,
-          /* 🔴 D79(店主 2026-08-28)线下现金腿:买材料的现金、备用金、找零、更正后的现金找补。
-             列表与金额句**全部后端给**(kindLabel / amountText),这里零拼串、零计算 —— 与网页端同源同句。 */
+
+
           notes: dc.cashNotes ? {
             label: dc.cashNotes.label || '现金手记',
             hint: dc.cashNotes.hint || '',
@@ -137,13 +137,13 @@ const dailyCloseMixin = {
               id: it.id, kindLabel: it.kindLabel, note: it.note, amt: it.amountText, isReversal: it.isReversal
             }))
           } : null,
-          // 定金守恒自检红字(后端出句;平=null,整块不渲染)
+
           depositAlert: dc.depositAlert ? dc.depositAlert.text : '',
           headline: (dc.headline || []).map((h) => ({ label: h.label, value: h.value })),
           refundLine: (dc.refunds && dc.refunds.totalCents)
             ? `${dc.refunds.label} · ${dc.refunds.storedCount ? `储值 ${dc.refunds.storedCount} 笔` : ''}${dc.refunds.timecardCount ? ` 次卡 ${dc.refunds.timecardCount} 笔` : ''} 合计 ${m(dc.refunds.totalCents)}`
             : '',
-          // 裁①+§十-7:次卡两条汇总单列(售卡=预收负债/核销=折算计业绩积分)
+
           tcSummary: (() => {
             const t = dc.timecardSummary || {}
             const bits = []
@@ -183,16 +183,17 @@ const dailyCloseMixin = {
       this.loadClose(this.data.date)
     } catch (err) { wx.showToast({ title: (err && err.message) || '分配失败', icon: 'none' }) }
   },
-  /* D68③(店主 08-23 裁):商家端「查看签署单」= 与顾客端**一模一样**的浮层查看器 ——
-     以前点开只出这一张(拿 code 塞排版弹层),多份组的其余份看不到。
-     现在走 GET /admin/settlements/:key/snapshots(与顾客端 payment.sheets 同一出口),
-     整组逐份全列 + 页码 n/N + 左右箭头 + 滑动,组件=components/snapshot-viewer(全仓一份)。
-     mixin 仍是唯一实现点:订单页日结区与日结落地页四个入口同时生效。 */
+
+
+
+
+
   async viewSnapshot(e) {
     const code = e.currentTarget.dataset.code
     if (!code) { wx.showToast({ title: '这单没有签署快照', icon: 'none' }); return }
     try {
       const r = await api.adminGet(`/admin/settlements/${encodeURIComponent(code)}/snapshots`)
+      if(r.memberDocumentGroupId){require('./nav').to('/pages/sign/index?memberGroup='+encodeURIComponent(r.memberDocumentGroupId)+'&merchant=1&archive=1');return}
       const items = (r.sheets || []).filter((sh) => sh.snapshotUrl)
         .map((sh) => ({ code: sh.code, label: sh.label, url: `${api.API_BASE}${sh.snapshotUrl}` }))
       if (!items.length) { wx.showToast({ title: '这单还没有签署快照', icon: 'none' }); return }
@@ -203,13 +204,13 @@ const dailyCloseMixin = {
     }
   },
   closeSnapViewer() { this.setData({ snapViewer: { open: false, items: [], index: 0 } }) }, // D94:设回 null=组件又收 undefined,警告复发
-  // 单据预览卡里的「查看签署原图」冒泡到这里 —— 与日结行同一入口实现(不另开一份)
+
   onPreviewViewSnapshot(e) {
     const code = (e.detail && e.detail.code) || ''
     if (!code) return
     this.viewSnapshot({ currentTarget: { dataset: { code } } })
   },
-  // D57:未签行点开=结算页纯出码模式(递给顾客签/重推签署;mixin 唯一实现,两个日结落点同时生效)
+
   goUnsigned(e) {
     const id = e.currentTarget.dataset.id
     if (!id) return
@@ -220,39 +221,42 @@ const dailyCloseMixin = {
   },
   closePreview() { this.setData({ previewSheet: '' }) },
 
-  // ===== 屏 1b 金额更正 =====
+
   async startCorrect(e) {
     const code = e.currentTarget.dataset.code
     try {
       const r = await api.adminGet(`/settlements/${encodeURIComponent(code)}`)
-      const s = r.settlement
+      let s = r.settlement
+      if(s.serviceDocument){const d=await api.adminGet('/admin/member-pricing/documents/'+encodeURIComponent(s.serviceDocument.id));s={...s,id:d.id,signedAtText:d.signedAtText,memberDocument:true,discountText:d.quote.display?.discountText,totalCents:d.correction.serviceTotalCents,items:d.quote.components.flatMap(c=>c.lines)}}
       const d = displayOf(s)
       const m = (c) => formatMoney(c, d, d.trimZeroDecimals ? 0 : 2)
       this.setData({
         newTotal: String(s.totalCents / 100),
         reason: '',
         correcting: {
-          id: s.id, code: s.code,
+          memberDocument:s.memberDocument,discountText:s.discountText,id: s.id, code: s.code,
           who: s.servedPersonName || '',
           proxy: s.isProxyPaid,
-          signedAt: String(s.signedAt || '').slice(0, 16).replace('T', ' '),
+          signedAt: s.signedAtText||String(s.signedAt || '').slice(0, 16).replace('T', ' '),
           techs: (s.technicians || []).map((t) => `${t.name}(${t.role === 'main' ? '主' : '副'})`).join('/'),
-          items: (s.items || []).map((l) => `${String(l.itemNo).padStart(2, '0')} ${l.name} ${l.isFree ? '免收' : m(l.amountCents)}`),
+          items: (s.items || []).map((l,i) => `${String(l.itemNo||i+1).padStart(2, '0')} ${l.name} ${l.isFree ? '免收' : m(l.amountCents)}`),
           deposit: s.depositDeductCents ? `−${m(s.depositDeductCents)}` : '',
           total: m(s.totalCents)
         }
-      })
+      });if(s.memberDocument)this.previewCorrection()
     } catch (err) { wx.showToast({ title: (err && err.message) || '读不到这张单', icon: 'none' }) }
   },
   cancelCorrect() { this.setData({ correcting: null }) },
-  onNewTotal(e) { this.setData({ newTotal: e.detail.value }) },
+  onNewTotal(e) { this.setData({ newTotal: e.detail.value });if(this.data.correcting?.memberDocument)this.previewCorrection() },
+  previewCorrection(){clearTimeout(this._amendTimer);const seq=this._amendSeq=(this._amendSeq||0)+1,id=this.data.correcting?.id;this.setData({amendPreview:null,amendPreviewText:'正在核对更正后的储值变化…'});this._amendTimer=setTimeout(async()=>{const raw=String(this.data.newTotal??'').trim();if(!/^\d+(?:\.\d{1,2})?$/.test(raw)||Number(raw)>1000000){this.setData({amendPreviewText:'请输入有效金额，最多两位小数'});return}const serviceTotalCents=Math.round(Number(raw)*100);try{const r=await api.adminPost('/admin/member-pricing/documents/'+encodeURIComponent(id)+'/amend-preview',{serviceTotalCents});if(seq!==this._amendSeq||id!==this.data.correcting?.id)return;if(!r.reviewHash)throw Error('未取得更正确认信息');this.setData({amendPreview:{...r,serviceTotalCents},amendPreviewText:r.balanceEffectText})}catch(e){if(seq===this._amendSeq&&id===this.data.correcting?.id)this.setData({amendPreviewText:(e.message||'预览失败')+'；请重新核对后再提交'})}},300)},
   onReason(e) { this.setData({ reason: e.detail.value }) },
   async submitCorrect() {
     const reason = (this.data.reason || '').trim()
     if (!reason) { wx.showToast({ title: '原因必填', icon: 'none' }); return }
-    const cents = Math.max(0, Math.round(Number(String(this.data.newTotal).replace(/[^\d.]/g, '')) * 100) || 0)
+    const raw=String(this.data.newTotal??'').trim();if(!/^\d+(?:\.\d{1,2})?$/.test(raw)||Number(raw)>1000000){wx.showToast({title:'请输入有效金额，最多两位小数',icon:'none'});return}const cents=Math.round(Number(raw)*100)
+    if(this.data.correcting.memberDocument&&(!this.data.amendPreview||this.data.amendPreview.serviceTotalCents!==cents)){wx.showToast({title:'请先核对储值变化预览',icon:'none'});return}
     try {
-      const r = await api.adminPost(`/admin/settlements/${encodeURIComponent(this.data.correcting.id)}/amend`, { totalCents: cents, reason })
+      const r = await api.adminPost(this.data.correcting.memberDocument?'/admin/member-pricing/documents/'+encodeURIComponent(this.data.correcting.id)+'/amend':`/admin/settlements/${encodeURIComponent(this.data.correcting.id)}/amend`, { [this.data.correcting.memberDocument?'serviceTotalCents':'totalCents']: cents, reason,...(this.data.correcting.memberDocument?{reviewHash:this.data.amendPreview.reviewHash}:{}) })
       wx.showToast({ title: r.autoBalanceAdjustCents ? '已更正,储值差额已自动补配' : '已更正,原签署单未改动', icon: 'none', duration: 2400 })
       this.setData({ correcting: null })
       this.loadClose(this.data.date)
@@ -266,9 +270,9 @@ const dailyCloseMixin = {
       this.loadClose(this.data.date)
     } catch (e) { wx.showToast({ title: (e && e.message) || '确认失败', icon: 'none' }) }
   },
-  /* D79 手记入口(商家端)。金额框在 wxml 里是 type=digit,**敲的过程中不重画**
-     (只把值收进 data,不回写、不格式化)—— 店主 08-27 立的那条同族。
-     备注前端提示、**后端才是最终闸**:接口直调同样会被 NOTE_REQUIRED 拦。 */
+
+
+
   onNoteKind(e) { this.setData({ noteKind: (this.data.v.notes.kinds[e.detail.value] || {}).kind || '', noteKindIndex: Number(e.detail.value) }) },
   onNoteSign(e) { this.setData({ noteSignIndex: Number(e.detail.value) }) },
   onNoteAmount(e) { this.data.noteAmount = e.detail.value },
@@ -291,8 +295,8 @@ const dailyCloseMixin = {
   async reverseCashNote(e) {
     const id = e.currentTarget.dataset.id
     try {
-      /* D122(店主 03c):事由必填 —— 与网页端同一口径,后端也硬拦。
-         小程序用 showModal 的 editable 取字;取消或空则不发请求。 */
+
+
       const r = await new Promise((ok) => wx.showModal({
         title: '冲销事由(必填)', editable: true, placeholderText: '写明为什么冲销,会进账本备注',
         success: (m) => ok(m.confirm ? String(m.content || '').trim() : null), fail: () => ok(null)

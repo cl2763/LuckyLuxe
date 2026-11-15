@@ -75,7 +75,7 @@ Page({
         loading: false,
         note: '',
         v: {
-          month: p.month,
+          details:p.memberPricingDetails||null, month: p.month,
           perf: m(p.hero.perfCents),
           orderCount: p.hero.orderCount,
           daysLeft: p.hero.daysLeft,

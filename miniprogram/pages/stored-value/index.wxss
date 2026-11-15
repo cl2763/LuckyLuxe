@@ -33,3 +33,5 @@
 .gift-list{border-top:1rpx solid var(--line);padding-top:18rpx;margin-top:18rpx;min-width:0;width:100%;color:var(--ink)}.gift-title{font-size:25rpx;font-weight:700}.gift-line{display:flex;justify-content:space-between;gap:12rpx;flex-wrap:wrap;margin-top:10rpx;font-size:24rpx;line-height:1.5;word-break:break-all}.gift-unit,.gift-note{color:var(--sub);font-size:22rpx}.gift-note{margin-top:12rpx;line-height:1.6}
 
 .li{gap:18rpx;align-items:flex-start}.li-v{flex:none;white-space:nowrap}.rc{flex-wrap:wrap}.rc-l{flex-basis:100%}.buy{margin-left:auto}.li-t{overflow-wrap:break-word}
+
+.buy{min-height:72rpx;box-sizing:border-box;display:flex;align-items:center;justify-content:center}

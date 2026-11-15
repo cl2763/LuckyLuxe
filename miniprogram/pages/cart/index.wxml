@@ -1,4 +1,5 @@
 <view class="page cart-page {{themeClass}}">
+<view class="section-note">{{lang==='en'?'Prices shown are for reference. Personal discounts and eligible offers are confirmed on the service document.':'展示价格用于预约参考；个人折扣及符合条件的优惠将在服务确认单中核对。'}}</view>
   <block wx:if="{{cart.length}}">
     <block wx:for="{{cart}}" wx:key="_id">
       <view class="cart-card card">
@@ -23,7 +24,7 @@
               </view>
               <view class="cart-meta">
                 <text>{{t.deposit}} <text class="price" wx:if="{{item.service.depositAmount !== null}}">{{cur.p}}{{cur.s}}{{item.service.depositAmount}}</text><text class="price" wx:else>—</text></text>
-                <text>{{t.servicePrice}} {{cur.p}}{{cur.s}}{{item.service.price}}</text>
+                <text>{{lang==='en'?'Service reference price':'服务参考价'}} {{cur.p}}{{cur.s}}{{item.service.price}}</text>
               </view>
             </view>
           </view>

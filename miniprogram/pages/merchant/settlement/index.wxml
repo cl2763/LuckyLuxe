@@ -1,4 +1,5 @@
 <view class="pg {{themeClass}}">
+<view wx:if="{{pendingMutation}}" class="card"><view>上次开单结果待核实</view><view>项目、充值和折扣已保留，请先查询或重试原操作。</view><button disabled="{{submitting}}" bindtap="mpRecover">查询／重试原操作</button></view><block wx:else>
   <view class="hd">
     <text class="t">结算开单</text>
     <!-- 屏 S2:顾客行 = 姓名 + 脱敏手机号 + 「新客·未绑定」徽标(文案后端下发) -->
@@ -11,15 +12,15 @@
   </view>
 
   <!-- qrOnly 纯出码模式不加载价目表 -->
-  <view wx:if="{{!ready && !qrOnly}}" class="loading">{{bootError ? '结算资料加载失败：' + bootError : '正在读取价目、卡项与顾客权益，请稍候…'}}</view>
-  <button wx:if="{{!ready && bootError && !qrOnly}}" class="retry-boot" bindtap="retryBoot">重新加载</button>
+  <view wx:if="{{!ready && !qrOnly}}" class="card"><view class="loading">{{bootError ? '结算资料加载失败：' + bootError : '正在读取价目、卡项与顾客权益，请稍候…'}}</view><view wx:if="{{bootError}}" class="mp-add-actions"><button class="retry-boot" bindtap="retryBoot">重新加载</button><button class="ghost" bindtap="mpReturnOrders">返回订单</button></view></view>
 
-  <block wx:else>
+  <block wx:if="{{ready || qrOnly}}">
+    <view wx:if="{{pricingConfig.active && memberPricing && !memberDocuments.length}}" class="card"><view class="ch">会员资格与个人折扣</view><view>{{memberPricing.eligibilityText}} · {{memberPricing.discountText}}</view><view class="hint">{{memberPricing.statusText}}</view></view>
     <!-- ═══ 组内六件套 × N(图 v2.2 屏1/屏2):每个服务项目一组,这组做什么、谁做、给谁做,一张卡说清 ═══ -->
-    <block wx:for="{{groups}}" wx:for-item="grp" wx:for-index="gi" wx:key="key">
+    <block wx:if="{{!memberDocuments.length}}"><block wx:for="{{people}}" wx:for-item="person" wx:key="key"><view class="{{pricingConfig.active?'mp-person':''}}"><view wx:if="{{pricingConfig.active}}" class="mp-person-head"><text class="hint">{{person.self?'本人 · 卡主':'被服务者 · 共卡'}}</text><view class="ch">{{person.self?customerName:person.name||'请填写被服务者'}}</view><input wx:if="{{!person.self}}" class="in full" maxlength="40" placeholder="填写被服务者姓名" value="{{person.name}}" data-person="{{person.key}}" bindinput="mpPersonName"/><view class="hint">此人的所有项目合为一张服务单</view></view><block wx:for="{{person.groups}}" wx:for-item="grp" wx:key="key">
 
       <!-- 收起态摘要行(屏2 上半) -->
-      <view wx:if="{{grp.collapsed}}" class="card grpcard dim" data-g="{{gi}}" bindtap="gToggleCollapse">
+      <view wx:if="{{grp.collapsed}}" class="card grpcard dim" data-g="{{grp.index}}" bindtap="gToggleCollapse">
         <view class="ch">服务项目 {{grp.label}} · {{grp.mainName || '(未选)'}}{{grp.techLine ? ' · ' + grp.techLine : ''}} <text class="hint">展开 ▸</text></view>
         <view class="grpsum">{{grp.summary}}</view>
       </view>
@@ -27,43 +28,43 @@
       <!-- 展开态:六件套 -->
       <view wx:else class="card grpcard">
         <view class="ch">服务项目 {{grp.label}}
-          <text wx:if="{{gi > 0}}" class="grpx" data-g="{{gi}}" catchtap="removeGroup">✕ 移除此项目</text>
-          <text wx:elif="{{groups.length > 1}}" class="hint" data-g="{{gi}}" catchtap="gToggleCollapse">收起 ▾</text>
+          <text wx:if="{{grp.index > 0}}" class="grpx" data-g="{{grp.index}}" catchtap="removeGroup">✕ 移除此项目</text>
+          <text wx:elif="{{groups.length > 1}}" class="hint" data-g="{{grp.index}}" catchtap="gToggleCollapse">收起 ▾</text>
         </view>
 
         <!-- 拍板(店主 08-21):次卡=独立消费不叠优惠——次卡组隐藏价格体系整排(折算价/套餐价与档位无关) -->
         <block wx:if="{{grp.catId !== '__timecard'}}">
           <view class="sec">价格体系(本组独立) <text class="hint">{{grp.tierChanged ? '已改档，将留痕' : '默认按会员判定'}}</text></view>
           <view class="chiprow">
-            <view class="chip {{grp.tierKey === it.key ? 'on' : ''}}" wx:for="{{tiers}}" wx:for-item="it" wx:key="key" data-g="{{gi}}" data-k="{{it.key}}" bindtap="gPickTier">{{it.label}}</view>
+            <view class="chip {{grp.tierKey === it.key ? 'on' : ''}}" wx:for="{{tiers}}" wx:for-item="it" wx:key="key" data-g="{{grp.index}}" data-k="{{it.key}}" bindtap="gPickTier">{{it.label}}</view>
           </view>
         </block>
         <view wx:else class="sec">次卡为独立消费 <text class="hint">按折算价/套餐价,不叠加会员价与优惠</text></view>
 
         <view class="sec">服务项目(单选自动替换)</view>
         <scroll-view class="cattabs" scroll-x>
-          <view class="chip {{grp.catId === c.id ? 'on' : ''}}" wx:for="{{cats}}" wx:for-item="c" wx:key="id" data-g="{{gi}}" data-id="{{c.id}}" bindtap="gPickCat">{{c.name}}<text wx:if="{{c.badge}}" class="tcbadge">{{c.badge}}</text></view>
+          <view class="chip {{grp.catId === c.id ? 'on' : ''}}" wx:for="{{cats}}" wx:for-item="c" wx:key="id" data-g="{{grp.index}}" data-id="{{c.id}}" bindtap="gPickCat">{{c.name}}<text wx:if="{{c.badge}}" class="tcbadge">{{c.badge}}</text></view>
         </scroll-view>
         <!-- B1 次卡大类(图 §四 屏1):卡列表(label 后端句;过期置灰点击拦)→组内选项目→金额=折算单价(后端算) -->
         <block wx:if="{{grp.catId === '__timecard'}}">
-          <view class="item tccard {{it.on ? '' : ''}} {{!it.redeemable ? 'tcdead' : ''}}" wx:for="{{grp.tcCards}}" wx:for-item="it" wx:key="id" data-g="{{gi}}" data-id="{{it.id}}" bindtap="gPickTimecard">
+          <view class="item tccard {{it.on ? '' : ''}} {{!it.redeemable ? 'tcdead' : ''}}" wx:for="{{grp.tcCards}}" wx:for-item="it" wx:key="id" data-g="{{grp.index}}" data-id="{{it.id}}" bindtap="gPickTimecard">
             <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
             <view class="iname">{{it.label}}<text wx:if="{{it.expired}}" class="tcexp">已过期</text></view>
           </view>
           <!-- B1-6 现场购卡入口(图 §四 屏1:顾客没卡?当场买当场用):选套餐→组内选项目→一次签署分行 -->
           <view wx:if="{{grp.tcPkgs.length}}" class="sec">＋ 现场购卡(顾客没卡?当场买当场用)</view>
-          <view class="item tccard {{it.on ? '' : ''}}" wx:if="{{grp.tcPkgs.length}}" wx:for="{{grp.tcPkgs}}" wx:for-item="it" wx:key="id" data-g="{{gi}}" data-id="{{it.id}}" bindtap="gPickPurchasePkg">
+          <view class="item tccard {{it.on ? '' : ''}}" wx:if="{{grp.tcPkgs.length}}" wx:for="{{grp.tcPkgs}}" wx:for-item="it" wx:key="id" data-g="{{grp.index}}" data-id="{{it.id}}" bindtap="gPickPurchasePkg">
             <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
             <view class="iname">{{it.label}}</view>
           </view>
           <view wx:if="{{grp.tcMode}}" class="sec">本次核销项目({{grp.tcMode === 'purchase' ? '新卡' : '卡'}}关联组内选)</view>
           <scroll-view wx:if="{{grp.tcMode}}" class="cattabs" scroll-x>
-            <view class="chip {{s.on ? 'on' : ''}}" wx:for="{{grp.tcServices}}" wx:for-item="s" wx:key="id" data-g="{{gi}}" data-id="{{s.id}}" bindtap="gPickTcService">{{s.name}}</view>
+            <view class="chip {{s.on ? 'on' : ''}}" wx:for="{{grp.tcServices}}" wx:for-item="s" wx:key="id" data-g="{{grp.index}}" data-id="{{s.id}}" bindtap="gPickTcService">{{s.name}}</view>
           </scroll-view>
           <view wx:if="{{grp.tcMode && !grp.tcServices.length}}" class="empty">卡关联组内暂无在售项目</view>
           <view wx:if="{{grp.tcMode && grp.mainName}}" class="grppicked">本组:{{grp.mainName}}(金额=折算单价,签字{{grp.tcMode === 'purchase' ? '购卡+扣第 1 次' : '扣一次'}})</view>
         </block>
-        <view class="item" wx:if="{{grp.catId !== '__timecard'}}" wx:for="{{grp.mainItems}}" wx:for-item="it" wx:key="id" data-g="{{gi}}" data-id="{{it.id}}" bindtap="gToggleMain">
+        <view class="item" wx:if="{{grp.catId !== '__timecard'}}" wx:for="{{grp.mainItems}}" wx:for-item="it" wx:key="id" data-g="{{grp.index}}" data-id="{{it.id}}" bindtap="gToggleMain">
           <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
           <view class="iname">{{it.name}}</view>
           <view class="pr">
@@ -78,13 +79,13 @@
         <block wx:for="{{grp.addonGroups}}" wx:for-item="ag" wx:key="title">
           <view class="gh">{{ag.title}}</view>
           <view class="item" wx:for="{{ag.items}}" wx:for-item="it" wx:key="id"
-                data-g="{{gi}}" data-id="{{it.id}}" bindtap="{{it.perFinger ? '' : 'gToggleAddon'}}">
+                data-g="{{grp.index}}" data-id="{{it.id}}" bindtap="{{it.perFinger ? '' : 'gToggleAddon'}}">
             <block wx:if="{{it.perFinger}}">
               <view class="iname wide">{{it.name}}</view>
               <view class="stepper">
-                <view class="sb" data-g="{{gi}}" data-id="{{it.id}}" data-d="-1" catchtap="gStepQty">−</view>
+                <view class="sb" data-g="{{grp.index}}" data-id="{{it.id}}" data-d="-1" catchtap="gStepQty">−</view>
                 <text class="qn">{{it.qty}} 指</text>
-                <view class="sb" data-g="{{gi}}" data-id="{{it.id}}" data-d="1" catchtap="gStepQty">＋</view>
+                <view class="sb" data-g="{{grp.index}}" data-id="{{it.id}}" data-d="1" catchtap="gStepQty">＋</view>
               </view>
             </block>
             <block wx:else>
@@ -98,20 +99,21 @@
           </view>
         </block>
 
+        <view wx:for="{{grp.quoteInputs}}" wx:for-item="quoteItem" wx:key="id" class="inputline"><text>{{quoteItem.name}} · 本次原价</text><input class="in amt" type="digit" value="{{quoteItem.value}}" data-g="{{grp.index}}" data-id="{{quoteItem.id}}" bindinput="mpQuote" placeholder="原价必填"/></view>
         <view class="sec">自选填写行(本组) <text class="hint">价目表外项目</text></view>
         <view class="inputline">
-          <input class="in" placeholder="项目名称（例：钻球）" value="{{grp.customName}}" data-g="{{gi}}" bindinput="gCustomName" />
-          <input class="in amt" placeholder="金额" type="digit" value="{{grp.customAmount}}" data-g="{{gi}}" bindinput="gCustomAmount" />
-          <view class="addbtn" data-g="{{gi}}" bindtap="gAddCustom">＋添加</view>
+          <input class="in" placeholder="项目名称（例：钻球）" value="{{grp.customName}}" data-g="{{grp.index}}" bindinput="gCustomName" />
+          <input class="in amt" placeholder="金额" type="digit" value="{{grp.customAmount}}" data-g="{{grp.index}}" bindinput="gCustomAmount" />
+          <view class="addbtn" data-g="{{grp.index}}" bindtap="gAddCustom">＋添加</view>
         </view>
-        <view class="cst" wx:for="{{grp.customItems}}" wx:for-item="c" wx:key="name" wx:for-index="ci" data-g="{{gi}}" data-i="{{ci}}" bindtap="gRemoveCustom">
+        <view class="cst" wx:for="{{grp.customItems}}" wx:for-item="c" wx:key="name" wx:for-index="ci" data-g="{{grp.index}}" data-i="{{ci}}" bindtap="gRemoveCustom">
           <text>{{c.name}}</text>
           <view class="cst-r"><text class="cst-amt">{{c.amountText}}</text><text class="del">移除</text></view>
         </view>
 
         <view class="sec">本单技师(本组,1–2 位) <text class="hint">双技师分成由店长日结核定</text></view>
         <view class="roster">
-          <view class="chip {{grp.selectedTechs[0] === t.id || grp.selectedTechs[1] === t.id ? 'on' : ''}}" wx:for="{{roster}}" wx:for-item="t" wx:key="id" data-g="{{gi}}" data-id="{{t.id}}" bindtap="gToggleTech">
+          <view class="chip {{grp.selectedTechs[0] === t.id || grp.selectedTechs[1] === t.id ? 'on' : ''}}" wx:for="{{roster}}" wx:for-item="t" wx:key="id" data-g="{{grp.index}}" data-id="{{t.id}}" bindtap="gToggleTech">
             {{t.name}}<text wx:if="{{t.title}}" class="r">{{t.title}}</text>
           </view>
         </view>
@@ -123,20 +125,23 @@
           <view class="techrow" wx:for="{{grp.techRows}}" wx:for-item="tr" wx:key="id">
             <view class="tn">{{tr.name}}</view>
             <view class="minichips">
-              <view class="mchip {{c.on ? 'on' : ''}}" wx:for="{{tr.chips}}" wx:for-item="c" wx:key="no" data-g="{{gi}}" data-tech="{{tr.id}}" data-no="{{c.no}}" catchtap="gToggleTechItem">{{c.label}}</view>
+              <view class="mchip {{c.on ? 'on' : ''}}" wx:for="{{tr.chips}}" wx:for-item="c" wx:key="no" data-g="{{grp.index}}" data-tech="{{tr.id}}" data-no="{{c.no}}" catchtap="gToggleTechItem">{{c.label}}</view>
             </view>
           </view>
           <view class="hint">每人点自己做的编号,可两人都点=共做;分成金额店长日结核定,此处只记录</view>
         </block>
 
-        <view class="sec">被服务者(本组) <text class="hint">朋友不建档:填称呼即可,单据仍推卡主签</text></view>
-        <input class="in full" placeholder="留空=本人；朋友填称呼" value="{{grp.servedPersonName}}" data-g="{{gi}}" bindinput="gServedName" />
+        <view wx:if="{{!pricingConfig.active}}" class="sec">被服务者(本组) <text class="hint">朋友不建档:填称呼即可,单据仍推卡主签</text></view>
+        <input wx:if="{{!pricingConfig.active}}" class="in full" placeholder="留空=本人；朋友填称呼" value="{{grp.servedPersonName}}" data-g="{{grp.index}}" bindinput="gServedName" />
       </view>
 
       <!-- 「＋添加第二个服务项目」在组①末尾之后(合同规则④) -->
-      <view wx:if="{{gi === groups.length - 1}}" class="addmain" bindtap="addGroup">＋ 添加第二个服务项目</view>
+      <view wx:if="{{!pricingConfig.active && grp.index === groups.length - 1}}" class="addmain" bindtap="addGroup">＋ 添加第二个服务项目</view>
+    </block><view wx:if="{{pricingConfig.active}}" class="mp-add-actions"><button class="ghost" data-person="{{person.key}}" bindtap="mpAddProject">＋ 为{{person.self?customerName:person.name||'此人'}}新增项目</button><button class="ghost" bindtap="mpAddPerson">＋ 新增被服务者</button></view></view></block>
     </block>
+    <view wx:if="{{memberDocuments.length}}" class="card"><view class="ch">本次服务单 · 共{{memberDocuments.length}}张</view><view wx:for="{{memberDocuments}}" wx:key="id" class="mp-batch-row"><view><text>{{item.personName}}</text><view class="hint">{{item.itemsText}}</view><view class="hint">{{item.quote.display.discountText}}</view><view wx:if="{{item.quote.rechargeCents > 0}}" class="hint">{{item.rechargeText}}</view><view wx:if="{{item.quote.rechargeCents > 0}}" class="hint">本次充值折扣 {{item.quote.display.discountChangeText}}</view></view><view><text>{{item.correction.amountText}}</text><view>{{item.statusText}}</view></view></view><view class="hint">{{batchHint}}</view><view class="hint">{{deliveryStatus}}</view><view class="mp-add-actions"><button class="primary" loading="{{sending}}" disabled="{{sending || !pendingDocuments}}" bindtap="mpDeliver">推送本人签署</button><button class="ghost" bindtap="mpLocalSign">在本机签署</button></view><button class="ghost" bindtap="mpRecheck">价格或权益有变化？重新核对待签单</button></view>
 
+    <block wx:if="{{!memberDocuments.length}}">
     <!-- ═══ 单级四件(图 v2.2 屏3):整单一份,在所有组之后 ═══ -->
 
     <view class="card">
@@ -261,8 +266,8 @@
 
     <view class="cta {{submitting ? 'ing' : ''}}" hover-class="tap-feedback" bindtap="submit">{{submitting ? '提交中…' : ctaText}}</view>
 
-    <view class="foot">金额全部由后端计价引擎算出，本页不做任何金额运算</view>
-  </block>
+    <view class="foot">请核对服务、折扣和支付明细。顾客签署后，充值与扣款一起生效。</view>
+  </block></block>
 
   <!-- B3-1 随单充值面板(挂单随签:只挂草稿,签字那一刻才入账)—— 浮层放顶层闸门外(护栏) -->
   <view wx:if="{{rvPanel}}" class="qmask" bindtap="closeRecharge"></view>
@@ -278,7 +283,8 @@
     <view class="sec">或手输金额(无赠送)</view>
     <input class="in full" type="digit" placeholder="充值金额" value="{{rvPanel.amount}}" bindinput="rvAmountInput" />
     <view class="rvnote">挂到本单一起签:签字那一刻充值才入账、随即抵扣本单,签署单上分行列明「充值实收 / 本单抵扣 / 充后余额」。未签退出=什么都没发生。</view>
-    <view class="ds-confirm" bindtap="rvConfirm">挂到本单(签字生效)</view>
+    <discount-wheel wx:if="{{pricingConfig.active}}" value="{{rvPanel.rateBps}}" bindchange="mpRate"/>
+<view class="ds-confirm" bindtap="rvConfirm">挂到本单(签字生效)</view>
     <view class="rvlink center" wx:if="{{rvDraft}}" bindtap="rvRemove">移除本单充值</view>
   </view>
 
@@ -327,4 +333,4 @@
     </block>
     <view wx:else class="qhandtip">新客只有扫码一条签署路 —— 扫码签署会自动建立档案绑定</view>
   </view>
-</view>
+</block></view>

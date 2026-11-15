@@ -1,3 +1,5 @@
+import {memberDiscountHistoryDisplay} from './member-discount-history-display.mjs'
+import {discountLabel} from './member-discount-input.mjs'
 /** Two independent price systems and tenant-scoped personal member discounts.
  * New tables only: existing prices, balances, ledgers and signed records are not migrated.
  * Rates are basis points of the original price: 8000 = 八折 (80% payable).
@@ -44,7 +46,7 @@ export function ensureMemberPricingSchema(db) {
       BEGIN SELECT RAISE(ABORT,'discount history is immutable'); END;
   `)
 }
-export function createMemberPricingPolicy({db, apiError, isMemberOf, getMembershipConfig, balanceOf, clock = () => new Date().toISOString()}) {
+export function createMemberPricingPolicy({db, apiError, isMemberOf, getMembershipConfig, balanceOf, formatCreatedAt = value => value, clock = () => new Date().toISOString()}) {
   const fail = (status, code, message) => { throw apiError(status, code, message) }
   const objectInput=v=>{if(!v||typeof v!=='object'||Array.isArray(v))fail(400,'INVALID_PRICING_VALUE','价格设置格式无效。')}
   const integer = (v, max, label) => {
@@ -130,7 +132,7 @@ export function createMemberPricingPolicy({db, apiError, isMemberOf, getMembersh
     user(tid,uid)
     const r=db.prepare('SELECT * FROM member_personal_discounts WHERE tenant_id=? AND user_id=?').get(tid,uid)
     const eligible=config(tid).membershipEnabled && isMemberOf(uid,tid)
-    return {userId:uid,rateBps:r?.rate_bps??null,revision:r?.revision||0,eligible,effectiveRateBps:eligible?(r?.rate_bps??null):null,status:!eligible?'ineligible':r?.rate_bps==null?'default':'active',balanceCents:balanceOf(uid,tid)}
+    return {copyEn:{eligibilityText:eligible?'Active':'Currently ineligible',discountText:r?.rate_bps==null?'Store default member price':r.rate_bps===10000?'No discount':`${((10000-r.rate_bps)/100).toFixed(0)}% off · Pay ${(r.rate_bps/100).toFixed(0)}%`,statusText:!eligible?'Personal discount is paused. It is available again when membership is restored.':r?.rate_bps==null?'No personal discount set. Store default member prices apply.':'Your personal discount applies to all chargeable services.'},active:config(tid).active,eligibilityText:eligible?'有效':'当前不具备会员资格',discountText:discountLabel(r?.rate_bps??null),statusText:!eligible?'个人折扣暂停使用；资格恢复后按已记录折扣结算。':r?.rate_bps==null?'尚未设置个人折扣，按门店默认会员价结算。':'所有收费服务按本人折扣结算。',userId:uid,rateBps:r?.rate_bps??null,revision:r?.revision||0,eligible,effectiveRateBps:eligible?(r?.rate_bps??null):null,status:!eligible?'ineligible':r?.rate_bps==null?'default':'active',balanceCents:balanceOf(uid,tid)}
   }
   function setDiscount(tid,uid,input,{actor,source='owner',sourceId,role}) {
     objectInput(input)
@@ -169,6 +171,6 @@ export function createMemberPricingPolicy({db, apiError, isMemberOf, getMembersh
     if(!write.changes)fail(409,'PRICING_CHANGED','套餐折扣已更新，请刷新后重试。')
     return packageDiscount(tid,id)
   }
-  function history(tid,uid) {user(tid,uid);return db.prepare('SELECT * FROM member_discount_events WHERE tenant_id=? AND user_id=? ORDER BY revision DESC LIMIT 100').all(tid,uid)}
+  function history(tid,uid) {user(tid,uid);return db.prepare('SELECT * FROM member_discount_events WHERE tenant_id=? AND user_id=? ORDER BY revision DESC LIMIT 100').all(tid,uid).map(event=>({...memberDiscountHistoryDisplay(db,event),createdText:formatCreatedAt(event.created_at,tid)}))}
   return {config,setConfig,prices,setPrices,publicPrices,discount,setDiscount,history,packageDiscount,setPackageDiscount,rate,revision,service,getMembershipConfig}
 }

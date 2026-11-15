@@ -1,0 +1,4455 @@
+{
+  "documents": [
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 19998,
+        "amountText": "CAD $199.98"
+      },
+      "id": "5d5f88d3-1c45-4fe8-895e-d440e940d79c",
+      "groupId": "sgrp_mwgykck8_15xv60",
+      "status": "pending_sign",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "d23f256fd11e99ba40621bbdb4812ebc67d75c1fb358a63c359d4a61a70a13bb",
+      "quote": {
+        "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+        "name": "林女士（合成验收）",
+        "componentIndexes": [
+          2
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 20200,
+        "subtotalCents": 19998,
+        "tierDiscountCents": 202,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 202,
+        "totalCents": 19998,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": "2ff799c7-1717-43b2-8ffe-fcb36201e254",
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 33704,
+        "expectedBalanceAfterCents": 13706,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $202.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $2.02"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $199.98"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $337.04"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $137.06"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgykck9_f32he0",
+          "code": "QA-20261114-X9I6",
+          "status": "pending_sign",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 39996,
+        "amountText": "CAD $399.96"
+      },
+      "id": "2872e952-8f6b-421d-90a5-e18ec15658f4",
+      "groupId": "sgrp_mwgykck8_15xv60",
+      "status": "pending_sign",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "self",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "2e362ff33c814d309f24e1a77bbeb060dbb400dd5f6c554ca8cf38e320764169",
+      "quote": {
+        "beneficiaryKey": "self",
+        "name": "",
+        "componentIndexes": [
+          0,
+          1
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 40400,
+        "subtotalCents": 39996,
+        "tierDiscountCents": 404,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 404,
+        "totalCents": 39996,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          },
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": "2ff799c7-1717-43b2-8ffe-fcb36201e254",
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 73700,
+        "expectedBalanceAfterCents": 33704,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            },
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $404.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $4.04"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $399.96"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $737.00"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $337.04"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgykck8_k9msuk",
+          "code": "QA-20261114-LBMM",
+          "status": "pending_sign",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        },
+        {
+          "id": "stl_mwgykck8_d2qv4i",
+          "code": "QA-20261114-SNPZ",
+          "status": "pending_sign",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 19998,
+        "amountText": "CAD $199.98"
+      },
+      "id": "84a28df6-b160-4651-a73f-2b9c41ad1a1c",
+      "groupId": "sgrp_mwgyjrqk_13h333",
+      "status": "voided",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "db2cf914622c43d85160685d4a287438d90a23f8f569022187ba64cdb6d805c4",
+      "quote": {
+        "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+        "name": "林女士（合成验收）",
+        "componentIndexes": [
+          2
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 20200,
+        "subtotalCents": 19998,
+        "tierDiscountCents": 202,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 202,
+        "totalCents": 19998,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": "1192340d-ee03-4942-a811-a47837f09e13",
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 33704,
+        "expectedBalanceAfterCents": 13706,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $202.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $2.02"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $199.98"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $337.04"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $137.06"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgyjrql_kdcvnn",
+          "code": "QA-20261114-QF7G",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 39996,
+        "amountText": "CAD $399.96"
+      },
+      "id": "2ff799c7-1717-43b2-8ffe-fcb36201e254",
+      "groupId": "sgrp_mwgyjrqk_13h333",
+      "status": "voided",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "self",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "ca4649a6941c20ff981bd4f1e23e72a513bc6359fb2d40536d9a581fd30b2f0b",
+      "quote": {
+        "beneficiaryKey": "self",
+        "name": "",
+        "componentIndexes": [
+          0,
+          1
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 40400,
+        "subtotalCents": 39996,
+        "tierDiscountCents": 404,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 404,
+        "totalCents": 39996,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          },
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": "1192340d-ee03-4942-a811-a47837f09e13",
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 73700,
+        "expectedBalanceAfterCents": 33704,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            },
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $404.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $4.04"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $399.96"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $737.00"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $337.04"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgyjrqk_2h1vku",
+          "code": "QA-20261114-7SWB",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        },
+        {
+          "id": "stl_mwgyjrql_0xoa8i",
+          "code": "QA-20261114-O14I",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 19998,
+        "amountText": "CAD $199.98"
+      },
+      "id": "56c90658-bf3a-4ccb-b895-329b61b3b0c8",
+      "groupId": "sgrp_mwgyjqmy_nphfim",
+      "status": "voided",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "b4393c503b4412c397ddbb4b80b7c9f8a47f5a599946b673758205d36439e8b2",
+      "quote": {
+        "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+        "name": "林女士（合成验收）",
+        "componentIndexes": [
+          2
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 20200,
+        "subtotalCents": 19998,
+        "tierDiscountCents": 202,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 202,
+        "totalCents": 19998,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": "cd0b343e-6bbd-4a80-b110-cd014dea0e31",
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 33704,
+        "expectedBalanceAfterCents": 13706,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $202.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $2.02"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $199.98"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $337.04"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $137.06"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgyjqmy_d8z4or",
+          "code": "QA-20261114-G9WN",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 39996,
+        "amountText": "CAD $399.96"
+      },
+      "id": "1192340d-ee03-4942-a811-a47837f09e13",
+      "groupId": "sgrp_mwgyjqmy_nphfim",
+      "status": "voided",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "self",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "6fa6c069867651960899fdfd33050b2bd912a973c68b716517205c0b0ac77f48",
+      "quote": {
+        "beneficiaryKey": "self",
+        "name": "",
+        "componentIndexes": [
+          0,
+          1
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 40400,
+        "subtotalCents": 39996,
+        "tierDiscountCents": 404,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 404,
+        "totalCents": 39996,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          },
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": "cd0b343e-6bbd-4a80-b110-cd014dea0e31",
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 73700,
+        "expectedBalanceAfterCents": 33704,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            },
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $404.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $4.04"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $399.96"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $737.00"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $337.04"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgyjqmy_6jxcn2",
+          "code": "QA-20261114-22R1",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        },
+        {
+          "id": "stl_mwgyjqmy_1dw793",
+          "code": "QA-20261114-DHHD",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 19998,
+        "amountText": "CAD $199.98"
+      },
+      "id": "3263ba80-6d7c-49e7-bad3-80749c8ca084",
+      "groupId": "sgrp_mwgyjpk8_fyhiuo",
+      "status": "voided",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "89974154e3d13eda518fb2a3bda6febd13ce44a14e9d1dfa4b8ec7a25210b358",
+      "quote": {
+        "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+        "name": "林女士（合成验收）",
+        "componentIndexes": [
+          2
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 20200,
+        "subtotalCents": 19998,
+        "tierDiscountCents": 202,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 202,
+        "totalCents": 19998,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": "ba3a64a1-38cf-401b-a659-f819cf09eb1d",
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 33704,
+        "expectedBalanceAfterCents": 13706,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $202.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $2.02"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $199.98"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $337.04"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $137.06"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgyjpk9_e3orld",
+          "code": "QA-20261114-B0CR",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 39996,
+        "amountText": "CAD $399.96"
+      },
+      "id": "cd0b343e-6bbd-4a80-b110-cd014dea0e31",
+      "groupId": "sgrp_mwgyjpk8_fyhiuo",
+      "status": "voided",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "self",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "b8cfd7a579e0487f22ede3ced9454762fc634ae456ebb41e49dc9849d4b0d3e6",
+      "quote": {
+        "beneficiaryKey": "self",
+        "name": "",
+        "componentIndexes": [
+          0,
+          1
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 40400,
+        "subtotalCents": 39996,
+        "tierDiscountCents": 404,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 404,
+        "totalCents": 39996,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          },
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": "ba3a64a1-38cf-401b-a659-f819cf09eb1d",
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 73700,
+        "expectedBalanceAfterCents": 33704,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            },
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $404.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $4.04"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $399.96"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $737.00"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $337.04"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgyjpk8_ign3d2",
+          "code": "QA-20261114-JKBO",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        },
+        {
+          "id": "stl_mwgyjpk8_40wf30",
+          "code": "QA-20261114-9EPZ",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 19998,
+        "amountText": "CAD $199.98"
+      },
+      "id": "7747b024-e6e6-4e1a-b4d8-eca1037357df",
+      "groupId": "sgrp_mwgyji4w_j9wzes",
+      "status": "voided",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "49bd54a2caa475d0b19fe319adfea0276638c823c6ae4510a300706da05fb744",
+      "quote": {
+        "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+        "name": "林女士（合成验收）",
+        "componentIndexes": [
+          2
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 20200,
+        "subtotalCents": 19998,
+        "tierDiscountCents": 202,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 202,
+        "totalCents": 19998,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": "0d0a82c3-e8a7-404d-b87b-fcbc7bcd7aca",
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 33704,
+        "expectedBalanceAfterCents": 13706,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $202.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $2.02"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $199.98"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $337.04"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $137.06"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgyji4w_4uvpjx",
+          "code": "QA-20261114-WIRK",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 39996,
+        "amountText": "CAD $399.96"
+      },
+      "id": "ba3a64a1-38cf-401b-a659-f819cf09eb1d",
+      "groupId": "sgrp_mwgyji4w_j9wzes",
+      "status": "voided",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "self",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "9c73dc271fb6cff7429c5c81f1a08545d5d4f19301214a46dd6219faafc02b7d",
+      "quote": {
+        "beneficiaryKey": "self",
+        "name": "",
+        "componentIndexes": [
+          0,
+          1
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 40400,
+        "subtotalCents": 39996,
+        "tierDiscountCents": 404,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 404,
+        "totalCents": 39996,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          },
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": "0d0a82c3-e8a7-404d-b87b-fcbc7bcd7aca",
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 73700,
+        "expectedBalanceAfterCents": 33704,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            },
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $404.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $4.04"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $399.96"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $737.00"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $337.04"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgyji4w_0anm56",
+          "code": "QA-20261114-JWF0",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        },
+        {
+          "id": "stl_mwgyji4w_h5zad0",
+          "code": "QA-20261114-PQGT",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 19998,
+        "amountText": "CAD $199.98"
+      },
+      "id": "b51edc7f-116f-4556-b50d-6c199b8d0773",
+      "groupId": "sgrp_mwgyhydy_h45zyg",
+      "status": "voided",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "fffb916b8c23dab4edb0bc82e53d0fdd1a694ea285ee1b0553ee8452c5791294",
+      "quote": {
+        "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+        "name": "林女士（合成验收）",
+        "componentIndexes": [
+          2
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 20200,
+        "subtotalCents": 19998,
+        "tierDiscountCents": 202,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 202,
+        "totalCents": 19998,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "mp-mwgyfhnz-q86xdtccsi",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": null,
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 33704,
+        "expectedBalanceAfterCents": 13706,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $202.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $2.02"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $199.98"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $199.98"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $337.04"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $137.06"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgyhye0_wsu2ir",
+          "code": "QA-20261114-UBJG",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 39996,
+        "amountText": "CAD $399.96"
+      },
+      "id": "0d0a82c3-e8a7-404d-b87b-fcbc7bcd7aca",
+      "groupId": "sgrp_mwgyhydy_h45zyg",
+      "status": "voided",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "self",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "c39b8f7786dcebb8cbafb27b7c2ee4cc9b4fb9d7ba3f756d59c6e98ee82f3be5",
+      "quote": {
+        "beneficiaryKey": "self",
+        "name": "",
+        "componentIndexes": [
+          0,
+          1
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 40400,
+        "subtotalCents": 39996,
+        "tierDiscountCents": 404,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 404,
+        "totalCents": 39996,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          },
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20200,
+                "unitPriceCents": 19998,
+                "listAmountCents": 20200,
+                "amountCents": 19998,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 9900,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20200,
+            "subtotalCents": 19998,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "这张单没有定金收取记录,没有可抵扣的定金",
+            "tierDiscountCents": 202,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 202,
+            "totalCents": 19998,
+            "perfBaseCents": 19998,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 19998,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 73700,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 73700,
+              "storedUsedCents": 19998,
+              "sharedStoredUsedCents": 19998,
+              "pendingRechargeUnusedCents": 0,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "1% off · Pay 99%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.9折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9900,
+            "revision": 18,
+            "eligible": true,
+            "effectiveRateBps": 9900,
+            "status": "active",
+            "balanceCents": 73700
+          },
+          "proposedRateBps": 9900,
+          "effectiveRateBps": 9900,
+          "suggestedRateBps": 9900,
+          "suggestionSource": "member",
+          "manuallySelected": false,
+          "eligible": true,
+          "pendingRecharge": false,
+          "configRevision": 11
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": null,
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 73700,
+        "expectedBalanceAfterCents": 33704,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "9.9折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            },
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $199.98",
+              "listText": "CAD $202.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $404.00"
+            },
+            {
+              "label": "个人会员优惠 · 9.9折",
+              "value": "−CAD $4.04"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $399.96"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $399.96"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $737.00"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $337.04"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": null,
+      "signedAt": null,
+      "signedAtText": null,
+      "components": [
+        {
+          "id": "stl_mwgyhydz_so9rhp",
+          "code": "QA-20261114-MXLZ",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        },
+        {
+          "id": "stl_mwgyhye0_gv5b58",
+          "code": "QA-20261114-K2NV",
+          "status": "voided",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 19998,
+          "actualDueText": "CAD $199.98",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": null
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 17000,
+        "amountText": "CAD $170.00"
+      },
+      "id": "6354854d-4b0f-4381-9913-2b8c14330000",
+      "groupId": "sgrp_mwgo6f60_b6gx8s",
+      "status": "signed",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "friend",
+      "dependencyId": "740c7145-d2f0-44b1-abc4-8708d385a6f6",
+      "expiresAt": null,
+      "confirmationHash": "e80eec775de6311958f6459e39ab0482959896128b46f70aed2b6616bda2636e",
+      "quote": {
+        "beneficiaryKey": "friend",
+        "name": "陈女士",
+        "componentIndexes": [
+          1
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 20000,
+        "subtotalCents": 17000,
+        "tierDiscountCents": 3000,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 3000,
+        "totalCents": 17000,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20000,
+                "unitPriceCents": 17000,
+                "listAmountCents": 20000,
+                "amountCents": 17000,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 8500,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20000,
+            "subtotalCents": 17000,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "即时开单(没挂预约),不涉及定金抵扣",
+            "tierDiscountCents": 3000,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 3000,
+            "totalCents": 17000,
+            "perfBaseCents": 17000,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 17000,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 55000,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 55000,
+              "storedUsedCents": 17000,
+              "sharedStoredUsedCents": 17000,
+              "pendingRechargeUnusedCents": 50000,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "friend",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "10% off · Pay 90%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.0折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9000,
+            "revision": 1,
+            "eligible": true,
+            "effectiveRateBps": 9000,
+            "status": "active",
+            "balanceCents": 55000
+          },
+          "proposedRateBps": 8500,
+          "effectiveRateBps": 8500,
+          "suggestedRateBps": 9000,
+          "suggestionSource": "member",
+          "manuallySelected": true,
+          "eligible": true,
+          "pendingRecharge": true,
+          "configRevision": 1
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": null,
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 88000,
+        "expectedBalanceAfterCents": 71000,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "陈女士",
+          "discountText": "8.5折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $170.00",
+              "listText": "CAD $200.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $200.00"
+            },
+            {
+              "label": "个人会员优惠 · 8.5折",
+              "value": "−CAD $30.00"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $170.00"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $170.00"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $170.00"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $880.00"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $710.00"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        }
+      },
+      "signed": {
+        "beneficiaryKey": "friend",
+        "name": "陈女士",
+        "componentIndexes": [
+          1
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 20000,
+        "subtotalCents": 17000,
+        "tierDiscountCents": 3000,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 3000,
+        "totalCents": 17000,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 0,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20000,
+                "unitPriceCents": 17000,
+                "listAmountCents": 20000,
+                "amountCents": 17000,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 8500,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20000,
+            "subtotalCents": 17000,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "即时开单(没挂预约),不涉及定金抵扣",
+            "tierDiscountCents": 3000,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 3000,
+            "totalCents": 17000,
+            "perfBaseCents": 17000,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": null,
+            "rechargeCents": 0,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 17000,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                }
+              ],
+              "balanceAvailableCents": 55000,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 55000,
+              "storedUsedCents": 17000,
+              "sharedStoredUsedCents": 17000,
+              "pendingRechargeUnusedCents": 50000,
+              "pendingRechargeCents": 0,
+              "afterRechargeBalanceCents": null,
+              "offlineCents": 0,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "friend",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "10% off · Pay 90%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.0折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9000,
+            "revision": 1,
+            "eligible": true,
+            "effectiveRateBps": 9000,
+            "status": "active",
+            "balanceCents": 55000
+          },
+          "proposedRateBps": 8500,
+          "effectiveRateBps": 8500,
+          "suggestedRateBps": 9000,
+          "suggestionSource": "member",
+          "manuallySelected": true,
+          "eligible": true,
+          "pendingRecharge": true,
+          "configRevision": 1
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": null,
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 88000,
+        "expectedBalanceAfterCents": 71000,
+        "display": {
+          "discountChangeText": "",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "陈女士",
+          "discountText": "8.5折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $170.00",
+              "listText": "CAD $200.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $200.00"
+            },
+            {
+              "label": "个人会员优惠 · 8.5折",
+              "value": "−CAD $30.00"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $170.00"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $170.00"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $170.00"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $880.00"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $710.00"
+            }
+          ],
+          "gifts": [],
+          "note": "请核对所有服务和支付明细。"
+        },
+        "documentId": "6354854d-4b0f-4381-9913-2b8c14330000",
+        "signature": "QA合成验收签名",
+        "strokes": [
+          [
+            {
+              "x": 1,
+              "y": 1
+            },
+            {
+              "x": 20,
+              "y": 20
+            }
+          ]
+        ],
+        "signatureViewport": null,
+        "signedAt": "2026-11-14T17:24:42.373Z",
+        "signedBy": "user_mwgo6f56_5yssab",
+        "balanceBeforeText": "CAD $880.00",
+        "balanceBeforeCents": 88000,
+        "balanceAfterCents": 71000,
+        "balanceAfterText": "CAD $710.00",
+        "discountAfter": {
+          "copyEn": {
+            "eligibilityText": "Active",
+            "discountText": "15% off · Pay 85%",
+            "statusText": "Your personal discount applies to all chargeable services."
+          },
+          "active": true,
+          "eligibilityText": "有效",
+          "discountText": "8.5折",
+          "statusText": "所有收费服务按本人折扣结算。",
+          "userId": "user_mwgo6f56_5yssab",
+          "rateBps": 8500,
+          "revision": 2,
+          "eligible": true,
+          "effectiveRateBps": 8500,
+          "status": "active",
+          "balanceCents": 88000
+        },
+        "confirmationHash": "e80eec775de6311958f6459e39ab0482959896128b46f70aed2b6616bda2636e",
+        "componentCodes": [
+          "QA-20261114-H2DM"
+        ]
+      },
+      "signedAt": "2026-11-14T17:24:42.373Z",
+      "signedAtText": "2026-11-14 12:24（America/Toronto）",
+      "components": [
+        {
+          "id": "stl_mwgo6f61_exovvt",
+          "code": "QA-20261114-H2DM",
+          "status": "signed",
+          "amendments": [],
+          "amendedCount": 0,
+          "amendBadgeText": "",
+          "actualDueCents": 17000,
+          "actualDueText": "CAD $170",
+          "amendFootnote": ""
+        }
+      ],
+      "snapshotUrl": "/member-documents/6354854d-4b0f-4381-9913-2b8c14330000/snapshot"
+    },
+    {
+      "recheck": null,
+      "correction": {
+        "serviceTotalCents": 16000,
+        "amountText": "CAD $160.00"
+      },
+      "id": "740c7145-d2f0-44b1-abc4-8708d385a6f6",
+      "groupId": "sgrp_mwgo6f60_b6gx8s",
+      "status": "signed",
+      "userId": "user_mwgo6f56_5yssab",
+      "beneficiaryKey": "self",
+      "dependencyId": null,
+      "expiresAt": null,
+      "confirmationHash": "9ec1b4d1087bbf9e00f9d5064fa15cac9ef9744fe923f206fbd4341a3aab7633",
+      "quote": {
+        "beneficiaryKey": "self",
+        "name": "",
+        "componentIndexes": [
+          0
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 20000,
+        "subtotalCents": 17000,
+        "tierDiscountCents": 3000,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 3000,
+        "totalCents": 67000,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 50000,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20000,
+                "unitPriceCents": 17000,
+                "listAmountCents": 20000,
+                "amountCents": 17000,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 8500,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20000,
+            "subtotalCents": 17000,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "即时开单(没挂预约),不涉及定金抵扣",
+            "tierDiscountCents": 3000,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 3000,
+            "totalCents": 67000,
+            "perfBaseCents": 17000,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": {
+              "amountCents": 50000,
+              "bonusCents": 0,
+              "giftItems": [],
+              "packageId": null,
+              "packageName": "",
+              "payChannel": "cash",
+              "technicianId": "tech_mwgo6f4q_uwoz2l"
+            },
+            "rechargeCents": 50000,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 17000,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                },
+                {
+                  "leg": "offline",
+                  "amountCents": 50000,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "note": "到店支付（含充值或购卡款）",
+                  "label": "到店支付"
+                }
+              ],
+              "balanceAvailableCents": 55000,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 55000,
+              "storedUsedCents": 17000,
+              "sharedStoredUsedCents": 17000,
+              "pendingRechargeUnusedCents": 50000,
+              "pendingRechargeCents": 50000,
+              "afterRechargeBalanceCents": 88000,
+              "offlineCents": 50000,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "10% off · Pay 90%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.0折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9000,
+            "revision": 1,
+            "eligible": true,
+            "effectiveRateBps": 9000,
+            "status": "active",
+            "balanceCents": 55000
+          },
+          "proposedRateBps": 8500,
+          "effectiveRateBps": 8500,
+          "suggestedRateBps": 9000,
+          "suggestionSource": "member",
+          "manuallySelected": true,
+          "eligible": true,
+          "pendingRecharge": true,
+          "configRevision": 1
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": null,
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 55000,
+        "expectedBalanceAfterCents": 88000,
+        "display": {
+          "discountChangeText": "9.0折 → 8.5折",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "8.5折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $170.00",
+              "listText": "CAD $200.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $200.00"
+            },
+            {
+              "label": "个人会员优惠 · 8.5折",
+              "value": "−CAD $30.00"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $170.00"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $170.00"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $170.00"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $550.00"
+            },
+            {
+              "label": "线下收款 · 充值本金",
+              "value": "CAD $500.00"
+            },
+            {
+              "label": "充值赠金（不另收款）",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $880.00"
+            }
+          ],
+          "gifts": [],
+          "note": "充值、赠送、新折扣及扣款将在本张签署成功后一起生效。"
+        }
+      },
+      "signed": {
+        "beneficiaryKey": "self",
+        "name": "",
+        "componentIndexes": [
+          0
+        ],
+        "selectedGrantId": "",
+        "coupon": null,
+        "listTotalCents": 20000,
+        "subtotalCents": 17000,
+        "tierDiscountCents": 3000,
+        "couponDiscountCents": 0,
+        "discountTotalCents": 3000,
+        "totalCents": 67000,
+        "depositDeductCents": 0,
+        "purchaseCents": 0,
+        "rechargeCents": 50000,
+        "components": [
+          {
+            "tenantId": "qa-web-mwgo6f40",
+            "tierKey": "member",
+            "currency": "CAD",
+            "currencyDisplay": {
+              "prefix": "<CODE> ",
+              "symbol": "$",
+              "trimZeroDecimals": false
+            },
+            "lines": [
+              {
+                "itemNo": 1,
+                "kind": "main",
+                "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+                "name": "纯色美甲",
+                "tierKey": "member",
+                "unit": "once",
+                "qty": 1,
+                "listUnitCents": 20000,
+                "unitPriceCents": 17000,
+                "listAmountCents": 20000,
+                "amountCents": 17000,
+                "ruleApplied": null,
+                "isFree": false,
+                "personalRateBps": 8500,
+                "roundingAdjustmentCents": 0
+              }
+            ],
+            "rulesApplied": [],
+            "listTotalCents": 20000,
+            "subtotalCents": 17000,
+            "depositDeductCents": 0,
+            "depositReceiptCents": 0,
+            "depositDeductible": false,
+            "depositHint": "即时开单(没挂预约),不涉及定金抵扣",
+            "tierDiscountCents": 3000,
+            "couponDiscountCents": 0,
+            "discountTotalCents": 3000,
+            "totalCents": 67000,
+            "perfBaseCents": 17000,
+            "coupon": null,
+            "couponUsableCount": 0,
+            "timecard": null,
+            "purchase": null,
+            "purchaseCents": 0,
+            "purchaseCashOnlyCents": 0,
+            "recharge": {
+              "amountCents": 50000,
+              "bonusCents": 0,
+              "giftItems": [],
+              "packageId": null,
+              "packageName": "",
+              "payChannel": "cash",
+              "technicianId": "tech_mwgo6f4q_uwoz2l"
+            },
+            "rechargeCents": 50000,
+            "payment": {
+              "plan": "balance_plus_offline",
+              "legs": [
+                {
+                  "leg": "stored_value",
+                  "amountCents": 17000,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "label": "储值卡抵扣"
+                },
+                {
+                  "leg": "offline",
+                  "amountCents": 50000,
+                  "payerUserId": "user_mwgo6f56_5yssab",
+                  "note": "到店支付（含充值或购卡款）",
+                  "label": "到店支付"
+                }
+              ],
+              "balanceAvailableCents": 55000,
+              "legacyBalanceCents": 0,
+              "normalBalanceCents": 55000,
+              "storedUsedCents": 17000,
+              "sharedStoredUsedCents": 17000,
+              "pendingRechargeUnusedCents": 50000,
+              "pendingRechargeCents": 50000,
+              "afterRechargeBalanceCents": 88000,
+              "offlineCents": 50000,
+              "shortfallCents": 0,
+              "timecardCoverCents": 0
+            },
+            "softWarnings": [],
+            "beneficiaryKey": "self",
+            "technicians": [
+              {
+                "technicianId": "tech_mwgo6f4q_uwoz2l",
+                "role": "main",
+                "itemNos": [],
+                "name": "Anna"
+              }
+            ]
+          }
+        ],
+        "personalDiscount": {
+          "current": {
+            "copyEn": {
+              "eligibilityText": "Active",
+              "discountText": "10% off · Pay 90%",
+              "statusText": "Your personal discount applies to all chargeable services."
+            },
+            "active": true,
+            "eligibilityText": "有效",
+            "discountText": "9.0折",
+            "statusText": "所有收费服务按本人折扣结算。",
+            "userId": "user_mwgo6f56_5yssab",
+            "rateBps": 9000,
+            "revision": 1,
+            "eligible": true,
+            "effectiveRateBps": 9000,
+            "status": "active",
+            "balanceCents": 55000
+          },
+          "proposedRateBps": 8500,
+          "effectiveRateBps": 8500,
+          "suggestedRateBps": 9000,
+          "suggestionSource": "member",
+          "manuallySelected": true,
+          "eligible": true,
+          "pendingRecharge": true,
+          "configRevision": 1
+        },
+        "cardOwnerUserId": "user_mwgo6f56_5yssab",
+        "replacesDocumentId": null,
+        "currency": "CAD",
+        "currencyDisplay": {
+          "prefix": "<CODE> ",
+          "symbol": "$",
+          "trimZeroDecimals": false
+        },
+        "expectedBalanceBeforeCents": 55000,
+        "expectedBalanceAfterCents": 88000,
+        "display": {
+          "discountChangeText": "9.0折 → 8.5折",
+          "storeName": "会员价格验收门店",
+          "customerName": "林女士（合成验收）",
+          "beneficiaryName": "林女士（合成验收）",
+          "discountText": "8.5折",
+          "lines": [
+            {
+              "name": "纯色美甲",
+              "technicians": "Anna",
+              "amountText": "CAD $170.00",
+              "listText": "CAD $200.00"
+            }
+          ],
+          "rows": [
+            {
+              "label": "服务原价",
+              "value": "CAD $200.00"
+            },
+            {
+              "label": "个人会员优惠 · 8.5折",
+              "value": "−CAD $30.00"
+            },
+            {
+              "label": "服务折后小计",
+              "value": "CAD $170.00"
+            },
+            {
+              "label": "优惠券",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "已付定金",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "服务应付",
+              "value": "CAD $170.00"
+            }
+          ],
+          "paymentRows": [
+            {
+              "label": "次卡抵扣",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "储值余额扣款",
+              "value": "CAD $170.00"
+            },
+            {
+              "label": "到店收款 · 服务差额",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "签署前账户余额（预计）",
+              "value": "CAD $550.00"
+            },
+            {
+              "label": "线下收款 · 充值本金",
+              "value": "CAD $500.00"
+            },
+            {
+              "label": "充值赠金（不另收款）",
+              "value": "CAD $0.00"
+            },
+            {
+              "label": "本单扣款后余额（预计）",
+              "value": "CAD $880.00"
+            }
+          ],
+          "gifts": [],
+          "note": "充值、赠送、新折扣及扣款将在本张签署成功后一起生效。"
+        },
+        "documentId": "740c7145-d2f0-44b1-abc4-8708d385a6f6",
+        "signature": "QA合成验收签名",
+        "strokes": [
+          [
+            {
+              "x": 1,
+              "y": 1
+            },
+            {
+              "x": 20,
+              "y": 20
+            }
+          ]
+        ],
+        "signatureViewport": null,
+        "signedAt": "2026-11-14T17:23:22.240Z",
+        "signedBy": "user_mwgo6f56_5yssab",
+        "balanceBeforeText": "CAD $550.00",
+        "balanceBeforeCents": 55000,
+        "balanceAfterCents": 88000,
+        "balanceAfterText": "CAD $880.00",
+        "discountAfter": {
+          "copyEn": {
+            "eligibilityText": "Active",
+            "discountText": "15% off · Pay 85%",
+            "statusText": "Your personal discount applies to all chargeable services."
+          },
+          "active": true,
+          "eligibilityText": "有效",
+          "discountText": "8.5折",
+          "statusText": "所有收费服务按本人折扣结算。",
+          "userId": "user_mwgo6f56_5yssab",
+          "rateBps": 8500,
+          "revision": 2,
+          "eligible": true,
+          "effectiveRateBps": 8500,
+          "status": "active",
+          "balanceCents": 88000,
+          "eventId": "740f2ae3-3b0c-4467-9478-44864c9709de"
+        },
+        "confirmationHash": "9ec1b4d1087bbf9e00f9d5064fa15cac9ef9744fe923f206fbd4341a3aab7633",
+        "componentCodes": [
+          "QA-20261114-EKMU"
+        ]
+      },
+      "signedAt": "2026-11-14T17:23:22.240Z",
+      "signedAtText": "2026-11-14 12:23（America/Toronto）",
+      "components": [
+        {
+          "id": "stl_mwgo6f60_o9l5bv",
+          "code": "QA-20261114-EKMU",
+          "status": "signed",
+          "amendments": [
+            {
+              "id": "samd_mwgybr5o_9phcxg",
+              "reason": "QA actual UI correction: service reduced by 10",
+              "amountDeltaCents": -1000,
+              "autoBalanceAdjustCents": 1000,
+              "amendedBy": "boss-qa-web-mwgo6f40",
+              "amendedAt": "2026-11-14T22:02:39.035Z",
+              "directionText": "退回差额",
+              "direction": "refund",
+              "deltaText": "−CAD $10",
+              "raisedAtText": "11-14 17:02",
+              "effectiveAtText": "11-14 17:02"
+            }
+          ],
+          "amendedCount": 1,
+          "amendBadgeText": "已更正",
+          "actualDueCents": 66000,
+          "actualDueText": "CAD $660",
+          "amendFootnote": "储值支付的单:差额已自动退回/补扣你的储值余额。"
+        }
+      ],
+      "snapshotUrl": "/member-documents/740c7145-d2f0-44b1-abc4-8708d385a6f6/snapshot"
+    }
+  ]
+}

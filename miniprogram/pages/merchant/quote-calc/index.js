@@ -1,14 +1,10 @@
-/* 屏 6｜技师端 · 报价试算器
-   与结算同一个计价引擎(POST /admin/settlements/preview),报价口径 = 结算口径。
-   试算不落库、不留痕:不传 bookingId / userId,后端只算不写。
-   金额红线同屏 1:本页不做任何金额运算。 */
 const api = require('../../../utils/api')
 const { formatMoney, displayOf } = require('../../../utils/money')
 
 const TIERS = [
   { key: 'list', label: '原价' },
   { key: 'share', label: '分享价' },
-  { key: 'member', label: '会员价' }
+  { key: 'member', label: '会员价' },{key:'course',label:'疗程价'}
 ]
 const TIER_PRICE_FIELD = { list: 'listPriceCents', share: 'sharePriceCents', member: 'memberPriceCents' }
 const DRAFT_KEY = 'lucky_quote_draft'
@@ -17,9 +13,9 @@ Page({
   // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
   onShow() { api.guardMerchant() },
   data: {
-    ready: false,
+    ready: false,referenceOnly:false,error:'',
     convId: '', fromLabel: '', quoteId: '',
-    tiers: TIERS, tierKey: 'list',
+    tiers: TIERS.filter(t=>t.key!=='course'), tierKey: 'list',
     cats: [], catId: '',
     items: [], addonGroups: [],
     picked: {},
@@ -38,21 +34,21 @@ Page({
 
   async boot() {
     try {
-      const [cats, items] = await Promise.all([
+      const [cats, items, pricing] = await Promise.all([
         api.adminGet('/admin/pricing/categories'),
-        api.adminGet('/admin/pricing/items')
+        api.adminGet('/admin/pricing/items'),api.adminGet('/admin/member-pricing/config')
       ])
-      this.allItems = (items.items || []).filter((i) => i.isActive !== false)
+      this.allItems = (items.items || []).filter((i) => i.isActive !== false&&(!pricing.config.active||!i.isTimecard))
       const categories = (cats.categories || []).filter((c) => c.isBookable !== false)
       this.setData({
-        ready: true,
+        ready: true,error:'',referenceOnly:!!pricing.config.active,tiers:pricing.config.active?TIERS.filter(t=>pricing.config.displayTypes.includes(t.key)):TIERS.filter(t=>t.key!=='course'),tierKey:'list',picked:{},preview:null,view:null,
         cats: categories.map((c) => ({ id: c.id, name: c.name })),
         catId: (categories[0] || {}).id || ''
       })
       this.renderCatalogue()
       this.refresh()
     } catch (e) {
-      wx.showToast({ title: (e && e.message) || '加载价目表失败', icon: 'none' })
+      this.setData({ready:false,error:e.message||'加载价目表失败',preview:null,view:null})
     }
   },
 
@@ -60,14 +56,14 @@ Page({
     const field = TIER_PRICE_FIELD[this.data.tierKey] || 'listPriceCents'
     const d = this.data.display
     const decorate = (it) => {
-      const cents = it[field] === null || it[field] === undefined ? it.listPriceCents : it[field]
+      const cents = this.data.referenceOnly?it.displayReference.prices[this.data.tierKey].priceCents:(it[field] == null ? it.listPriceCents : it[field])
       return {
         id: it.id, name: it.nameZh,
         priceText: cents === 0 ? '免收' : formatMoney(cents, d, d && d.trimZeroDecimals ? 0 : 2),
         on: Object.prototype.hasOwnProperty.call(this.data.picked, it.id)
       }
     }
-    const all = this.allItems || []
+    const all = (this.allItems || []).filter(it=>!this.data.referenceOnly||Number.isInteger(it.displayReference?.prices?.[this.data.tierKey]?.priceCents))
     const catName = {}
     ;(this.data.cats || []).forEach((c) => { catName[c.id] = c.name })
     const groupMap = {}
@@ -81,10 +77,11 @@ Page({
     })
   },
 
-  pickTier(e) { this.setData({ tierKey: e.currentTarget.dataset.k }); this.renderCatalogue(); this.refresh() },
+  pickTier(e) { const k=e.currentTarget.dataset.k;if(!this.data.tiers.some(t=>t.key===k))return;const picked={...this.data.picked};if(this.data.referenceOnly)for(const id of Object.keys(picked))if(!Number.isInteger(this.allItems.find(x=>x.id===id)?.displayReference?.prices?.[k]?.priceCents))delete picked[id];this.setData({ tierKey:k,picked }); this.renderCatalogue(); this.refresh() },
   pickCat(e) { this.setData({ catId: e.currentTarget.dataset.id }); this.renderCatalogue() },
   toggleItem(e) {
     const id = e.currentTarget.dataset.id
+    if(this.data.referenceOnly&&!Number.isInteger(this.allItems.find(x=>x.id===id)?.displayReference?.prices?.[this.data.tierKey]?.priceCents))return
     const picked = Object.assign({}, this.data.picked)
     if (Object.prototype.hasOwnProperty.call(picked, id)) delete picked[id]
     else picked[id] = 1
@@ -95,20 +92,17 @@ Page({
   toggleFoot() { this.setData({ applyFootSurcharge: !this.data.applyFootSurcharge }); this.refresh() },
 
   refresh() {
-    clearTimeout(this._t)
+    this._seq=(this._seq||0)+1;this.setData({view:null,preview:null,error:''});clearTimeout(this._t)
     this._t = setTimeout(() => this.doPreview(), 250)
   },
   async doPreview() {
-    const ids = Object.keys(this.data.picked)
-    if (!ids.length) { this.setData({ view: null }); return }
+    const seq=this._seq=(this._seq||0)+1,ids = Object.keys(this.data.picked)
+    if (!ids.length) { this.setData({ view: null,preview:null }); return }
     try {
-      const r = await api.adminPost('/admin/settlements/preview', {
+      this.setData({view:null,preview:null,error:''});const body={
         tierKey: this.data.tierKey,
         items: ids.map((id) => ({ serviceId: id, qty: 1 })),
-        applyFootSurcharge: this.data.applyFootSurcharge,
-        depositApplied: false,
-        payIntent: 'offline_full'
-      })
+        applyFootSurcharge: this.data.applyFootSurcharge};if(!this.data.referenceOnly)Object.assign(body,{depositApplied:false,payIntent:'offline_full'});const r=await api.adminPost(this.data.referenceOnly?'/admin/member-pricing/reference-preview':'/admin/settlements/preview',body);if(seq!==this._seq)return
       const s = r.settlement || {}
       const d = displayOf(s)
       const m = (cents) => formatMoney(cents, d, d.trimZeroDecimals ? 0 : 2)
@@ -125,14 +119,14 @@ Page({
       })
       if (!prev || prev.symbol !== d.symbol || prev.prefix !== d.prefix) this.renderCatalogue()
     } catch (e) {
-      wx.showToast({ title: (e && e.message) || '试算失败', icon: 'none' })
+      if(seq===this._seq)this.setData({view:null,preview:null,error:e.message||'试算失败，请重试'})
     }
   },
 
   quoteText() {
     const v = this.data.view
     if (!v) return ''
-    return `您选的款式预估 ${v.subtotal}（含${v.breakdown}），最终以到店确认为准哦～`
+    return `您选的款式预估 ${v.subtotal}（含${v.breakdown}），展示价格仅供参考，实际价格以本人服务确认单为准。`
   },
   copyText() {
     const text = this.quoteText()

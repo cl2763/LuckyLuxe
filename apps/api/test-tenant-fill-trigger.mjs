@@ -15,11 +15,11 @@
    开机那七条 UPDATE 改成**只报数不改值**(`/health.tenantNullRows`)。
 
    ⚠️ standalone:CI_SUITES="tenant-fill-trigger" bash apps/api/run-all-tests.sh */
-import { readFileSync, existsSync, statSync, copyFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, existsSync, statSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync, backup } from 'node:sqlite'
 import { assertTestTarget } from './test-guard.mjs'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
@@ -65,7 +65,8 @@ if (!DBP) {
   /* ③ 行为层:在**临时副本**上插一行父表解不出的 payments —— 必须失败,且不许出现在任何租户下 */
   const dir = mkdtempSync(join(tmpdir(), 'll-d137-'))
   const COPY = join(dir, 'probe.sqlite')
-  copyFileSync(DBP, COPY)
+  const sourceDb=new DatabaseSync(DBP,{readOnly:true})
+  try {await backup(sourceDb,COPY)} finally {sourceDb.close()}
   const w = new DatabaseSync(COPY)
   const before = w.prepare('SELECT COUNT(*) AS n FROM payments').get().n
   let threw = ''

@@ -1,3 +1,4 @@
+<import src="./member-documents.wxml"/>
 <view class="page {{themeClass}}">
   <view wx:if="{{focusedBooking}}" class="card">
     <view class="oname">预约详情 · {{focusedBooking.customer}}</view>
@@ -14,6 +15,7 @@
     <view class="seg-i {{mode==='aftersales'?'on':''}}" hover-class="tap-feedback" data-m="aftersales" bindtap="switchMode">售后订单</view>
   </view>
 
+  <template wx:if="{{mode==='all'}}" is="member-documents" data="{{mpDocumentGroups,mpDocsError,mpDocsNote,mpDocsLoading,mpDocsBusy}}"/>
   <view class="draft-toolbar" wx:if="{{mode==='today'}}">
     <button class="draft-entry" size="mini" hover-class="draft-entry-pressed" bindtap="createManualDraft"><text class="draft-plus">＋</text><text>预约草稿</text></button>
     <text class="draft-hint">分享给顾客确认</text>
@@ -117,7 +119,7 @@
           <text wx:if="{{v.confirmed}}" class="dcok">已确认{{v.reopenCount ? ' · 重开过 ' + v.reopenCount + ' 次' : ''}}<text class="lnk" bindtap="reopen">重开</text></text>
         </view>
 
-        <block wx:if="{{!correcting}}">
+        <block wx:if="{{!correcting}}"><view wx:if="{{v.personDocuments.length}}" class="card"><view class="ch">按被服务者归档的服务单</view><view wx:for="{{v.personDocuments}}" wx:key="id" wx:for-item="doc"><view>{{doc.name}} · {{doc.amountText}}</view><view>{{doc.items}}</view><view class="note">{{doc.discountText}} · {{doc.projectCount}}个项目</view><button data-code="{{doc.code}}" bindtap="viewSnapshot">查看原件</button></view></view>
           <view class="dcsub" wx:if="{{v.pending.length}}">待分配 {{v.pending.length}} 单 · 逐单点开</view>
           <view class="card" wx:for="{{v.pending}}" wx:for-item="p" wx:key="id">
             <view class="ah" data-id="{{p.id}}" bindtap="toggleOpen">
@@ -196,10 +198,10 @@
           </view>
           <view class="card">
             <view class="fh">更正内容</view>
-            <view class="fd"><text class="lab">更正后合计</text><input class="in" type="digit" value="{{newTotal}}" bindinput="onNewTotal" /></view>
+            <view class="fd"><text class="lab">{{correcting.memberDocument?'更正后的服务金额':'更正后合计'}}</text><input class="in" type="digit" value="{{newTotal}}" bindinput="onNewTotal" /></view>
             <textarea class="ta" placeholder="原因(必填):例「实际只补了 1 指,技师勾多了」" value="{{reason}}" bindinput="onReason"></textarea>
             <view class="note">提交后:① 原签署单保持原样,顾客服务记录追加一条更正记录 ② 用卡付过的单,储值差额由系统自动补配 ③ 更正进当日日结留痕</view>
-            <view class="cta" bindtap="submitCorrect">提交更正</view>
+            <view wx:if="{{correcting.discountText}}" class="note">原个人折扣：{{correcting.discountText}}。充值退款请走账户调整。</view><view wx:if="{{correcting.memberDocument}}" class="note">{{amendPreviewText}}</view><button wx:if="{{correcting.memberDocument}}" class="ghost" bindtap="previewCorrection">重新核对</button><button class="cta" disabled="{{correcting.memberDocument && !amendPreview}}" bindtap="submitCorrect">提交更正</button>
           </view>
         </block>
       </view>

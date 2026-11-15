@@ -39,7 +39,7 @@
   <view class="cust" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="open">
     <view class="av">{{item.av}}</view>
     <view class="cmain">
-      <view class="cname">{{item.name}} <text wx:if="{{item.tierLabel}}" class="tbadge {{item.tier}}">{{item.tierLabel}}</text></view>
+      <view wx:if="{{item.personalDiscount.active}}" class="cmeta">个人折扣：{{item.personalDiscount.discountText}} · {{item.personalDiscount.eligibilityText}}</view><view class="cname">{{item.name}} <text wx:if="{{item.tierLabel}}" class="tbadge {{item.tier}}">{{item.tierLabel}}</text></view>
       <view wx:if="{{staffView}}" class="cmeta">到店{{item.visits}}次 · 最近{{item.last}}{{item.phone ? ' · ' + item.phone : ''}}</view>
       <view wx:else class="cmeta">到店{{item.visits}}次 · 最近{{item.last}} · 储值{{item.stored}}</view>
       <view class="ctags" wx:if="{{item.tags.length}}"><text wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" class="tg">{{tg}}</text></view>

@@ -96,7 +96,7 @@ for (const item of inputs) {
   const body = bodyOf(readFileSync(item.js, 'utf8'), item.handler)
   if (!body) {
     // mixin 里的方法:去 utils 里找同名的(日结两个落点共用一份 mixin)
-    const fromMixin = walk(join(ROOT, 'utils'), /\.js$/).map((f) => bodyOf(readFileSync(f, 'utf8'), item.handler)).find(Boolean)
+    const fromMixin = [...walk(join(ROOT, 'utils'), /\.js$/),...walk(dirname(item.js), /\.js$/)].map((f) => bodyOf(readFileSync(f, 'utf8'), item.handler)).find(Boolean)
     if (!fromMixin) { missingHandler.push(`${item.page} ${item.handler}`); continue }
     item.body = fromMixin
   } else item.body = body

@@ -17,7 +17,7 @@ function isDevtools() {
 const LOCAL_API = isDevtools() ? LOCAL_LOOPBACK : `http://${devhost.lanHost}:${LOCAL_PORT}`
 
 const API_BASE = USE_LOCAL_SANDBOX ? LOCAL_API : 'https://api.jingshengyouji.com'
-// 云端体验与本机沙箱分开；此标志只控制演示门店可见性，不放宽微信身份验证。
+
 const EXPERIENCE = /\/experience$/.test(API_BASE)
 const EXPERIENCE_TENANTS = ['demo-ai', 'demo-basic', 'demo-empty']
 const DEMO_USER_ID = 'user-demo'
@@ -55,11 +55,11 @@ const localImageMap = {
   '/assets/images/member-profile.png': '/assets/images/member-profile.jpg'
 }
 
-// Failed customer requests must remain errors; never substitute demo data.
 
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #1
-// QR target follows the running mini-program version; API/database scope never changes.
+
+
+
 function miniCodeEnvironment() {
   try { const v = wx.getAccountInfoSync().miniProgram.envVersion; return ['trial', 'develop'].includes(v) ? v : 'release' } catch (e) { return 'release' }
 }
@@ -100,8 +100,8 @@ function isLoggedIn() {
 function getAdminAuth() {
   const auth = wx.getStorageSync(ADMIN_AUTH_KEY) || null
   if (!auth) return null
-  // 会话是跟环境绑定的:本地沙盘发的 token 生产不认,反之亦然。
-  // 切了 USE_LOCAL_SANDBOX 之后旧 token 还留着,会造成"本地看着已登录、实际每个接口都 401、页面一片空白"。
+
+
   if (auth.apiBase && auth.apiBase !== API_BASE) {
     wx.removeStorageSync(ADMIN_AUTH_KEY)
     return null
@@ -120,16 +120,16 @@ function clearAdminAuth() {
   wx.removeStorageSync(ADMIN_AUTH_KEY)
 }
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #2
+
 function currentTenant() {
   return wx.getStorageSync('lucky_tenant') || deploy.defaultTenantId || ''
 }
 const realWechatClaimKey = tenantId => `lucky_real_wechat_claim::${tenantId}`
 
-// 有没有门店上下文(没有就该去选店,而不是拿别人家的店顶上)
+
 function hasTenant() { return Boolean(currentTenant()) }
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #3
+
 function onStoreSwitched() {
   publicCatalogCache.clear()
   for (const k of ['lucky_member', 'lucky_store_currency', 'lucky_store_deposit', 'lucky_store_ai', 'lucky_cart', 'lucky_orders', 'lucky_style_preset']) {
@@ -137,7 +137,7 @@ function onStoreSwitched() {
   }
 }
 
-// 会话失效时统一弹回登录页。多个接口并行 401 时只跳一次,避免路由打架。
+
 let kickingToLogin = false
 function kickToLogin(silent) {
   if (kickingToLogin) return
@@ -152,8 +152,8 @@ function kickToLogin(silent) {
   }, silent ? 0 : 500)
 }
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #4
-/* `/health` 是公开的服务自述口(版本指纹),不属于任何门店 —— 04f-3「关于」页读它 */
+
+
 const TENANT_FREE_PATHS = ['/shops', '/health']
 let pickingStore = false
 function goPickStore() {
@@ -165,7 +165,7 @@ function goPickStore() {
   })
 }
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #5
+
 const publicPaths = new Set(['/shops', '/health', '/stores', '/services', '/portfolio', '/add-ons', '/service-categories'])
 let renewingCustomer = null
 function contextChanged() { return Object.assign(new Error('门店已切换，请重试'), { code: 'STORE_CHANGED' }) }
@@ -203,7 +203,7 @@ function customerRequest(path, method, data, _retried) {
         err.statusCode = res.statusCode
         err.requestPath = path.split('?')[0]
         if (err.code === 'PHONE_BINDING_REQUIRED' && getAuth()) setAuth(Object.assign({}, getAuth(), {needPhone:true}))
-        // 顾客会话失效 → 静默重登一次再重放(只对"曾经登录过"的会话做,未登录照常报错走登录引导)
+
         if (res.statusCode === 401 && !_retried && path.indexOf('/auth/') !== 0 && getAuth() && getAuth().accessToken) {
           if (!renewingCustomer || renewingCustomer.tenant !== tid) {
             const renewal = { tenant: tid }
@@ -247,11 +247,11 @@ function merchantRequest(path, method, data) {
       complete: finish,
       success(res) {
         if (res.statusCode >= 200 && res.statusCode < 300) return resolve(res.data)
-        // 把 HTTP 状态码带出去:调用方要能区分「没登录/没权限」和「网络不通」
+
         const err = res.data && res.data.error ? res.data.error : new Error('Admin API request failed')
         try { err.statusCode = res.statusCode } catch (e) { /* 冻结对象忽略 */ }
-        // 兜底:任何商家接口 401 都说明这个会话在当前后端不成立(过期、被顶、或换了环境),
-        // 一律清会话弹回登录页——页面各自 catch 掉错误就会停在空白页上,这里必须拦住。
+
+
         if (res.statusCode === 401) kickToLogin()
         reject(err)
       },
@@ -260,8 +260,8 @@ function merchantRequest(path, method, data) {
   })
 }
 
-/* Store deposit is tenant scoped; never substitute another shop. */
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #6
+
+
 function storeDepositAmount() {
   try {
     const d = wx.getStorageSync('lucky_store_deposit')
@@ -280,7 +280,7 @@ function toMiniService(service) {
     name: service.name,
     description: service.description,
     price: service.price,
-    // R5:定金额来自门店配置(/stores 下发),拿不到就 0 不显示 —— 不许再写死 50
+
     depositAmount: storeDepositAmount(),
     duration: service.durationMin,
     suitableFor: service.suitableFor || '',
@@ -292,10 +292,10 @@ function toMiniService(service) {
     pricingType: service.pricingType,
     priceLabelZh: service.priceLabelZh,
     priceLabelEn: service.priceLabelEn,
-    // S1:列表「xxx 起」起价独立字段(详情/AI 报价 label 不动)
+
     priceFromLabelZh: service.priceFromLabelZh,
     priceFromLabelEn: service.priceFromLabelEn,
-    // D49:详情页价格 label(多档=起+档说明,单档才是固定价/基础价)
+
     priceDetailLabelZh: service.priceDetailLabelZh,
     priceDetailLabelEn: service.priceDetailLabelEn,
     quoteHintZh: service.quoteHintZh,
@@ -308,7 +308,7 @@ function toMiniService(service) {
   }
 }
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #7
+
 function toMiniStore(store) {
   return {
     id: store.id || '',   // D19:不再用写死的旗舰店 id 兜底
@@ -364,44 +364,46 @@ function toMiniBooking(booking) {
     galleryStatus: booking.galleryStatus,
     couponDiscount: 0,
     balanceDeduction: 0,
-    /* D32(4500 同族·假数回落):原来 booking.deposit 为 0 就回落店配定金额还标「已付」。
-       现在真相直出:depositState/depositCents/payment(已签快照分解)由后端下发,前端零运算。 */
+
+
     depositState: booking.depositState || '',   // 拿不到不猜「无定金」(页面按未知走通用句)
-    /* 🔴 c3 补扫(店主 08-25 通则提炼律):D71 那轮只扫了网页顾客端,小程序**映射层**这几处漏了。
-       三宗罪都在这五行里:①`|| 0` 把"没有值"变成"零元"(0 在界面上=免费/免定金,是假话);
-       ②`servicePrice || service.price` 拿**别的字段**顶上(零回落律明令禁止);
-       ③页面层明明写了「!== null 才显示,否则 —」,被映射层的 `|| 0` 堵死,那句「—」永远走不到。
-       现在:后端没给就是 null,让页面照它本来的写法显示「—」。 */
+
+
+
+
+
     depositCents: booking.depositCents == null ? null : booking.depositCents,
+    memberDocuments:booking.memberDocuments||null,
+    depositPayment:booking.depositPayment||null,
     payment: booking.payment || null,
     payableAmount: booking.depositCents == null ? null : Math.round(booking.depositCents / 100),
     finalDue: booking.finalDue == null ? null : booking.finalDue,
     servicePrice: booking.servicePrice == null ? null : booking.servicePrice,
-    /* 🔴 D70 合同⑤(店主 08-24):**售后不改写主状态** —— 后端不再回 AFTER_SALES,
-       售后中的单主状态就是 COMPLETED。列表「售后」分组因此必须改按售后字段筛,
-       不然这个分组会永远是空的(网页端同刀,四之九)。 */
+
+
+
     status: (booking.afterSalesStatus ? 'after_sales' : (booking.status === 'COMPLETED' && !booking.payment ? 'pending_settlement' : statusMap[booking.status])) || '',
     paymentStatus: booking.status === 'PENDING_PAYMENT' ? 'pending' : 'paid',
     backendBookingId: booking.id,
-    /* 屏 D2/D3(2026-08-10 核验轮修复):这个映射是**白名单**,后端 customerOrderBadges()
-       下发的徽标三态 / 副行 / 实际应付 / 售后三步在这一层被整片丢掉了 ——
-       后端断言全绿,页面上一个徽标也不出、售后进度卡整块不渲染。原样透传,前端仍零计算。 */
-    /* A2(08-25):订单状态的人话句后端唯一给(与网页顾客端同一出口),映射层零裁剪 */
+
+
+
+
     statusText: booking.statusText || '',
     listBadgeText: booking.listBadgeText || '',
     listBadgeKind: booking.listBadgeKind || '',
     listNote: booking.listNote || '',
-    // ㋉ D1(店主拍案一 08-22):多项目单列表标题「首项目 等N项」,句后端唯一;空串=前端回落服务名
+
     listTitleText: booking.listTitleText || '',
     actualDueText: booking.actualDueText || '',
     listAmountText: booking.listAmountText || '',
     actualDueCents: booking.actualDueCents === undefined ? null : booking.actualDueCents,
     settlementCode: booking.settlementCode || '',
     afterSales: booking.afterSales || null,
-    // 批③首件 B1/B5:售后按钮位(后端句唯一,映射层零裁剪)
-    /* D70(店主 08-24):顾客端可做的动作也由后端状态机给(customerActions);
-       afterSalesAction 是售后线的既有字段,保留不动 —— 两者不冲突:
-       前者管"这张单现在能做什么"(按钮显隐),后者管售后按钮的文案与进度。 */
+
+
+
+
     customerActions: booking.customerActions || [],
     afterSalesStatus: booking.afterSalesStatus || '',
     afterSalesAction: booking.afterSalesAction || '',
@@ -429,18 +431,18 @@ function authRequiredError() {
   return error
 }
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #8
+
 async function loginForCurrentStore(options = {}) {
   const tid = currentTenant()
   const code = await wxLoginCode()
   if (tid !== currentTenant()) throw contextChanged()
-  // An experience profile is only a preview. After a real scan/phone claim,
-  // renew with the same WeChat identity instead of falling back to a demo user.
+
+
   const previousRealWechatClaim = Boolean(getAuth()?._realWechat || wx.getStorageSync(realWechatClaimKey(currentTenant())))
   const data = await request('/auth/wechat/mini-login', 'POST', {
     code,
-    // 本地沙盘:走服务器演示登录旁路(无需真实微信授权即可演示登录后页面)。
-    // 上线前 USE_LOCAL_SANDBOX 置回 false 后此标记自动为 false,走真实微信登录。
+
+
     demoLogin: USE_LOCAL_SANDBOX && !previousRealWechatClaim,
     tenantId: currentTenant(),
     displayName: options.displayName || '',
@@ -456,7 +458,7 @@ async function loginForCurrentStore(options = {}) {
   return data.user
 }
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #9
+
 async function bindWechatPhone({ encryptedData, iv, phoneCode }) {
   const payload = phoneCode ? {phoneCode} : {code:await wxLoginCode(),encryptedData,iv}
   const out = await request('/auth/wechat/mini-phone', 'POST', payload)
@@ -482,7 +484,7 @@ async function ensureLogin(options = {}) {
   return loginForCurrentStore(options)
 }
 
-// 供 /my/* 出口在请求前自愈:换店后 token 不属于本店 → 先静默重登再取数
+
 async function ensureStoreScopedAuth() {
   const a = getAuth()
   if (a && a.accessToken && a.tenantId !== currentTenant()) await ensureLogin({ interactive: false })
@@ -516,16 +518,16 @@ async function updateProfile(profile) {
 
 function miniMember(user = {}) {
   const displayName = String(user.displayName || '').trim()
-  /* 🔴 A1-M2(店主 08-25):会员码**只认后端**(memberCodeForUserId 唯一算法)。
-     原来这里拿 displayName 是不是以 LL- 开头来猜 —— 那是"名字碰巧长得像会员码就当成会员码",
-     与网页那份本地推导同族。零回落律:拿不到显示「—」,不猜。
-     (未登录场景后端本来就不给 user,页面另有登录引导,不靠这句话兜。) */
+
+
+
+
   const memberCode = user.memberCode || '—'
   const isGenericName = !displayName || displayName === 'Lucky Member' || displayName === '微信用户' || displayName === 'WeChat User' || displayName === memberCode
   const hasRealName = Boolean(!isGenericName)
   const profileComplete = user.profileComplete === undefined ? Boolean(hasRealName || user.avatarUrl) : Boolean(user.profileComplete)
   const hasRealStats = user.hasRealStats === undefined ? Boolean(user.id) : Boolean(user.hasRealStats)
-  // 等级信息全部以后端为准(租户单源);后端没给的字段一律中性回落,不再用本地梯子补
+
   const tiers = Array.isArray(user.memberTiers) ? user.memberTiers : []
   const tierKey = String(user.memberTier || '').toLowerCase() || 'member'
   const tierIndex = tiers.findIndex((item) => item.key === tierKey)
@@ -552,7 +554,7 @@ function miniMember(user = {}) {
     growthValue,
     nextLevelValue,
     points: hasRealStats ? (user.points || 0) : 0,
-    // 积分入口的提示(后端唯一出口;整句给黑卡格、数字给小方格角标,同一个数)
+
     redeemablePrizeText: user.redeemablePrizeText || '',
     redeemablePrizeCount: user.redeemablePrizeCount || 0,
     balance: hasRealStats ? Math.round((user.balanceCents || 0) / 100) : 0,
@@ -565,7 +567,7 @@ function miniMember(user = {}) {
   }
 }
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #10
+
 let _addOnCatalog = null
 let _addOnCatalogAt = 0
 async function selectedAddOns(ids) {
@@ -589,7 +591,7 @@ async function getServices(type, lang) {
   }
 }
 
-/* v1.4 大类改造:服务 Tab 一次拉全量+平台大类字典(左栏=大类,空类不显示,与网页同构)。 */
+
 async function getServiceCatalog(lang) {
   const data = await publicRead(`/services?lang=${lang}`)
   return {
@@ -598,16 +600,16 @@ async function getServiceCatalog(lang) {
   }
 }
 
-// 门店是否开通 AI 智能包。顾客端据此隐藏 AI 入口(未知时按"没有"处理,宁可少显示一个按钮,
-// 也不要让顾客点了一个没有结果的 AI)。由 /stores 顺带下发,不额外发请求。
+
+
 function getStoreAiEnabled() { return wx.getStorageSync('lucky_store_ai') === true }
 
 async function getStores() {
   try {
     const data = await publicRead('/stores?lang=' + (wx.getStorageSync('lucky_lang') === 'en' ? 'en' : 'zh'))
     wx.setStorageSync('lucky_store_ai', data.aiEnabled === true)
-    /* 03u:样例内容(充值套餐示例 / 我的消息样例)只许在演示店出。
-       照 aiEnabled 同一形制缓存,不另起一套(先搜复用,公约④)。 */
+
+
     wx.setStorageSync('lucky_store_demo', data.isDemo === true)
     return (data.stores || []).map(toMiniStore)
   } catch (error) {
@@ -615,16 +617,16 @@ async function getStores() {
   }
 }
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #11
+
 async function getHeroSlides(lang) {
   const data = await publicRead(`/stores?lang=${lang === 'en' ? 'en' : 'zh'}`)
   return data.heroSlides || []
 }
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #12
+
 async function getStoreCurrency() {
   const data = await publicRead('/stores?lang=' + (wx.getStorageSync('lucky_lang') === 'en' ? 'en' : 'zh'))
-  // R5:定金配置跟币种同一趟取回来,顾客端不再自己编默认 50
+
   return { currency: data.currency || '', currencyDisplay: data.currencyDisplay || null, deposit: data.deposit || null }
 }
 
@@ -643,7 +645,7 @@ async function getAddOns() {
   }
 }
 
-// 方案B作品墙:平铺作品+品类(旧 getPortfolio 保留给仍按技师分组的调用方)
+
 async function getPortfolioWall() {
   try {
     const data = await request('/portfolio')
@@ -666,17 +668,17 @@ async function getPortfolio() {
       }))
     }
   } catch (error) {
-    // Use fallback below.
+
   }
-  // D17(自纠:上一轮误分到 ⚪):这是**编造的作品图**,会端给顾客 —— 同样不许回 mock
+
   throw new Error('作品墙加载失败')
 }
 
 async function getService(id, lang) {
-  /* D48(店主 08-16 实测:护理板块「服务不存在」):原实现靠猜 id 前缀定类
-     (id 以 lash 开头→lash,否则一律→nail)——护理类 id(care-service-*)被猜成 nail,
-     去美甲列表里找,永远 null → 护理详情从来打不开。改:全量目录里直查,不猜类。
-     D17 红线不变:真找不到返回 null,绝不回 mock。 */
+
+
+
+
   const data = await publicRead(`/services?lang=${lang}`)
   return (data.services || []).map(toMiniService).find((item) => item._id === id) || null
 }
@@ -708,7 +710,8 @@ async function getTechnicians(serviceId) {
   }
 }
 
-// Historical rationale: handoff/messages-20261012/api历史开发说明.md #13
+
+async function bookingCheckoutPayload(items,remark,useBalance){const user=await ensureLogin(),store=await activeStoreId();return {useBalance:!!useBalance,items:await Promise.all(items.map(async x=>({clientItemId:x._id,userId:user.id,storeId:x.storeId||store,serviceId:x.serviceId,technicianId:x.appointmentInfo.technicianId,date:x.appointmentInfo.date,time:x.appointmentInfo.time,addOns:await selectedAddOns(x.appointmentInfo.addOns),referenceImages:x.appointmentInfo.referenceDataImages||x.appointmentInfo.referenceImages||[],sourceChannel:'wechat_miniprogram',notes:remark||x.appointmentInfo.remark||'',bookingDraftId:x.bookingDraftId||x.appointmentInfo.bookingDraftId||x.draftId||''})))}}
 async function createBooking(cartItem, remark) {
   const user = await ensureLogin()
   const appointment = cartItem.appointmentInfo
@@ -737,10 +740,10 @@ async function getBookings(lang) {
   return (data.bookings || []).map(toMiniBooking)
 }
 
-// 2026-08-04 安全修复:这里原来有一段"假分析"回退——请求一失败就返回写死的
-// estimatedPriceCents(美甲 $238 / 美睫 $198)+ "已根据参考图生成初步建议"话术,
-// 界面上跟真 AI 结果长得一模一样。等于给顾客看一个跟他的图、跟门店价目表都无关的报价,
-// 还挂着商家的品牌。已删除:失败就如实抛错,由页面提示顾客走人工报价。
+
+
+
+
 async function analyzeReference(payload) {
   const data = await request('/ai/reference-analysis', 'POST', payload)
   return data.analysis || data
@@ -755,7 +758,7 @@ async function adminLogin(email, password, remember = true) {
   return auth
 }
 
-// 保持登录:本地有未过期的商家会话即视为已登录
+
 function isAdminLoggedIn() {
   const a = getAdminAuth()
   return Boolean(a && a.accessToken && (!a.expiresAt || Date.now() < a.expiresAt - 60 * 1000))
@@ -765,14 +768,14 @@ async function adminChangePassword(oldPassword, newPassword, confirmPassword) {
   return adminRequest('/admin/auth/change-password', 'POST', { oldPassword, newPassword, confirmPassword })
 }
 
-// 通用商家端接口封装:任意 /admin/* GET/POST
-// 商家入驻申请(公开,无需登录)
+
+
 function submitMerchantLead(data) {
   return request('/merchant-leads', 'POST', data)
 }
 
-// 公开门店列表(兜底进店)
-// includeDemo=true 时返回演示门店(店主在选店页开「演示模式」才会传;顾客永远看不到)
+
+
 function getShops(includeDemo = EXPERIENCE) {
   return request(includeDemo ? '/shops?include=demo' : '/shops')
 }
@@ -790,24 +793,24 @@ function aiCustomerService(message) {
   return request('/ai/customer-service', 'POST', { message, lang: 'zh', clientId: clientChatId() })
 }
 
-// 我的资产(user × 当前店)
-// 顾客端预约确认页(屏 3)读本店定金规则。公开接口,不需要登录。
+
+
 function getDepositPolicy(qs) { return request(`/store/deposit-policy${qs ? `?${qs}` : ''}`) }
 function getMyCoupons() { return request('/my/coupons') }
-// 批③次段:卡包(三类聚合+角标同源)与商城(上架套餐+按钮句)两个只读出口
-// getAssets 已删(资产层收敛,08-25):/my/assets 整条退役,小程序这边本来也已零使用方
+
+
 function getCardPack() { return request('/my/card-pack') }
 function getMyTimecards() { return request('/my/timecards') }
 function getMall() { return request('/my/mall') }
 function getMyStoredValue() { return request('/my/stored-value') }
-// D57 顾客侧待签单再入口:全部未签单(不止最新一张;即时开单没挂预约的也在)
-function getMyPendingSign() { return request('/my/pending-sign') }
-// 批③首件 屏B:顾客侧售后发起/撤回(同一状态机,前置=已完成+已签署;撤回=转已解决留痕)
 
-function cancelBooking(bookingId, reason) { return request(`/bookings/${encodeURIComponent(bookingId)}/cancel`, 'POST', { reason: reason || '' }) }
+function getMyPendingSign() { return request('/my/pending-sign') }
+
+
+function cancelBooking(bookingId, reason,reviewHash) { return request(`/bookings/${encodeURIComponent(bookingId)}/cancel`, 'POST', { reason: reason || '',reviewHash }) }
 function startAfterSales(bookingId, description) { return request(`/my/bookings/${encodeURIComponent(bookingId)}/after-sales`, 'POST', { description }) }
 function withdrawAfterSales(bookingId) { return request(`/my/bookings/${encodeURIComponent(bookingId)}/after-sales/withdraw`, 'POST', {}) }
-// B3-4 代充回执确认:幂等,只许确认本人的充值行;未确认不阻塞任何链路
+
 function confirmStoredRecharge(id) { return request('/my/stored-value/confirm', 'POST', { id }) }
 
 async function myBalance() {
@@ -820,36 +823,36 @@ async function myBalance() {
 function getSandboxRoster() { return request('/sandbox/demo-roster') }
 async function sandboxLoginAs(userId) {
   const data = await request('/auth/wechat/mini-login', 'POST', { demoLogin: true, tenantId: currentTenant(), asUserId: userId })
-  // 演示身份切换会换顾客；全局订单缓存若沿用，会把上一人的订单显示给下一人。
+
   wx.removeStorageSync('lucky_orders')
-  // Explicitly choosing a demo profile leaves the real-WeChat session for this
-  // store. A later ordinary login may now use the preview identity again.
+
+
   wx.removeStorageSync(realWechatClaimKey(currentTenant()))
   setAuth(Object.assign({}, data.auth, { user: data.user, tenantId: currentTenant() }))
   wx.setStorageSync('lucky_member', Object.assign(miniMember(data.user), { _tenant: currentTenant() }))
   return data.user
 }
 function getMyPointsHistory() { return request('/my/points-history') }
-// 积分商城
+
 function getPointsMall() { return request('/my/points-mall') }
 function redeemPrize(prizeId) { return request('/my/points-mall/redeem', 'POST', { prizeId }) }
 
-// 按"当前进的店"刷新会员数据(会员=用户×店:积分/储值/等级每店独立,切店后必须刷新)
+
 async function refreshMember() {
-  // D39:换店后先把身份换成本店的,再刷会员数据;换不动(未登录/网络断)按原逻辑走
+
   try { await ensureStoreScopedAuth() } catch (e) { return null }
   const auth = getAuth()
-  /* D33 根因之一:登录存的 auth 里可能没有 user.id(mini-login 的 auth 与 user 是并列字段),
-     这里一早退,lucky_member 里旧演示时代的 4500 余额缓存就永远洗不掉。
-     id 兜底链:auth.user.id → auth.userId → 本机 lucky_member.id。 */
+
+
+
   if (!auth || !auth.accessToken) return null
   const uid = (auth.user && auth.user.id) || auth.userId || (wx.getStorageSync('lucky_member') || {}).id
   if (!uid) return null
   try {
     const data = await request(`/users/${uid}`)
     const fresh = miniMember(data.user)
-    // D40(换店残留第 3 案):昵称/头像/资料完善度这类「档案身份字段」只在**同一家店**内保留;
-    // 跨店快照一律以当前店档案为准 —— 快照带租户戳(_tenant)界定归属
+
+
     wx.setStorageSync('lucky_member', Object.assign({}, fresh, {
       _tenant: currentTenant(),
       nickname: fresh.nickname,
@@ -872,7 +875,7 @@ function adminPut(path, data) {
 function adminPatch(path, data) {
   return adminRequest(path, 'PATCH', data)
 }
-// 服务小记(P0-②)
+
 function saveServiceNote(data) {
   return adminRequest('/admin/service-notes', 'POST', data)
 }
@@ -894,17 +897,17 @@ function voidSignedDoc(docId, reason) {
 }
 
 function getMySignedDocs() { return request('/my/signed-docs') }
-// 角色缓存(登录/adminMe 后写入),供页面同步判断
+
 function getCachedRole() { return wx.getStorageSync('lucky_admin_role') || '' }
 function isOwner() { return getCachedRole() === 'owner' }
-// owner-only 页面守卫:员工进入即弹回。返回 true=放行
-// 未登录时跳回商家登录页(而不是把人放进一个没有数据的空白后台)
+
+
 function goMerchantLogin() {
   kickToLogin(true)
 }
 
-// 商家区通用守卫(老板或员工都可):没登录就送回登录页,别让人停在没有数据的空壳页面上。
-// 只做本地会话判断,不发请求——放在 onShow 开头零成本。
+
+
 
 const HOURS_SETUP_PAGE = 'pages/merchant/hours-setup/index'
 function hoursGateText() { try { return JSON.parse(wx.getStorageSync('lucky_hours_gate') || 'null') || {} } catch (e) { return {} } }
@@ -923,17 +926,17 @@ function guardMerchant() {
 }
 
 async function guardOwner() {
-  // 2026-08-04 修:原来这里 catch 到任何异常都 return true,401 也照放——
-  // 结果没登录也能进商家页,但每个接口都 401,页面一片空白,看起来像"不用密码就能登录"。
-  // 现在:本地压根没有有效会话 → 直接去登录页;会话失效(401/403)→ 清掉再去登录;
-  // 只有真的断网/超时才沿用旧的"不误伤"策略,放行让页面自己重试。
+
+
+
+
   if (!isAdminLoggedIn()) { goMerchantLogin(); return false }
   let me = null
   try {
     me = await adminMe()
   } catch (e) {
     const code = e && (e.statusCode || e.code)
-    // 401 已由 adminRequest 统一踢回登录页,这里只需要不放行
+
     if (code === 401 || code === 403 || code === 'UNAUTHORIZED' || code === 'FORBIDDEN' || code === 'ACCOUNT_DISABLED') return false
     return true // 断网/超时:不误伤
   }
@@ -944,7 +947,7 @@ async function guardOwner() {
   return false
 }
 
-// 财务门禁:解锁后本地存 x-finance-key,后续财务请求自动带上
+
 function getFinanceKey() { return wx.getStorageSync('lucky_finance_key') || '' }
 function clearFinanceKey() { wx.removeStorageSync('lucky_finance_key') }
 async function financeUnlock(password, confirmPassword) {
@@ -960,15 +963,15 @@ async function adminMe(force = false) {
   if (!force && adminMeCache && adminMeCache.token === token && Date.now() - adminMeCache.at < 5000) return adminMeCache.value
   const data = await adminRequest('/admin/auth/me')
   if (data && data.admin && data.admin.role) wx.setStorageSync('lucky_admin_role', data.admin.role)
-  /* D84 强制设置(图 v1.0):未设置旗标+后端句随 me 缓存,守卫零请求即时拦 */
+
   wx.setStorageSync('lucky_hours_unset', data && data.hoursUnset ? '1' : '')
   if (data && data.hoursGateText) wx.setStorageSync('lucky_hours_gate', JSON.stringify(data.hoursGateText))
   adminMeCache = { token, at: Date.now(), value: data.admin }
   return data.admin
 }
 
-// 商家端「本店有没有 AI 智能包」。小程序原先完全不读权限,所有 AI 按钮无差别显示;
-// 现在进商家页时取一次并缓存,页面用 merchantHasAi() 同步判断要不要显示 AI 入口。
+
+
 async function refreshMerchantAi() {
   try {
     const d = await adminRequest('/admin/tenant/entitlements')
@@ -1029,6 +1032,9 @@ async function refreshPhoneRequirement() {
 }
 
 module.exports = {
+  getMemberPricing:()=>request('/my/member-pricing'),
+  getMemberDocuments:()=>request('/my/member-documents'),
+  getMemberGroupLink:id=>request('/my/member-document-groups/'+encodeURIComponent(id)+'/sign-link','POST',{}),
   phoneBindingRequired, refreshPhoneRequirement,
   miniCodeUrl, miniCodeEnvironment,
   getBookingDraft: id => request(`/booking-drafts/${encodeURIComponent(id)}`),
@@ -1117,7 +1123,10 @@ module.exports = {
   getPortfolioWall,
   getTechnicians,
   getAvailability,
-  createBooking,
+  createBooking,bookingCheckoutPayload,
+  previewBookingCheckout:b=>request('/my/booking-checkout/preview','POST',b),
+  submitBookingCheckout:b=>request('/my/booking-checkout','POST',b),
+  previewBookingCancel:id=>request('/bookings/'+encodeURIComponent(id)+'/cancel-preview'),
   getBookings,
   getStoreCurrency,
   toMiniBooking,   // 导出只为回归断言:这层是白名单,漏字段=页面整块不渲染(见 test-double-sheet)

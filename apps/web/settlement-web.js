@@ -24,7 +24,7 @@ window.SettlementWeb = (function () {
     bookingId: '', userId: '', customerName: '',
     cats: [], items: [], roster: [], timecards: [], timecardPackages: [],
     depositDeductible: true, depositApplied: false,
-    groups: [], couponGrantId: '', couponOptions: [], couponUsableCount: 0,
+    catalogPrices: null, groups: [], couponGrantId: '', couponOptions: [], couponUsableCount: 0,
     payMenu: { useBalance: true, recharge: false },
     applyFootSurcharge: false, applyTipReuse: false,
     bind: null, couponPanel: false,
@@ -36,6 +36,7 @@ window.SettlementWeb = (function () {
     clearTimeout(signPollTimer)
     if (!state.open || !state.pendingSheets.length) return
     try {
+      if(state.pricingConfig?.active){const r=await state._deps.request('/admin/member-pricing/groups/'+encodeURIComponent(state.documentGroupId));state.pendingSheets=r.documents;if(r.documents.every(d=>d.status==='signed')){state._deps.toast('本次服务单均已签署');close();return}render();if(r.documents.some(d=>d.status==='pending_sign'))signPollTimer=setTimeout(pollSignState,2500);return}
       const checks = await Promise.all(state.pendingSheets.map(sheet => state._deps.request(`/admin/settlements/${encodeURIComponent(sheet.id)}/sign-state`)))
       if (!state.open) return
       const remaining = state.pendingSheets.filter((sheet, i) => checks[i]?.state !== 'signed')
@@ -51,7 +52,7 @@ window.SettlementWeb = (function () {
       catId: firstCat || '', mainId: '',
       timecardId: '', timecardServiceId: '', purchasePackageId: '',
       addonIds: {}, customItems: [], selectedTechs: [], techItems: {},
-      servedPersonName: ''
+      servedPersonName: '', beneficiaryKey: 'self'
     }
   }
 
@@ -106,7 +107,7 @@ window.SettlementWeb = (function () {
       payerUserId: st.userId || undefined,
       cardOwnerUserId: st.userId || undefined,
       payIntent: payIntentOf(st),
-      settlements: buildSheets(st)
+      settlements: st.pricingConfig?.active?window.MemberPricingInput.enrich(st,buildSheets(st)):buildSheets(st)
     }
   }
 
@@ -116,12 +117,16 @@ window.SettlementWeb = (function () {
     Object.assign(state, {
       open: true, ready: false, submitting: false, _scrolled: false,
       bookingId: ctx.bookingId || '', userId: ctx.userId || '', customerName: ctx.customerName || '',
-      groups: [], couponGrantId: '', couponOptions: [], couponUsableCount: 0,
+      catalogPrices: null, groups: [], couponGrantId: '', couponOptions: [], couponUsableCount: 0,
       payMenu: { useBalance: true, recharge: false }, applyFootSurcharge: false, applyTipReuse: false,
       bind: null, couponPanel: false, rvDraft: null, rvPanel: null, preview: null, view: null, pendingSheets: [], signLink: null
     })
-    state._deps = deps
+    state._deps = deps; state.bootError=null; state._ctx=ctx
+    render()
     try {
+      state.pricingConfig=(await request('/admin/member-pricing/config')).config
+      state.memberPricing=state.userId?await request('/admin/member-pricing/members/'+encodeURIComponent(state.userId)):null
+      state.createRetry={};state.documentGroupId=null;state.deliveryStatus='';state.deliveryOperation=null
       const [cats, items, techs, dep] = await Promise.all([
         request('/admin/pricing/categories'),
         request('/admin/pricing/items'),
@@ -162,11 +167,11 @@ window.SettlementWeb = (function () {
       if (state.bookingId) {
         const r = await request(`/admin/settlements?bookingId=${encodeURIComponent(state.bookingId)}`).catch(function () { return null })
         const pending = ((r && r.settlements) || []).filter(function (x) { return x.status === 'pending_sign' })
-        if (pending.length) { state.pendingSheets = pending; render(); pollSignState() }
+        if (pending.length) { if(state.pricingConfig.active&&pending[0].serviceDocument){const d=await request('/admin/member-pricing/documents/'+encodeURIComponent(pending[0].serviceDocument.id));state.documentGroupId=d.visitGroupId||d.groupId;state.pendingSheets=(await request('/admin/member-pricing/groups/'+encodeURIComponent(state.documentGroupId))).documents}else state.pendingSheets = pending; render(); pollSignState() }
       }
     } catch (e) {
       toast((e && e.message) || '加载价目表失败')
-      state.open = false
+      state.bootError=e.message||'读取失败，请重试';state.ready=false
       render()
     }
   }
@@ -192,7 +197,8 @@ window.SettlementWeb = (function () {
     if (page) page.classList.add('settle-open')
     mount.classList.remove('hidden')
     const { escapeHtml } = state._deps
-    if (!state.ready) { mount.innerHTML = '<div class="empty-state">加载中…</div>'; window.scrollTo(0, 0); return }
+    if (!state.ready) { mount.innerHTML = state.bootError?'<section class="admin-card settle-composer"><h2>结算开单</h2><p>'+escapeHtml(state.customerName)+'</p><section class="sw-card" role="alert"><h3>结算资料加载失败</h3><p class="mp-error">'+escapeHtml(state.bootError)+'</p><div class="mp-sign-actions"><button type="button" class="primary slim" data-mp-retry>重新加载</button><button type="button" class="ghost slim" data-mp-return>返回订单</button></div></section></section>':'<div class="empty-state">加载中…</div>'; const retry=mount.querySelector('[data-mp-retry]');if(retry)retry.onclick=()=>open(state._ctx,state._deps);const back=mount.querySelector('[data-mp-return]');if(back)back.onclick=close;window.scrollTo(0, 0);return }
+    if(window.MemberPricingInput?.pending('documents:'+state.userId)){mount.innerHTML='<section class="admin-card"><h2>上次开单结果待核实</h2><p>已保留本次项目、充值与折扣。请先查询或重试原操作，避免重复开单。</p><button data-mp-recover class="primary">查询／重试原操作</button></section>';mount.querySelector('[data-mp-recover]').onclick=async()=>{try{const r=await window.MemberPricingInput.mutation('documents:'+state.userId,'',{},(url,data)=>state._deps.request(url,{method:'POST',body:JSON.stringify(data)}),true);state.documentGroupId=r.documents[0].visitGroupId||r.groupId;state.pendingSheets=(await state._deps.request('/admin/member-pricing/groups/'+encodeURIComponent(state.documentGroupId))).documents;pollSignState()}catch(e){state._deps.toast(e.message)}render()};return}
     const v = state.view || {}
     const bindInfo = state.bind || {}
     mount.innerHTML = `
@@ -209,13 +215,15 @@ window.SettlementWeb = (function () {
           </div>
           <button class="ghost slim" data-sw-close type="button">返回订单</button>
         </div>
-        ${state.pendingSheets.length ? `
+        ${state.pricingConfig?.active&&state.memberPricing&&!state.pendingSheets.length ? `<section class="sw-card"><h3>会员资格与个人折扣</h3><p>${escapeHtml(state.memberPricing.eligibilityText)} · ${escapeHtml(state.memberPricing.discountText)}</p><p class="sw-mut">${escapeHtml(state.memberPricing.statusText)}</p></section>` : ''}
+        ${state.pricingConfig?.active&&state.pendingSheets.length ? window.MemberPricingComposer.batch(state,escapeHtml) : state.pendingSheets.length ? `
           <div class="sw-pending">该预约已有待签单 ${state.pendingSheets.length} 张 —— 等待顾客核对签署；要改单先撤回。
             ${state.pendingSheets.map(function (sheet) { return `<div class="sw-pending-row"><code>${escapeHtml(sheet.code)}</code> 待签 <span class="sw-mut">结算经手账号：${escapeHtml(sheet.operatorText || '历史未记录')}</span><button type="button" class="ghost slim" data-sw-sign-link="${escapeHtml(sheet.id)}">生成顾客签署链接</button></div>` }).join('')}
           </div>` : ''}
         ${state.signLink ? `<div class="sw-card"><b>顾客签署链接</b><p>${escapeHtml(state.signLink.note)}</p><input class="sw-in full" data-sw-sign-url readonly value="${escapeHtml(state.signLink.url)}"><button class="ghost slim" data-sw-sign-copy type="button">复制链接</button> <a data-sw-sign-open href="${escapeHtml(state.signLink.url)}" target="_blank" rel="noopener noreferrer">打开签署页</a><p class="sw-mut">请交给本单顾客核对并签字。重新生成会使旧链接失效。</p></div>` : ''}
-        ${state.groups.map(function (g, gi) { return renderGroup(g, gi, escapeHtml) }).join('')}
-        <button class="sw-addmain" data-sw-add-group type="button">＋ 添加第二个服务项目</button>
+        <div ${state.pricingConfig?.active&&state.pendingSheets.length?'hidden':''}>
+        ${state.pricingConfig?.active?window.MemberPricingComposer.people(state,renderGroup,escapeHtml):state.groups.map(function (g, gi) { return renderGroup(g, gi, escapeHtml) }).join('')}
+        ${state.pricingConfig?.active?'':'<button class="sw-addmain" data-sw-add-group type="button">＋ 添加第二个服务项目</button>'}
 
         ${/* ═══ 单级卡:定金 / 券 / 整单规则(小程序屏 3 上半)═══ */''}
         <div class="sw-card" id="swPayBlock">
@@ -255,7 +263,7 @@ window.SettlementWeb = (function () {
           </div>
           <button class="sw-paym ${state.payMenu.recharge ? 'on' : ''}" data-sw-recharge type="button">
             <span class="sw-ck ${state.payMenu.recharge ? 'on' : ''}">${state.payMenu.recharge ? '✓' : ''}</span>
-            <span class="sw-pmain"><b>随单充值(签字生效)</b>　<span class="sw-rvlink ${state.bind && state.bind.bound ? '' : 'dis'}" data-sw-rv-open>${state.rvDraft ? '改充值 →' : '去挂充值 →'}</span>
+            <span class="sw-pmain"><b>随单充值(签字生效)</b>　<button type="button" class="sw-rvlink ${state.bind && state.bind.bound ? '' : 'dis'}" data-sw-rv-open>${state.rvDraft ? '改充值 →' : '去挂充值 →'}</button>
               ${state.userId && state.bind && !state.bind.bound ? '<span class="sw-bindbar">未绑定档案不可充值 —— 本单签字时顾客扫码即完成绑定,下一单就能随单充值</span>' : ''}
               <span class="sw-psmall">${state.rvDraft ? `已挂:${escapeHtml(state.rvDraft.label)};签字那一刻才入账,充完即抵本单` : '挂到本单一起签:签字那一刻充值才入账,充完即抵本单'}</span></span>
           </button>
@@ -283,13 +291,14 @@ window.SettlementWeb = (function () {
           ${v.totalText ? `<div class="sw-tl big"><span>到店应收</span><span>${escapeHtml(v.totalText)}</span></div>` : ''}
         </div>
 
-        <button class="sw-cta" data-sw-submit ${state.submitting ? 'disabled' : ''} type="button" id="swSubmitBtn">${state.submitting ? '提交中…' : '生成待签结算单(顾客侧签署)'}</button>
-        <p class="sw-foot">金额全部由后端计价引擎算出，本页不做任何金额运算 · 入账唯一路径=签署</p>
+        <button class="sw-cta" data-sw-submit ${state.submitting||state.pendingSheets.length ? 'disabled' : ''} type="button" id="swSubmitBtn">${state.submitting ? '提交中…' : '核对并生成本次服务单'}</button>
+        <p class="sw-foot">请核对服务、折扣和支付明细。顾客签署后，充值与扣款一起生效。</p></div>
       </section>
       ${state.couponPanel ? renderCouponPanel(escapeHtml) : ''}
       ${state.rvPanel ? renderRvPanel(escapeHtml) : ''}
     `
     bind(mount)
+    if(state.pricingConfig?.active&&state.rvPanel){const host=document.createElement('div');mount.querySelector('[data-sw-rv-ok]').before(host);window.DiscountWheel.mount(host,{value:state.rvPanel.rateBps,onChange:v=>{state.rvPanel.rateBps=v}})}
     if (!state._scrolled) { state._scrolled = true; window.scrollTo(0, 0) }   // 开单块就在页顶:直接回顶,不与浏览器滚动锚定打架
   }
 
@@ -331,11 +340,13 @@ window.SettlementWeb = (function () {
   }
 
   function renderGroup(g, gi, escapeHtml) {
+    if(state.pricingConfig?.active&&g.collapsed)return window.MemberPricingComposer.collapsed(state,g,gi,escapeHtml);
     const money = state._deps.money
     const mains = state.items.filter(function (i) { return (i.itemKind || 'main') === 'main' && (i.categoryId || '') === g.catId })
     const addons = state.items.filter(function (i) { return i.itemKind === 'addon' })
     const isTc = g.catId === '__timecard'
     const decorateRow = function (it, on, qty) {
+      if(state.pricingConfig?.active){const price=state.catalogPrices?.items.find(x=>x.id===it.id);if(!price)return '<span class="sw-pr">读取中…</span>';if(price.requiresQuote)return '<span class="sw-pr">需报价</span>';const amount=price.prices[isTc?'list':g.tierKey];return '<span class="sw-pr">'+(amount===undefined?'未配置':money(amount,2))+'</span>'}
       const cents = priceCentsOf(it, isTc ? 'list' : g.tierKey)
       const listC = it.listPriceCents ?? cents
       return `<span class="sw-pr">${listC !== cents ? `<span class="sw-mut sw-strike">${money(listC, 2)}</span>` : ''}<span class="sw-now${cents === 0 ? ' free' : ''}">${cents === 0 ? '免收' : money(cents, 2)}</span></span>`
@@ -343,6 +354,7 @@ window.SettlementWeb = (function () {
     return `
       <div class="sw-card sw-group" data-gi="${gi}">
         <div class="sw-ch">服务项目 ${'①②③④⑤'[gi] || gi + 1}
+          ${state.pricingConfig?.active?`<button type="button" class="ghost slim" data-mp-collapse="${gi}">收起</button>`:''}
           ${gi > 0 ? `<button class="ghost slim sw-grpx" data-sw-remove-group="${gi}" type="button">✕ 移除此项目</button>` : ''}
         </div>
 
@@ -350,7 +362,7 @@ window.SettlementWeb = (function () {
         ${!isTc ? `
         <div class="sw-sec">价格体系(本组独立) <span class="sw-hint">${g.tierChanged ? '已改档，将留痕' : '默认按会员判定'}</span></div>
         <div class="sw-chiprow" id="swItemsBlock">
-          ${TIERS.map(function (t2) { return `<button class="sw-chip ${g.tierKey === t2.key ? 'on' : ''}" data-sw-tier="${gi}" data-k="${t2.key}" type="button">${t2.label}${t2.key === g.tierDefault ? '(默认)' : ''}</button>` }).join('')}
+          ${window.MemberPricingInput.availableTypes(state.pricingConfig,state.catalogPrices,state.memberPricing).map(function (t2) { return `<button class="sw-chip ${g.tierKey === t2.key ? 'on' : ''}" data-sw-tier="${gi}" data-k="${t2.key}" type="button">${t2.label}${t2.key==='member'&&state.pricingConfig?.active?' · '+escapeHtml(state.customerName)+' '+window.MemberPricingInput.label(state.catalogPrices?.rateBps??null):''}${t2.key === g.tierDefault ? '(默认)' : ''}</button>` }).join('')}
         </div>` : '<div class="sw-sec">次卡为独立消费 <span class="sw-hint">按折算价/套餐价,不叠加会员价与优惠</span></div>'}
 
         ${/* 服务项目:大类横排 chips + 项目列表行(勾框+名+划线价+现价),单选自动替换 */''}
@@ -406,6 +418,7 @@ window.SettlementWeb = (function () {
           ${mains.length ? '' : '<p class="sw-empty">该大类下暂无在售项目</p>'}
           ${g.mainId ? `<p class="sw-grppicked">本组主项目:${escapeHtml((state.items.find(function (i) { return i.id === g.mainId }) || {}).nameZh || '')}(点其他大类里的项目=替换)</p>` : ''}`}
 
+        ${state.pricingConfig?.active?window.MemberPricingComposer.quotes(state,g,gi,escapeHtml):''}
         ${/* 加项:列表行勾选;按指计价的用 stepper(− n指 ＋) */''}
         <div class="sw-sec" id="swAddonBlock">加项目录 <span class="sw-hint">按本组价格档计价</span></div>
         ${addons.length ? addons.map(function (a) {
@@ -455,8 +468,8 @@ window.SettlementWeb = (function () {
         })()}
 
         ${/* 被服务者:input full(输入过程原样,不 trim 不重画) */''}
-        <div class="sw-sec" id="swServedBlock">被服务者(本组) <span class="sw-hint">朋友不建档:填称呼即可,单据仍推卡主签</span></div>
-        <input class="sw-in full" data-sw-served="${gi}" placeholder="留空=本人；朋友填称呼" value="${escapeHtml(g.servedPersonName)}">
+        ${state.pricingConfig?.active?'':`<div class="sw-sec" id="swServedBlock">被服务者(本组) <span class="sw-hint">朋友不建档:填称呼即可,单据仍推卡主签</span></div>
+        <input class="sw-in full" data-sw-served="${gi}" placeholder="留空=本人；朋友填称呼" value="${escapeHtml(g.servedPersonName)}">`}
       </div>`
   }
 
@@ -483,6 +496,7 @@ window.SettlementWeb = (function () {
   /* ===== 事件(输入原样进 state,不回写不重画;金额框走 data-money 全局兜底) ===== */
   function bind(mount) {
     const { toast } = state._deps
+    if(state.pricingConfig?.active){window.MemberPricingComposer.bind(mount,state,{newGroup,render,preview:schedulePreview});mount.querySelector('[data-mp-deliver]')?.addEventListener('click',()=>window.MemberPricingComposer.signing(state,false,render));mount.querySelector('[data-mp-local]')?.addEventListener('click',()=>window.MemberPricingComposer.signing(state,true,render))}
     const on = function (sel, fn) { mount.querySelectorAll(sel).forEach(function (el) { el.addEventListener('click', function (e2) { fn(el, e2) }) }) }
     mount.querySelector('[data-sw-close]')?.addEventListener('click', close)
     on('[data-sw-sign-link]',async function(el){
@@ -618,6 +632,7 @@ window.SettlementWeb = (function () {
     on('[data-sw-rv-pick]', function (el) {
       const id = el.dataset.swRvPick
       state.rvPanel = Object.assign({}, state.rvPanel, { packageId: state.rvPanel.packageId === id ? '' : id, amount: '' })
+      if(state.pricingConfig?.active)state.rvPanel.rateBps=window.MemberPricingInput.chosenRate(state.rvPanel.pkgs.find(p=>p.id===state.rvPanel.packageId),state.memberPricing)
       render()
     })
     mount.querySelector('#swRvAmt')?.addEventListener('input', function (ev) {
@@ -638,6 +653,7 @@ window.SettlementWeb = (function () {
         if (!Number.isFinite(payCents) || payCents <= 0) { toast('金额不对'); return }
         draft = { packageId: '', amountCents: payCents, label: '手输金额(无赠送)' }
       }
+      if(state.pricingConfig?.active)draft.rateBps=state.rvPanel.rateBps
       state.rvDraft = draft; state.rvPanel = null; state.payMenu.recharge = true
       render(); schedulePreview()
     })
@@ -671,21 +687,22 @@ window.SettlementWeb = (function () {
     state.rvPanel = {
       amount: cur && !cur.packageId ? String(cur.amountCents / 100) : '',
       packageId: cur ? (cur.packageId || '') : '',
-      pkgs
+      pkgs,rateBps:cur?cur.rateBps:state.memberPricing.rateBps
     }
     render()
   }
 
   /* ===== 预览:响应次序护栏与小程序同刀(过期响应整包丢弃) ===== */
   let _t = null; let _seq = 0
-  function schedulePreview() { clearTimeout(_t); _t = setTimeout(doPreview, 250) }
+  function schedulePreview() { ++_seq; clearTimeout(_t); _t = setTimeout(doPreview, 250) }
   async function doPreview() {
     /* C2 裁(08-30):空态守卫拆除 —— 小程序 doPreview 从来不设守卫,后端对空单回 200 合法零单
        (后端是最终闸)。守卫=前端多养一份「什么算空」的定义,D86(漏认购卡组)就是它咬的第一口。 */
     const { request } = state._deps
     const seq = ++_seq
     try {
-      const r = await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify(buildBody(state)) })
+      if(state.pricingConfig?.active){const prices=await request('/admin/member-pricing/catalog',{method:'POST',body:JSON.stringify(buildBody(state))});if(seq!==_seq)return;state.catalogPrices=prices;window.MemberPricingInput.syncTier(state.groups,prices)}
+      const r = await request(state.pricingConfig?.active?'/admin/member-pricing/preview':'/admin/settlements/preview', { method: 'POST', body: JSON.stringify(buildBody(state)) })
       if (seq !== _seq) return
       state.preview = r
       const sheets = r.sheets || []
@@ -702,7 +719,7 @@ window.SettlementWeb = (function () {
           const g = state.groups[i] || {}
           const who = g.servedPersonName ? ` · 被服务者:${g.servedPersonName}` : ''
           const techNames = (g.selectedTechs || []).map(function (id) { return (state.roster.find(function (t2) { return t2.id === id }) || {}).name }).filter(Boolean).join('/')
-          const mainName = (state.items.find(function (it) { return it.id === g.mainId }) || {}).nameZh || ''
+          const mainName = g.timecardId ? '次卡核销 · '+(state.timecards.find(c=>c.id===g.timecardId)?.name||'') : g.purchasePackageId ? '现场购卡 · '+(state.timecardPackages.find(p=>p.id===g.purchasePackageId)?.name||'') : (state.items.find(function (it) { return it.id === g.mainId }) || {}).nameZh || ''
           return {
             title: `项目${'①②③④⑤'[i] || i + 1} ${mainName || '(未选主项目)'}${techNames ? ' · ' + techNames : ''}${who}`,
             lines: (s2.lines || []).map(function (l) {
@@ -756,12 +773,13 @@ window.SettlementWeb = (function () {
     }
     state.submitting = true; render()
     try {
-      const r = await request('/admin/settlements', { method: 'POST', body: JSON.stringify(buildBody(state)) })
-      state.pendingSheets = r.settlements || []
+      const body=buildBody(state);if(state.pricingConfig?.active)body.operationId=window.MemberPricingInput.retryKey(state.createRetry,body)
+      const r = state.pricingConfig?.active?await window.MemberPricingInput.mutation('documents:'+state.userId,'/admin/member-pricing/documents',body,(url,data)=>request(url,{method:'POST',body:JSON.stringify(data)})):await request('/admin/settlements',{method:'POST',body:JSON.stringify(body)})
+      state.documentGroupId=r.groupId;state.pendingSheets = state.pricingConfig?.active?r.documents:r.settlements || []
       pollSignState()
       toast(`待签结算单已生成(${state.pendingSheets.length} 张)—— 顾客侧签署,签字那一刻才记账`)
       /* D97(01t 设计回归恢复):结算完成 → 写小记环节(可跳过;跳过自动进「待写小记」清单) */
-      if (window.ServiceNoteModal && state.userId) {
+      if (!state.pricingConfig?.active && window.ServiceNoteModal && state.userId) {
         window.ServiceNoteModal.open(state.userId, state.customerName || '顾客', state._deps, state.bookingId || '')
       }
     } catch (e) {

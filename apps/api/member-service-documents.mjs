@@ -1,3 +1,5 @@
+import {memberDocumentDisplay} from './member-document-display.mjs'
+import {memberDocumentRootGroup} from './member-document-summary.mjs'
 import {randomUUID,randomBytes,createHash} from 'node:crypto'
 import {pricingDigest} from './member-pricing-calculation.mjs'
 import {makeActorOf} from './actor-name.mjs'
@@ -26,7 +28,7 @@ export function ensureMemberDocumentSchema(db) {
     CREATE TRIGGER IF NOT EXISTS member_document_signed_delete BEFORE DELETE ON member_service_documents WHEN OLD.status='signed'
       BEGIN SELECT RAISE(ABORT,'signed person document is immutable');END;`)
 }
-export function createMemberServiceDocuments({db,policy,preview,apiError,currentTenantId,createSettlementGroup,signLedger,balanceOf,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,assertStaff,amendSettlement,amendmentShape}) {
+export function createMemberServiceDocuments({db,policy,preview,apiError,currentTenantId,createSettlementGroup,signLedger,balanceOf,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,assertStaff,amendSettlement,amendmentShape,formatMoneyCents,formatSignedAt=v=>v}) {
   const actorOf=makeActorOf({apiError}),now=()=>new Date().toISOString()
   const canonical=v=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v
   const digest=v=>pricingDigest(canonical(v))
@@ -44,14 +46,27 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
     const couponIds=[...new Set(sheets.map(s=>s.couponGrantId).filter(Boolean))].sort()
     const {active,membershipEnabled,settlementTypes}=policy.config(tid)
     return digest({config:{active,membershipEnabled,settlementTypes},membership:policy.getMembershipConfig(tid),rules:getPricingRules(tid),
-      services:ids.map(id=>({id,prices:policy.prices(tid,id,'settlement'),service:db.prepare('SELECT * FROM services WHERE id=? AND tenant_id=?').get(id,tid)})),
+      services:ids.map(id=>({id,prices:policy.prices(tid,id,'settlement').prices,service:Object.fromEntries(Object.entries(db.prepare('SELECT * FROM services WHERE id=? AND tenant_id=?').get(id,tid)||{}).filter(([key])=>['id','name_zh','name_en','is_active','category_id','item_kind','unit','price_rule','price_rule_value','addon_scope_json','addon_group','price_mode'].includes(key)))})),
       packages:packageIds.map(id=>db.prepare('SELECT * FROM membership_packages WHERE id=? AND tenant_id=?').get(id,tid)),
       coupons:couponIds.map(id=>db.prepare('SELECT c.*,g.expires_at FROM coupons c JOIN coupon_grants g ON g.coupon_id=c.id WHERE g.id=? AND g.tenant_id=?').get(id,tid))})
   }
+  function freshness(row){
+    if(row.status!=='pending_sign')return null
+    const group=db.prepare('SELECT * FROM member_document_groups WHERE id=?').get(row.group_id);if(!group)return null
+    const context=JSON.parse(group.context_json),current=policy.discount(row.tenant_id,row.user_id),previous=db.prepare("SELECT * FROM member_discount_events WHERE tenant_id=? AND user_id=? AND source='recharge' AND source_id=?").get(row.tenant_id,row.user_id,`document-group:${row.group_id}`)
+    let reason=''
+    if(proof(row.tenant_id,JSON.parse(group.input_json))!==group.proof_hash)reason='服务价格或会员规则已变化，请店员重新核对。'
+    else if(current.revision!==(previous?previous.revision:context.oldRevision))reason='个人折扣已变化，请店员重新核对。'
+    const begun=db.prepare("SELECT 1 FROM member_service_documents WHERE group_id=? AND status='signed'").get(row.group_id)
+    const recharge=JSON.parse(group.input_json).some(s=>s.rechargePackageId||s.rechargeAmountCents!==undefined)
+    if(!reason&&!recharge&&!begun&&current.eligible!==context.eligible)reason='会员资格已变化，请店员重新核对。'
+    return reason?{reason,currentDiscountText:current.discountText,originalDiscountText:JSON.parse(row.quote_json).display?.discountText}:null
+  }
   function shape(row) {
     const quote=JSON.parse(row.quote_json),signed=row.signed_json?JSON.parse(row.signed_json):null
-    return {id:row.id,groupId:row.group_id,status:row.status,userId:row.user_id,beneficiaryKey:row.beneficiary_key,
-      dependencyId:row.dependency_id||null,expiresAt:null,confirmationHash:row.confirmation_hash,quote,signed,signedAt:row.signed_at,
+    const componentRows=components(row),serviceTotalCents=componentRows.reduce((n,c)=>n+(amendmentShape(c).actualDueCents??c.total_cents)-(JSON.parse(c.recharge_json||'null')?.amountCents||0)-(JSON.parse(c.purchase_json||'null')?.priceCents||0),0)
+    return {recheck:freshness(row),correction:{serviceTotalCents,amountText:formatMoneyCents(serviceTotalCents,row.tenant_id,2)},id:row.id,groupId:row.group_id,visitGroupId:memberDocumentRootGroup(db,row),status:row.status,userId:row.user_id,beneficiaryKey:row.beneficiary_key,
+      dependencyId:row.dependency_id||null,expiresAt:null,confirmationHash:row.confirmation_hash,quote,signed,signedAt:row.signed_at,signedAtText:row.signed_at?formatSignedAt(row.signed_at,row.tenant_id):null,
       components:components(row).map(c=>({id:c.id,code:c.code,status:c.status,...amendmentShape(c)})),snapshotUrl:signed?`/member-documents/${row.id}/snapshot`:null}
   }
   function groupView(groupId,tid) {return {groupId,documents:db.prepare('SELECT * FROM member_service_documents WHERE group_id=? AND tenant_id=? ORDER BY rowid').all(groupId,tid).map(shape)}}
@@ -73,11 +88,14 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
       const input=JSON.stringify(sheets),timestamp=now(),groupId=made.groupId
       db.prepare('INSERT INTO member_document_groups VALUES(?,?,?,?,?,?,?,?,?)').run(groupId,tid,userId,id,payloadHash,input,JSON.stringify(context),proof(tid,sheets),timestamp)
       let primaryId=null
+      let documentBalance=view.personalDiscount.current.balanceCents
       for(const person of view.documents) {
         const docId=randomUUID(),own=person.componentIndexes.map(i=>view.components[i])
         if(own.some(c=>c.recharge))primaryId=docId
         const quote={...person,components:own.map(c=>{const {couponOptions,...v}=c;return v}),personalDiscount:view.personalDiscount,
           cardOwnerUserId:userId,replacesDocumentId:options.replacesDocumentId||null,currency:own[0]?.currency,currencyDisplay:own[0]?.currencyDisplay}
+        quote.expectedBalanceBeforeCents=documentBalance;documentBalance+=own.reduce((n,c)=>n+(c.recharge?.amountCents||0)+(c.recharge?.bonusCents||0)-(c.payment.storedUsedCents||0),0);quote.expectedBalanceAfterCents=documentBalance
+        quote.display=memberDocumentDisplay(quote,{money:n=>formatMoneyCents(n,tid,2),customerName:db.prepare('SELECT display_name FROM users WHERE id=?').get(userId).display_name,storeName:db.prepare('SELECT name FROM stores WHERE tenant_id=? LIMIT 1').get(tid)?.name||''})
         delete quote.couponOptions
         const hash=digest(quote)
         db.prepare('INSERT INTO member_service_documents VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(docId,tid,groupId,userId,person.beneficiaryKey,'pending_sign',primaryId&&primaryId!==docId?primaryId:null,JSON.stringify(quote),hash,null,null,actor,timestamp)
@@ -107,12 +125,14 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
     }catch(e){db.exec('ROLLBACK TO document_token; RELEASE document_token');throw e}
     return {token,expiresAt,documentId:id}
   }
+  function inTokenGroup(anchor,row){let target=row;for(let i=0;i<100;i++){if(target.tenant_id!==anchor.tenant_id||target.user_id!==anchor.user_id)return false;if(target.group_id===anchor.group_id)return true;const parent=JSON.parse(target.quote_json).replacesDocumentId;if(!parent)return false;target=get(parent)}return false}
   function authorize(req,row,body=null) {
     const token=req.headers['x-document-token']
     if(token) {
       const t=db.prepare('SELECT * FROM member_document_tokens WHERE token_hash=?').get(tokenHash(token))
       if(!t||!t.active||t.expires_at<=now())throw apiError(401,'DOCUMENT_LINK_EXPIRED','签署链接无效或已过期。')
-      if(t.document_id!==row.id||t.tenant_id!==row.tenant_id)throw apiError(403,'DOCUMENT_TOKEN_MISMATCH','这份链接不能用于其他服务单。')
+      const groupAccess=String(token).startsWith('group_')&&inTokenGroup(get(t.document_id),row)
+      if((t.document_id!==row.id&&!groupAccess)||t.tenant_id!==row.tenant_id)throw apiError(403,'DOCUMENT_TOKEN_MISMATCH','这份链接不能用于其他服务单。')
       if(body&&body.signerConfirmed!==true)throw apiError(400,'SIGNER_CONFIRMATION_REQUIRED','请核对卡主及被服务者后再确认。')
       return
     }
@@ -127,7 +147,8 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
     let row=get(id);authorize(req,row,body)
     if(body.disclaimerAccepted!==true)throw apiError(400,'DISCLAIMER_REQUIRED','请先确认服务及充值明细。')
     if(body.confirmationHash!==row.confirmation_hash)throw apiError(409,'DOCUMENT_CHANGED','服务单内容已变化，请重新核对。')
-    const signature=String(body.signature||'').trim(),strokes=body.strokes||[]
+    const signature=String(body.signature||'').trim(),strokes=body.strokes||[],signatureViewport=body.signatureViewport||null
+    if(signatureViewport&&(!Number.isFinite(signatureViewport.width)||!Number.isFinite(signatureViewport.height)||signatureViewport.width<1||signatureViewport.width>10000||signatureViewport.height<1||signatureViewport.height>10000))throw apiError(400,'SIGNATURE_REQUIRED','签名画布尺寸无效。')
     if(!signature||signature.length>200||!Array.isArray(strokes)||JSON.stringify(strokes).length>250000)throw apiError(400,'SIGNATURE_REQUIRED','签名格式无效。')
     db.exec('BEGIN IMMEDIATE')
     try {
@@ -167,9 +188,9 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
       if(hasRecharge) afterDiscount=policy.setDiscount(row.tenant_id,row.user_id,{rateBps:context.proposedRateBps,expectedRevision:context.oldRevision,reason:context.reason},
         {actor:context.actor,role:context.role,source:'recharge',sourceId:`document-group:${row.group_id}`})
       if(rechargeReceipt)db.prepare('INSERT INTO member_pricing_operations VALUES(?,?,?,?,?,?,?)').run(row.tenant_id,`inline:${row.group_id}`,'recharge',row.user_id,digest(rechargeReceipt),JSON.stringify({...rechargeReceipt,discountReceipt:{before:current,after:afterDiscount,actor:context.actor,source:'recharge'}}),now())
-      const signedAt=now(),signed={...quote,documentId:row.id,signature,strokes,signedAt,signedBy:row.user_id,
-        balanceBeforeCents:balanceBefore.totalCents,balanceAfterCents:balanceOf(row.user_id,row.tenant_id).totalCents,
-        discountAfter:afterDiscount,confirmationHash:row.confirmation_hash,componentCodes:comp.map(c=>c.code)}
+      const signedAt=now(),signed={...quote,documentId:row.id,signature,strokes,signatureViewport,signedAt,signedBy:row.user_id,
+        balanceBeforeText:formatMoneyCents(balanceBefore.totalCents,row.tenant_id,2),balanceBeforeCents:balanceBefore.totalCents,balanceAfterCents:balanceOf(row.user_id,row.tenant_id).totalCents,
+        balanceAfterText:formatMoneyCents(balanceOf(row.user_id,row.tenant_id).totalCents,row.tenant_id,2),discountAfter:afterDiscount,confirmationHash:row.confirmation_hash,componentCodes:comp.map(c=>c.code)}
       db.prepare("UPDATE member_service_documents SET status='signed',signed_json=?,signed_at=? WHERE id=?").run(JSON.stringify(signed),signedAt,row.id)
       for(const bookingId of new Set(comp.map(c=>c.booking_id).filter(Boolean))) {
         const pending=db.prepare("SELECT 1 FROM settlements WHERE booking_id=? AND tenant_id=? AND status='pending_sign'").get(bookingId,row.tenant_id)
@@ -197,19 +218,27 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
         }
         db.prepare("UPDATE member_service_documents SET status='voided' WHERE id=?").run(d.id)
         db.prepare('INSERT INTO member_document_events VALUES(?,?,?,?,?,?,?)').run(randomUUID(),d.tenant_id,d.id,'voided',actorOf(admin),reason,now())
-        db.prepare('UPDATE member_document_tokens SET active=0 WHERE document_id=?').run(d.id)
+        // Existing links may show the withdrawal or replacement; sign() still rejects voided records.
       }
       const alive=db.prepare("SELECT status FROM member_service_documents WHERE group_id=? AND status<>'voided'").all(row.group_id)
       db.prepare('UPDATE settlement_groups SET status=?,updated_at=? WHERE id=?').run(!alive.length?'voided':alive.every(d=>d.status==='signed')?'signed':'pending_sign',now(),row.group_id)
       db.exec('RELEASE void_person_documents');return {documents:targets.map(d=>shape(get(d.id)))}
     }catch(e){db.exec('ROLLBACK TO void_person_documents; RELEASE void_person_documents');throw e}
   }
-  function amend(id,body,admin) {
+  function amend(id,body,admin,options={}) {
     if(admin.role!=='owner')throw apiError(403,'FORBIDDEN','只有老板可以更正已签服务单。')
-    const row=adminRow(id,admin),reason=String(body.reason||'').trim(),changes=body.components
+    const row=adminRow(id,admin),reason=String(body.reason||'').trim();let changes=body.components
+    if(body.serviceTotalCents!==undefined){
+      if(!Number.isSafeInteger(body.serviceTotalCents)||body.serviceTotalCents<0||body.serviceTotalCents>100000000)throw apiError(400,'INVALID_AMOUNT','请填写有效服务金额。')
+      const comp=components(row),bases=comp.map(c=>Math.max(0,(amendmentShape(c).actualDueCents??c.total_cents)-(JSON.parse(c.recharge_json||'null')?.amountCents||0)-(JSON.parse(c.purchase_json||'null')?.priceCents||0))),total=bases.reduce((a,b)=>a+b,0);let allocated=0,cumulative=0
+      changes=comp.map((c,i)=>{cumulative+=bases[i];const target=total?Number(BigInt(body.serviceTotalCents)*BigInt(cumulative)/BigInt(total)):(i===comp.length-1?body.serviceTotalCents:0),value=target-allocated;allocated=target;return {id:c.id,totalCents:value+(JSON.parse(c.recharge_json||'null')?.amountCents||0)+(JSON.parse(c.purchase_json||'null')?.priceCents||0)}})
+    }
     if(row.status!=='signed')throw apiError(409,'NOT_SIGNED','未签服务单请撤回后重开。')
     if(!reason||!Array.isArray(changes)||!changes.length||changes.length>100)throw apiError(400,'CORRECTION_REQUIRED','请填写更正原因及对应项目。')
     const existing=new Map(components(row).map(c=>[c.id,c])),seen=new Set()
+    const reviewHash=digest({id,components:[...existing.values()].map(c=>({id:c.id,total:amendmentShape(c).actualDueCents??c.total_cents})),changes})
+    if(body.reviewHash&&body.reviewHash!==reviewHash)throw apiError(409,'CORRECTION_CHANGED','单据金额已变化，请重新预览更正。')
+    if(options.preview){const effects=changes.map(change=>{const c=existing.get(change.id);if(!c||seen.has(c.id))throw apiError(400,'INVALID_COMPONENT','更正项目必须属于本单且不能重复。');seen.add(c.id);return amendSettlement(c.id,{...change,reason},admin,{preview:true})});const amountDeltaCents=effects.reduce((n,x)=>n+x.amountDeltaCents,0),autoBalanceAdjustCents=effects.reduce((n,x)=>n+x.autoBalanceAdjustCents,0);return {reviewHash,amountDeltaCents,autoBalanceAdjustCents,balanceEffectText:autoBalanceAdjustCents>0?'退回储值 '+formatMoneyCents(autoBalanceAdjustCents,row.tenant_id,2):autoBalanceAdjustCents<0?'补扣储值 '+formatMoneyCents(-autoBalanceAdjustCents,row.tenant_id,2):'不自动调整储值；线下差额由门店核对处理。'}}
     db.exec('BEGIN IMMEDIATE')
     try {
       for(const change of changes) {
@@ -223,6 +252,22 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
       db.prepare('INSERT INTO member_document_events VALUES(?,?,?,?,?,?,?)').run(randomUUID(),row.tenant_id,row.id,'amended',actorOf(admin),reason,now())
       db.exec('COMMIT');return shape(get(id))
     }catch(e){db.exec('ROLLBACK');throw e}
+  }
+  function review(id,admin) {
+    const row=adminRow(id,admin);if(row.status!=='pending_sign')throw apiError(409,'DOCUMENT_NOT_PENDING','只能核对待签服务单。')
+    const group=db.prepare('SELECT * FROM member_document_groups WHERE id=?').get(row.group_id),all=db.prepare("SELECT * FROM member_service_documents WHERE group_id=? AND status<>'voided'").all(row.group_id),partial=all.some(r=>r.status==='signed')
+    const input=JSON.parse(group.input_json).filter(s=>!partial||(s.beneficiaryKey||'self')===row.beneficiary_key)
+    const hasRecharge=input.some(s=>s.rechargePackageId||s.rechargeAmountCents!==undefined),eligible=policy.discount(row.tenant_id,row.user_id).eligible
+    const body={userId:row.user_id,settlements:input.map(s=>({...s,bookingId:s.bookingId||components(all.find(d=>d.beneficiary_key===(s.beneficiaryKey||'self'))||row)[0]?.booking_id,tierKey:!hasRecharge&&!eligible&&s.tierKey==='member'?'list':s.tierKey}))}
+    const value=preview.preview(row.tenant_id,body,admin)
+    return {body,reviewHash:digest({body,value}),documents:value.documents.map(d=>({name:d.beneficiaryKey==='self'?JSON.parse(row.quote_json).display.customerName:d.name,amountText:formatMoneyCents(d.totalCents-d.rechargeCents-d.purchaseCents,row.tenant_id,2)})),discountText:policy.discount(row.tenant_id,row.user_id).discountText}
+  }
+  function refresh(id,body,admin){
+    // A successful retry returns its original result, even though the old document is now voided.
+    const row=adminRow(id,admin)
+    for(const event of db.prepare("SELECT reason FROM member_document_events WHERE document_id=? AND action='requoted'").all(id)){const receipt=JSON.parse(event.reason);if(receipt.operationId===body.operationId){if(receipt.reviewHash!==body.reviewHash||receipt.actor!==actorOf(admin))throw apiError(409,'IDEMPOTENCY_CONFLICT','同一核对编号的内容发生变化。');return {...groupView(receipt.groupId,row.tenant_id),duplicate:true}}}
+    const fresh=review(id,admin);if(fresh.reviewHash!==body.reviewHash)throw apiError(409,'PRICING_CHANGED','核对期间价格或权益再次变化，请重新读取。')
+    return requote(id,{...fresh.body,operationId:body.operationId,reviewHash:body.reviewHash,reason:'店员核对最新价格与权益后更新待签单'},admin)
   }
   function requote(id,body,admin) {
     const row=adminRow(id,admin)
@@ -248,9 +293,9 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
     try {
       for(const r of hasSigned?[row]:groupRows) if(get(r.id).status==='pending_sign')voidDocument(r.id,{reason:body.reason||'更新待签服务单'},admin)
       const result=create(next,admin,{sharedBookingGroupId:hasSigned?row.group_id:null,replacesDocumentId:row.id})
-      db.prepare('INSERT INTO member_document_events VALUES(?,?,?,?,?,?,?)').run(randomUUID(),row.tenant_id,row.id,'requoted',actorOf(admin),JSON.stringify({operationId:body.operationId,requestHash,groupId:result.groupId,reason:body.reason||'更新待签服务单'}),now())
+      db.prepare('INSERT INTO member_document_events VALUES(?,?,?,?,?,?,?)').run(randomUUID(),row.tenant_id,row.id,'requoted',actorOf(admin),JSON.stringify({operationId:body.operationId,requestHash,reviewHash:body.reviewHash,actor:actorOf(admin),groupId:result.groupId,reason:body.reason||'更新待签服务单'}),now())
       db.exec('COMMIT');return result
     }catch(e){db.exec('ROLLBACK');throw e}
   }
-  return {create,get,shape,groupView,adminRow,issueToken,authorize,sign,voidDocument,requote,amend,guardComponent}
+  return {amendPreview:(id,body,admin)=>{if(body.serviceTotalCents===undefined)throw apiError(400,'INVALID_AMOUNT','请填写服务金额。');return amend(id,{...body,reason:'更正预览'},admin,{preview:true})},review,refresh,create,get,shape,groupView,adminRow,issueToken,authorize,sign,voidDocument,requote,amend,guardComponent}
 }

@@ -11,21 +11,25 @@ vm.runInNewContext(read('apps/web/membership-summary.js'), web)
 const host = { innerHTML: '', querySelector() { return { addEventListener: (_, fn) => { host.retry = fn } } } }
 const escapeHtml = text => String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 const show = web.window.LLMembershipSummary.show
+const pricing={config:{active:true,membershipEnabled:true}}
 const rows = { summaryRows: [{ label: '会员资格', value: '<本店规则>' }], editHint: '由平台配置' }
 let resolveOld
-const old = show({ host, escapeHtml, visible: true, request: () => new Promise(resolve => { resolveOld = resolve }) })
+const old = show({ host, escapeHtml, visible: true, request: path => path==='/admin/member-pricing/config'?Promise.resolve(pricing):new Promise(resolve => { resolveOld = resolve }) })
 check('网页未取到响应时明确加载中', host.innerHTML.includes('role="status"'))
-await show({ host, escapeHtml, visible: true, request: async path => { assert.equal(path, '/admin/membership/config'); return rows } })
+await show({ host, escapeHtml, visible: true, request: async path => { assert.ok(['/admin/membership/config','/admin/member-pricing/config'].includes(path)); return path==='/admin/member-pricing/config'?pricing:rows } })
+check('新版会员说明由启用配置决定',host.innerHTML.includes('个人折扣说明'))
 check('网页显示后端规则并转义内容', host.innerHTML.includes('&lt;本店规则&gt;') && host.innerHTML.includes('由平台配置'))
 resolveOld({ summaryRows: [{ label: '旧店', value: '过期响应' }] }); await old
 check('迟到的旧门店响应不覆盖当前规则', !host.innerHTML.includes('过期响应'))
 let failed = true
-await show({ host, escapeHtml, visible: true, request: async () => { if (failed) throw Error('offline'); return rows } })
+await show({ host, escapeHtml, visible: true, request: async path => { if (failed) throw Error('offline'); return path==='/admin/member-pricing/config'?pricing:rows } })
 check('网络失败显示失败和重试', host.innerHTML.includes('role="alert"') && typeof host.retry === 'function')
 failed = false; await host.retry()
 check('重试恢复本店规则', host.innerHTML.includes('&lt;本店规则&gt;') && !host.innerHTML.includes('role="alert"'))
 await show({ host, escapeHtml, visible: true, request: async () => ({ summaryRows: [] }) })
 check('空响应不能无限读取或伪造会员规则', host.innerHTML.includes('role="alert"'))
+await show({host,escapeHtml,visible:true,request:async path=>path==='/admin/member-pricing/config'?{config:{active:false,membershipEnabled:true}}:rows})
+check('旧模式不错误展示已启用的个人折扣说明',!host.innerHTML.includes('个人折扣说明')&&host.innerHTML.includes('&lt;本店规则&gt;'))
 let calls = 0
 show({ host, escapeHtml, visible: false, request: async () => { calls++ } })
 check('其他标签不请求会员规则', calls === 0)
@@ -37,7 +41,7 @@ vm.runInNewContext(read('miniprogram/pages/merchant/member/index.js'), { require
 page.setData = data => Object.assign(page.data, data)
 await page.loadMembershipView()
 check('小程序网络失败停止加载并允许重试', page.data.msLoading === false && !!page.data.msError && !page._msPending)
-api.adminGet = async () => rows
+api.adminGet = async path => path==='/admin/member-pricing/config'?pricing:rows
 await page.loadMembershipView()
 check('小程序重试后恢复同源规则', !page.data.msError && page.data.msRows[0].value === '<本店规则>')
 api.adminGet = async () => ({ summaryRows: [] })

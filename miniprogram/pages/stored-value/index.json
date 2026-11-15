@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "储值卡",
-  "usingComponents": {}
+  "usingComponents": {
+    "member-pricing": "/components/member-pricing/index"
+  }
 }

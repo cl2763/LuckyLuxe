@@ -23,10 +23,12 @@
       <button class="gift-add" bindtap="addGift" disabled="{{giftItems.length >= 20}}">＋ 再加一行</button>
       <view class="gift-hint">价值用于展示，不计入储值余额、营业收入或技师业绩。物品领取请联系门店，此清单不代表已领取。</view>
     </view>
+    <view wx:if="{{kind==='recharge'}}" class="gifts"><view class="gift-title">充值后默认个人折扣</view><discount-wheel value="{{rateBps}}" bindchange="onRate"/><view class="gift-hint">作为充值时的默认选项，店员可在确认充值时调整。</view></view>
     <view class="frow"><text class="lb">权益说明</text><input class="in" value="{{benefits}}" placeholder="选填,如 赠免费卸甲" bindinput="onBenefits" /></view>
-    <view class="frow"><text class="lb">上架(顾客可购)</text><switch checked="{{active}}" color="#c8a47e" bindchange="onActive" /></view>
+    <view class="frow"><text class="lb">上架(顾客可见)</text><switch checked="{{active}}" color="#c8a47e" bindchange="onActive" /></view>
   </view>
 
-  <view class="btn {{saving?'off':''}}" bindtap="save">{{saving?'保存中…':(isNew?'新增':'保存')}}</view>
-  <view class="note">套餐售出、次卡核销等发生在顾客端;这里只做定义与上下架。</view>
+  <view class="btn {{saving?'off':''}}" bindtap="save">{{saving?'保存中…':'保存套餐'}}</view>
+  <view class="btn cancel" bindtap="cancel">取消</view>
+  <view class="note">顾客可查看套餐权益；实际充值由门店确认办理。</view>
 </view>

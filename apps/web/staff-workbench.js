@@ -71,10 +71,11 @@ window.StaffWorkbench = (function () {
           ${hero ? `<div class="finance-metrics">
             <div class="finance-metric"><span>本月业绩</span><strong>${money(hero.perfCents || 0)}</strong></div>
             <div class="finance-metric"><span>单数</span><strong>${hero.orderCount || 0}</strong></div>
-            ${hero.targetCents ? `<div class="finance-metric"><span>目标进度</span><strong>${escapeHtml(hero.progressText || '')}</strong></div>` : ''}
+            ${hero.targetCents ? `<div class="finance-metric"><span>目标进度</span><strong>${escapeHtml(hero.progressText || (Number.isFinite(hero.pct) ? hero.pct + '%' : '—'))}</strong></div>` : ''}
           </div>` : (p.note ? '' : '<p class="subtle">本月还没有已确认的日结业绩。</p>')}
           ${(p.trend || []).length ? `<p class="subtle small">近 6 月:${p.trend.map((t) => `${t.month.slice(5)}月 ${money(t.perfCents || 0)}`).join(' · ')}</p>` : ''}
         </section>
+        ${p.memberPricingDetails ? `<section class="card swb-card"><h3>成交折扣与服务单</h3>${p.memberPricingDetails.services.map(d=>`<div class="mp-batch-row"><div><strong>${escapeHtml(d.date+' · '+d.person)}</strong><p>${escapeHtml(d.items)}</p><p>${escapeHtml(d.payer+' · '+d.discount)}</p><small>${escapeHtml(d.id)}</small></div><strong>${escapeHtml(d.amountText)}</strong></div>`).join('')||'<p class="subtle">暂无已确认日结的新版服务单</p>'}<h3>促成充值（单列）</h3>${p.memberPricingDetails.recharges.map(r=>`<div class="mp-batch-row"><span>${escapeHtml(r.date+' · '+r.label)}</span><strong>${escapeHtml(r.amountText)}</strong></div>`).join('')}<p class="subtle">${escapeHtml(p.memberPricingDetails.note)}</p></section>` : ''}
         <section class="card swb-card">
           <div class="swb-monthbar">
             <button class="ghost slim" data-swb-mprev type="button">‹</button>

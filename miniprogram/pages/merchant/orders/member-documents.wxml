@@ -1,0 +1,15 @@
+<template name="member-documents">
+<view class="card mp-order-docs">
+ <view class="ch">本次服务单 · <text class="note">最近100张</text></view>
+ <button size="mini" bindtap="loadMemberDocuments" disabled="{{mpDocsLoading}}">{{mpDocsLoading?'读取中…':'刷新服务单'}}</button>
+ <view wx:if="{{mpDocsError}}" class="note">{{mpDocsError}}</view><view wx:if="{{mpDocsNote}}" class="note">{{mpDocsNote}}</view>
+ <view wx:if="{{!mpDocsLoading && !mpDocsError && !mpDocumentGroups.length}}" class="note">暂无服务单</view>
+ <view class="mp-order-group" wx:for="{{mpDocumentGroups}}" wx:key="id" wx:for-item="g">
+  <view class="oname" data-id="{{g.id}}" bindtap="mpOrderExpand">{{g.customer}} · 本次服务单 {{g.expanded?'⌄':'›'}}</view><view class="note">已签{{g.signed}}张 · 待签{{g.pending}}张</view>
+  <block wx:if="{{g.expanded}}"><view class="note">卡主／付款会员：{{g.customer}} · {{g.bound?'已绑定微信':'需完成身份绑定'}}</view><view class="mp-order-document" wx:for="{{g.documents}}" wx:key="id" wx:for-item="d"><view class="mp-order-head"><text>{{d.name}} · {{d.statusText}}</text><text class="mp-order-money">{{d.amount}}</text></view><view>{{d.items}}</view><view class="note">{{d.discount}}</view><view wx:if="{{d.recharge}}" class="note">{{d.recharge}}</view><view wx:if="{{d.reason}}" class="note">{{d.reason}}</view></view>
+  <view wx:if="{{g.pending}}" class="note">{{g.signed?'已签单不会重复扣款，卡主从同一入口继续签署剩余单据。':(g.hasRecharge?'本次全部单据一次送达卡主，先签含充值的单，再继续下一张。':'本次全部单据一次送达卡主，按顺序逐张核对签署。')}}</view><view class="mp-order-actions" wx:if="{{g.pending}}"><button data-id="{{g.id}}" disabled="{{mpDocsBusy}}" bindtap="mpOrderDeliver">推送本人签署</button><button data-id="{{g.id}}" disabled="{{mpDocsBusy}}" bindtap="mpOrderSign">在本机签署</button></view>
+  <button wx:if="{{g.pending}}" data-id="{{g.id}}" disabled="{{mpDocsBusy}}" bindtap="mpOrderReview">重新核对待签单</button>
+  <button wx:elif="{{g.signed}}" data-id="{{g.id}}" bindtap="mpOrderSign">查看已签原件</button><view wx:if="{{g.pending}}" class="note">本机签署时，将设备交给卡主本人核对并签字。</view></block>
+ </view>
+</view>
+</template>

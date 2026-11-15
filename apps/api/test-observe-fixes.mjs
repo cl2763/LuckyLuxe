@@ -90,7 +90,7 @@ async function main() {
   check('D97 写完消行(挂单判定闭环)', !(p2.data.items || []).some((x) => x.bookingId === bid))
   /* 前端链:两端结算钩 + 台面 pill + 员工卡 + 订单卡补写口 */
   check('D97 网页结算完成钩(ServiceNoteModal.open 带 bookingId)', rf('apps/web/settlement-web.js').includes('window.ServiceNoteModal.open(state.userId, state.customerName'))
-  check('D97 小程序签完回今日台面，从待写清单补小记', rf('miniprogram/pages/merchant/settlement/index.js').includes("relaunch('/pages/merchant/orders/index')") && !rf('miniprogram/pages/merchant/settlement/index.js').includes("title: '给这单写个服务小记?'"))
+  check('D97 小程序签完回今日台面，从待写清单补小记', rf('miniprogram/pages/merchant/settlement/preview-signing.js').includes("relaunch('/pages/merchant/orders/index')") && !rf('miniprogram/pages/merchant/settlement/index.js').includes("title: '给这单写个服务小记?'"))
   check('D97 台面 pill 双端(data-tb-notes / tapPendingNotes)', tb.includes('data-tb-notes') && ordJs.includes('tapPendingNotes()'))
   check('D97 员工工作台待写卡 + 网页订单卡补写口', rf('apps/web/staff-workbench.js').includes('data-swb-note="') && rf('apps/web/admin.js').includes('data-note-booking="${booking.id}"'))
   check('D97 弹层保存体带 bookingId', rf('apps/web/service-note-modal.js').includes('bookingId: st.bookingId || undefined'))

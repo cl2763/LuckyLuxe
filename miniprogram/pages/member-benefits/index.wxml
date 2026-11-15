@@ -1,5 +1,7 @@
 <view class="page benefits-page {{themeClass}}">
-  <view class="benefit-hero">
+<member-pricing customer="{{true}}" show-balance="{{true}}"/>
+
+  <view class="benefit-hero" wx:if="{{levels.length}}">
     <swiper class="level-swiper" current="{{currentLevelIndex}}" bindchange="onLevelChange" previous-margin="28rpx" next-margin="28rpx">
       <block wx:for="{{levels}}" wx:key="key">
         <swiper-item>
@@ -19,14 +21,14 @@
 
   <!-- 不分级店:成为会员承接区(店主 2026-08-12 追加)。已是会员=权益视角;非会员=成为会员视角 -->
   <view class="plain-join card" wx:if="{{plainStore}}">
-    <view class="pj-title">{{isMemberNow ? '我的会员' : '成为会员'}}</view>
-    <view class="pj-line">{{isMemberNow ? '您已是本店会员(充值即入会)。' : '在本店充值即可成为会员。'}}</view>
+    <view class="pj-title">{{lang === 'en' ? (isMemberNow ? 'My membership' : 'Become a member') : (isMemberNow ? '我的会员' : '成为会员')}}</view>
+    <view class="pj-line">{{lang === 'en' ? (isMemberNow ? 'Your membership is active at this store.' : 'Ask the store about its membership requirements.') : (isMemberNow ? '您已是本店会员。' : '请向门店了解会员加入条件。')}}</view>
     <block wx:if="{{memberPerks.length}}">
-      <view class="pj-sub">本店会员专属权益</view>
+      <view class="pj-sub">{{lang === 'en' ? 'Store member benefits' : '本店会员专属权益'}}</view>
       <view class="pj-perk" wx:for="{{memberPerks}}" wx:key="*this">· {{item}}</view>
     </block>
   </view>
-  <view class="benefit-section">
+  <view class="benefit-section" wx:if="{{benefits.length}}">
     <view class="benefit-title">{{levels[currentLevelIndex].name}}{{lang === 'en' ? ' benefits' : '权益'}}</view>
     <view class="benefit-grid">
       <block wx:for="{{benefits}}" wx:key="title">
@@ -40,7 +42,7 @@
 
   <view class="benefit-section">
     <view class="benefit-title">{{lang === 'en' ? 'Upgrade gifts' : '升级礼包'}}</view>
-    <block wx:for="{{gifts}}" wx:key="title">
+    <view>{{lang === 'en' ? 'View any upgrade coupons and passes in your card pack.' : '升级赠送的优惠券和次卡可在卡包中查看。'}}</view><button bindtap="goCardPack">{{lang === 'en' ? 'View card pack' : '查看卡包'}}</button><block wx:for="{{gifts}}" wx:key="title">
       <view class="gift-card card">
         <view>{{lang === 'en' ? 'Coupon x' : '兑换券 '}}{{item.count}}</view>
         <text>{{item.title}}</text>

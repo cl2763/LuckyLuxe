@@ -24,15 +24,15 @@ Page({
       const shelf = mainsRaw.filter((i) => i.isActive !== false).map((i) => ({
         id: i.id,
         name: i.nameZh,
-        on: !!i.storefront,
-        sub: `${storeMoney(i.startingPriceCents || i.listPriceCents || 0)} 起${i.baseDurationMin ? ' · ' + i.baseDurationMin + ' 分钟' : ''}`
+        on: !!i.storefront,category:i.category||'',
+        sub: `展示原价 ${storeMoney(i.displayReference?.prices.list?.priceCents ?? i.startingPriceCents ?? i.listPriceCents)}${i.baseDurationMin ? ' · ' + i.baseDurationMin + ' 分钟' : ''}`
       }))
       // 页签②:项目与价档 chips(只列挂了的档;没挂的开单时根本不出现,规则②)
-      const chip = (label, cents, suffix) => (cents ? `${label} ${storeMoney(cents)}${suffix || ''}` : null)
+      const chip = (label, cents, suffix) => (cents!=null ? `${label} ${storeMoney(cents)}${suffix || ''}` : null)
       const mains = mainsRaw.map((i) => ({
         id: i.id,
         name: i.nameZh,
-        chips: [
+        chips:i.settlementPriceSummary?i.settlementPriceSummary.map(p=>p.key==='member'?p.label:p.label+' '+p.amountText):[
           chip('普通', i.listPriceCents),
           chip('分享', i.sharePriceCents),
           chip('会员', i.memberPriceCents),
@@ -43,6 +43,8 @@ Page({
         id: i.id,
         label: `${i.nameZh} ${storeMoney(i.listPriceCents || 0)}`
       }))
+      const categoryOrder=new Map();shelf.forEach(s=>{if(!categoryOrder.has(s.category))categoryOrder.set(s.category,categoryOrder.size)});shelf.sort((a,b)=>categoryOrder.get(a.category)-categoryOrder.get(b.category));
+      shelf.forEach((s,i)=>{s.categoryStart=!!s.category&&(i===0||shelf[i-1].category!==s.category);s.categoryCount=shelf.filter(x=>x.category===s.category).length});
       this.setData({ shelf, mains, addons, hasTimecards: items.some((i) => i.isTimecard), loading: false })
     } catch (e) {
       this.setData({ loading: false })
@@ -66,5 +68,6 @@ Page({
     }
   },
 
+  editPrice(e){require('../../../utils/nav').to('/pages/merchant/service-edit/index?id='+encodeURIComponent(e.currentTarget.dataset.id||'')+'&system='+e.currentTarget.dataset.system)},
   goMembership() { wx.navigateTo({ url: '/pages/merchant/member/index', fail: (e) => console.warn('[nav] member fail', e) }) }
 })

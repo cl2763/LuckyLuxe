@@ -1,3 +1,12 @@
+import {ensureFinanceLockColumn} from './finance-lock-schema.mjs'
+import {createBookingDepositFunding} from './booking-deposit-funding.mjs'
+import {createBookingCheckout} from './booking-checkout.mjs'
+import {storedValueReversalFacts} from './stored-value-reversal-display.mjs';import {memberPricingPerformanceDetails} from './member-pricing-performance.mjs'
+import {memberPriceSummary} from './member-pricing-catalog.mjs'
+import {discountLabel} from './member-discount-input.mjs'
+import {memberDiscountReceipt} from './member-discount-receipt.mjs'
+import {memberDocumentSummary,dailyMemberDocuments} from './member-document-summary.mjs'
+import {createServiceEditRoutes} from './service-edit-routes.mjs'
 import {scopedCouponContext} from './member-pricing-coupons.mjs'
 import {createMemberPricingPresentation} from './member-pricing-presentation.mjs'
 import {ensureMemberDocumentSchema,createMemberServiceDocuments} from './member-service-documents.mjs'
@@ -8,6 +17,7 @@ import {createStoredValueRechargeRoutes} from './stored-value-recharge-routes.mj
 import { createMemberPricingCalculation } from './member-pricing-calculation.mjs'
 import { createSettlementSigner } from './settlement-signing.mjs'
 import { createMembershipPackageSerializer } from './membership-package-serialize.mjs'
+import { memberDailyServiceAmount, signedServiceRows } from './member-pricing-daily-facts.mjs'
 import { PRICING_CONTEXT, ensureMemberPricingSchema, createMemberPricingPolicy } from './member-pricing-policy.mjs'
 import { createMemberPricingRoutes } from './member-pricing-routes.mjs'
 import {userBookingStats as readBookingStats} from './booking-read-model.mjs'
@@ -5159,7 +5169,7 @@ const { tenantForSideEffect, scheduleReminderTask, getAdminReminderTasks, markRe
 const { profileIdInTenant, registerEmailUser } = createTenantProfile({ db, validTenantId, randomId, displayNameForUserId, apiError, serializeUser, upsertUserIdentity })
 const storeDirectory = createStoreDirectory({ db })
 const { pricingCategories, serializePricingCategory, serializePricingItem, pricingItemShape } = createPricingSerialize({
-  db, apiError, currentTenantId, cents, formatMoneyCents,
+  db, apiError, currentTenantId, cents, formatMoneyCents,memberPrices:(row)=>memberPricing.config(row.tenant_id).active?{displayReference:memberPricing.publicPrices(row.tenant_id,row.id),settlementPriceSummary:memberPriceSummary(memberPricing,row,formatMoneyCents)}:null,
   categoryNameOf: (row) => categoryNameOf(row), timecardUnitCents: (row, n) => timecardUnitCents(row, n),
   servicePriceMap: (id) => servicePriceMap(id), startingPriceCentsOf: (id, base) => startingPriceCentsOf(id, base)
 })
@@ -5259,7 +5269,7 @@ function serializeBooking(row, lang = 'zh') {
   row = { ...row, settlementSigned: Boolean(signedSettlement) }
   return {
     id: row.id,
-    publicCode: row.public_code,
+    depositPayment:bookingCheckout.summary(row),memberDocuments:memberDocumentSummary(db,row.id,row.tenant_id,n=>formatMoneyCents(n,row.tenant_id,2)),publicCode: row.public_code,
     status: row.status,
     merchantConfirmationText: db.prepare('SELECT 1 FROM booking_acceptances WHERE tenant_id=? AND booking_id=?').get(row.tenant_id,row.id) ? (lang==='en'?'Accepted by store':'商家已确认预约') : (['CONFIRMED','PENDING_PAYMENT'].includes(row.status)&&!row.arrived_at&&row.appointment_start>new Date().toISOString() ? (lang==='en'?'Awaiting store confirmation':'等待商家确认预约') : ''),
     /* 补录小合同(01v 合同二):归属日与服务日不同 → 单上注明那一句(后端出,两端同句) */
@@ -6279,11 +6289,11 @@ function createBooking(body, opts = {}) {
   const depositConfig = getDepositConfig(bookingTenantId)
   const depositRequiredCents = onlineDeposit ? depositAmountForService(service, depositConfig, bookingTenantId) : 0
   const memberWaives = depositConfig.memberWaive === 'all'
-    ? Boolean(serializedUser)
+    ? isMemberOf(input.userId, bookingTenantId)
     : (depositConfig.memberWaive === 'by_tier' ? Boolean(serializedUser?.depositWaived) : false)
   const depositWaivedCents = memberWaives ? depositRequiredCents : 0
   // 上一次合规改期留下的定金保留凭据:有就直接抵掉本次定金,并核销
-  const retain = (!opts.adminDirect && depositRequiredCents > 0) ? activeDepositRetain(input.userId, bookingTenantId) : null
+  const retain = (!opts.checkout && !opts.adminDirect && depositRequiredCents > 0) ? activeDepositRetain(input.userId, bookingTenantId) : null
   // 老板直接排单:一律 CONFIRMED、不走在线定金门、不设占位到期;记"未付定金"标(占位但提醒之后收)
   /* 「未付定金」标只在本店真的收定金时才打 —— 没配定金规则(或金额算下来是 0)的店
      不该出现「标记已收定金」按钮(拍板 A 的 corner case 之一)。 */
@@ -6300,7 +6310,7 @@ function createBooking(body, opts = {}) {
     : (retainCoverCents > 0 ? '上一次合规改期保留的定金已抵扣' : null)
   const sourceChannel = opts.adminDirect ? 'owner_direct' : input.sourceChannel
 
-  db.exec('BEGIN IMMEDIATE')
+  db.exec(opts.checkout?'SAVEPOINT checkout_booking':'BEGIN IMMEDIATE')
   try {
     /* 占位在**落单这一刻**,不在草稿(店主 05l 裁 (1))。
 
@@ -6333,30 +6343,18 @@ function createBooking(body, opts = {}) {
 
     db.prepare('INSERT INTO payments (id, booking_id, provider, status, amount_cents, currency, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(randomId('pay'), bookingId, 'OFFLINE', directUnpaid ? 'REQUIRES_PAYMENT' : 'NOT_REQUIRED', opts.adminDirect ? (directUnpaid ? directDepositCents : 0) : outstandingDepositCents, tenantCurrencyCode(input.tenantId || DEFAULT_TENANT_ID), now, now)
     db.prepare('INSERT INTO booking_status_history (id, booking_id, to_status, note, created_at) VALUES (?, ?, ?, ?, ?)').run(randomId('hist'), bookingId, status, directUnpaid ? 'Booking confirmed; deposit to be collected by the store.' : 'Booking confirmed; no outstanding deposit.', now)
-    if (retain && retainCoverCents > 0) {
-      const sourceReceipts = activeDepositReceipts(retain.source_booking_id, bookingTenantId).filter(r => !r.settled_settlement_id)
-      if (sourceReceipts.reduce((sum,r)=>sum+r.amount_cents,0) !== retain.amount_cents) throw apiError(409,'DEPOSIT_RECONCILIATION_REQUIRED','保留定金与实收记录不一致，请联系门店核对后再预约。')
-      db.prepare(`INSERT INTO deposit_receipts (id, tenant_id, booking_id, user_id, kind, amount_cents, pay_channel, reason, actor, created_at) VALUES (?, ?, ?, ?, 'receipt', ?, 'retain_carry', ?, 'system', ?)` ).run(randomId('dep'), bookingTenantId, bookingId, input.userId, retainCoverCents, `改期保留定金带出 · ${retain.id}`, now)
-      // 同一笔负债迁移到新预约：追加原收取的冲销留痕，不能两张预约各算一次。
-      for (const source of sourceReceipts) {
-        db.prepare(`INSERT INTO deposit_receipts (id, tenant_id, booking_id, user_id, kind, amount_cents, revoke_of, reason, actor, created_at) VALUES (?, ?, ?, ?, 'revoke', ?, ?, ?, 'system', ?)` ).run(randomId('dep'), bookingTenantId, retain.source_booking_id, input.userId, source.amount_cents, source.id, `改期定金转入预约 ${bookingId}（非退款）`, now)
-      }
-      consumeDepositRetain(retain.id, bookingId)
-      const remainder = retain.amount_cents - retainCoverCents
-      if (remainder > 0) {
-        db.prepare(`INSERT INTO deposit_receipts (id,tenant_id,booking_id,user_id,kind,amount_cents,pay_channel,reason,actor,created_at) VALUES (?,?,?,?,'receipt',?,'retain_carry',?,'system',?)`).run(randomId('dep'),bookingTenantId,retain.source_booking_id,input.userId,remainder,`改期定金部分抵扣，余额继续保留 · ${retain.id}`,now)
-        issueDepositRetain({tenantId:bookingTenantId,userId:input.userId,bookingId:retain.source_booking_id,amountCents:remainder,timesUsed:retain.times_used})
-      }
-    }
+    if (retain && retainCoverCents > 0) bookingCheckout.carry(retain,{id:bookingId,tenant_id:bookingTenantId,user_id:input.userId},retainCoverCents)
+    if(!opts.checkout&&!retain){const nr=db.prepare("SELECT * FROM deposit_retains WHERE tenant_id=? AND user_id=? AND source='no_show' AND status='active' AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at LIMIT 1").get(bookingTenantId,input.userId,now);if(nr){bookingCheckout.carry(nr,{id:bookingId,tenant_id:bookingTenantId,user_id:input.userId},nr.amount_cents);db.prepare('UPDATE bookings SET deposit_cents=?,direct_deposit_unpaid=0 WHERE id=?').run(nr.amount_cents,bookingId)}}
+    if(opts.checkout)bookingCheckout.apply(db.prepare('SELECT * FROM bookings WHERE id=?').get(bookingId),opts.checkout)
     if (input.bookingDraftId) {
       db.prepare("UPDATE booking_drafts SET status = 'BOOKING_CREATED', booking_id = ?, updated_at = ? WHERE id = ?")
         .run(bookingId, now, input.bookingDraftId)
       db.prepare("UPDATE quote_requests SET draft_booking_id = ?, updated_at = ? WHERE id IN (SELECT quote_request_id FROM booking_drafts WHERE id = ?)")
         .run(bookingId, now, input.bookingDraftId)
     }
-    db.exec('COMMIT')
+    db.exec(opts.checkout?'RELEASE checkout_booking':'COMMIT')
   } catch (error) {
-    db.exec('ROLLBACK')
+    db.exec(opts.checkout?'ROLLBACK TO checkout_booking; RELEASE checkout_booking':'ROLLBACK')
     /* 唯一索引兜底(`booking_slots` 有内联 `UNIQUE (technician_id, starts_at)`,05n 查实);
        真正拦住双占的是事务内那次复查,两边**共用同一套出句** `slotTakenError`。 */
     if (String(error.message || '').includes('UNIQUE constraint failed')) {
@@ -6370,30 +6368,8 @@ function createBooking(body, opts = {}) {
     throw error
   }
 
-  /* A②(图 v1.1):爽约留存的定金,下次该客户预约确认时**自动带出为已收定金** ——
-     写一条新的收取记录(留痕引用来源留存),核销留存凭据;结算时按既有抵扣路径走。
-     放在建单事务之后:带出失败不应拖垮建单本身(留存还在,下一单再带)。 */
-  try {
-    const nsRetain = activeNoShowRetain(input.userId, bookingTenantId)
-    if (nsRetain && nsRetain.amount_cents > 0) {
-      const nowc = iso(new Date())
-      db.exec('BEGIN IMMEDIATE')
-      try {
-        db.prepare(`INSERT INTO deposit_receipts (id, tenant_id, booking_id, user_id, kind, amount_cents, pay_channel, reason, actor, created_at)
-          VALUES (?, ?, ?, ?, 'receipt', ?, 'retain_carry', ?, 'system', ?)`)
-          .run(randomId('dep'), bookingTenantId, bookingId, input.userId, nsRetain.amount_cents,
-            `爽约留存带出 · 来源预约 ${nsRetain.source_booking_id || ''} · 留存 ${nsRetain.id}`, nowc)
-        db.prepare('UPDATE bookings SET deposit_cents = ?, direct_deposit_unpaid = 0, updated_at = ? WHERE id = ?')
-          .run(nsRetain.amount_cents, nowc, bookingId)
-        db.prepare("UPDATE deposit_retains SET status = 'consumed', consumed_booking_id = ?, consumed_at = ? WHERE id = ?")
-          .run(bookingId, nowc, nsRetain.id)
-        db.exec('COMMIT')
-      } catch (error) { db.exec('ROLLBACK'); throw error }
-    }
-  } catch (error) { /* 带出失败不拦单;留存仍 active,下次预约再带 */ }
-
   /* P3 事件钩:通知失败不许拦单(可用性>通知),但也不吞 —— 落日志有名有姓 */
-  try { notifyScheduler.onBookingEvent({ event: 'created', bookingId }) } catch (error) { console.error('[notify] created 钩失败:', error.message) }
+  try { if(!opts.checkout)notifyScheduler.onBookingEvent({ event: 'created', bookingId }) } catch (error) { console.error('[notify] created 钩失败:', error.message) }
 
   return serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(bookingId))
 }
@@ -6401,6 +6377,7 @@ function createBooking(body, opts = {}) {
 function cancelBooking(id, body) {
   const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
   if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+  const prior=bookingCheckout.oldCancel(booking);if(prior)return {booking:serializeBooking(booking),refundReceipt:prior,refundPolicy:prior}
   /* 🔴 D70(店主 08-24):取消的前置**只有状态机一份**。这里原来自己写了一遍
      `['PENDING_PAYMENT','CONFIRMED'].includes(status)` —— 与商家端那份是分叉的两套判定,
      而且漏了"售后中不许取消"(顾客能把一张正在售后的单取消掉)。错误码是对外契约,原样保留。 */
@@ -6414,11 +6391,13 @@ function cancelBooking(id, body) {
   // P1.2:扣费规则改为按本店 deposit_config 算。默认 refundable + 24h 全退 + 临期扣 50%,
   // 与改造前的 `hoursBefore >= 24 ? 0 : floor(deposit/2)` 完全等价。
   const cancelConfig = getDepositConfig(booking.tenant_id || currentTenantId())
-  const cancellationFeeCents = forfeitedDepositCents(booking, cancelConfig, { noShow: Boolean(body.noShow) })
+  const cancellationFeeCents = forfeitedDepositCents(booking, cancelConfig)
   const now = iso(new Date())
 
+  let refundReceipt=null
   db.exec('BEGIN IMMEDIATE')
   try {
+    refundReceipt=bookingCheckout.refundCancellation(booking,body)
     db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id)
     db.prepare("UPDATE bookings SET status = 'CANCELLED', cancelled_at = ?, cancellation_fee_cents = ?, updated_at = ? WHERE id = ?").run(now, cancellationFeeCents, now, id)
     db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(randomId('hist'), id, booking.status, 'CANCELLED', body.reason || 'Customer cancelled booking.', now)
@@ -6430,6 +6409,7 @@ function cancelBooking(id, body) {
   try { notifyScheduler.onBookingEvent({ event: 'cancelled', bookingId: id }) } catch (error) { console.error('[notify] cancelled 钩失败:', error.message) }
   return {
     booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)),
+    refundReceipt,
     refundPolicy: {
       hoursBefore,
       cancellationFeeCents,
@@ -6765,12 +6745,17 @@ const businessHoursRoutes = createBusinessHoursRoutes({
   upcomingSpecialDates: (sid, d) => upcomingSpecialDates(sid, d),
   iso, hoursSavable, HOURS_GATE_TEXT
 })
-const memberPricing = createMemberPricingPolicy({db,apiError,isMemberOf,getMembershipConfig,balanceOf:(u,t)=>storedValueBalanceDetail(u,t).totalCents})
+const bookingDepositFunding=createBookingDepositFunding({db,randomId,apiError,balanceOf:storedValueBalanceDetail,refundFacts:(u,t)=>refundApi.refundFacts(u,t),formatMoneyCents})
+const bookingCheckout=createBookingCheckout({db,apiError,randomId,getDepositConfig,depositAmountForService,serializeUser,validateBookingInput,assertBookable,balanceOf:storedValueBalanceDetail,formatMoneyCents,createBooking,serializeBooking,activeDepositReceipts,funding:bookingDepositFunding,isMemberOf,currency:tenantCurrencyCode,
+  notifyCreated:id=>{try{notifyScheduler.onBookingEvent({event:'created',bookingId:id})}catch(e){console.error('[notify] checkout:',e.message)}},
+  assertCancel:b=>{bookingState.assertTransition(b,'cancel',{actor:'customer',apiError});if(db.prepare("SELECT 1 FROM settlements WHERE tenant_id=? AND booking_id=? AND status<>'voided'").get(b.tenant_id,b.id))throw apiError(409,'SETTLEMENT_EXISTS','请先处理该预约的服务单，再取消预约。')},
+  forfeited:forfeitedDepositCents,forfeitIncome:(b,r,id)=>{const amount=bookingDepositFunding.normalAmount(r);if(amount)insertFinanceTransaction({tenantId:b.tenant_id,type:'income',source:'deposit_disposal',tags:id,category:'定金收入·爽约没收',amountCents:amount,payChannel:r.pay_channel,occurredOn:todayOf(b.tenant_id),bookingId:b.id,note:'取消预约：按本店规则不退部分',createdBy:'booking_checkout'})}})
+const memberPricing = createMemberPricingPolicy({db,apiError,isMemberOf,getMembershipConfig,balanceOf:(u,t)=>storedValueBalanceDetail(u,t).totalCents,formatCreatedAt:(v,t)=>{const p=localParts(v,tenantTimezone(t));return `${p.date} ${p.time}（${tenantTimezone(t)}）`}})
 const memberPricingPresentation=createMemberPricingPresentation({db,policy:memberPricing})
 const memberPricingCalculation = createMemberPricingCalculation({db,policy:memberPricing,apiError,balanceOf:(u,t)=>storedValueBalanceDetail(u,t).totalCents})
 const pricingTransactions=createMemberPricingTransactions({db,policy:memberPricing,apiError})
 const memberPricingPreview=createMemberPricingPreview({db,policy:memberPricing,calculation:memberPricingCalculation,computeSettlement,buildPaymentLegs,couponOptionsFor,apiError})
-const memberPricingRoutes = createMemberPricingRoutes({db,policy:memberPricing,preview:memberPricingPreview.preview,apiError,json,readBody,currentTenantId,isPlatformKey})
+const memberPricingRoutes = createMemberPricingRoutes({db,policy:memberPricing,calculation:memberPricingCalculation,preview:memberPricingPreview.preview,computeSettlement,apiError,json,readBody,currentTenantId,isPlatformKey})
 const settlementRoutes = createSettlementRoutes({
   apiError, json, readBody, db, currentTenantId, tenantTimezone, localParts, formatMoneyCents, groupMainItemCount,
   memberPricing, assertStaff: (a, row) => settlementAccess.assertStaff(a, row),
@@ -7359,7 +7344,7 @@ function depositLiabilityCents(tenantId = currentTenantId()) {
   const rows = db.prepare("SELECT * FROM deposit_receipts WHERE tenant_id = ?").all(tenantId)
   const revoked = new Set(rows.filter((r) => r.kind === 'revoke' && r.revoke_of).map((r) => r.revoke_of))
   return rows
-    .filter((r) => r.kind === 'receipt' && !revoked.has(r.id) && !r.settled_settlement_id)
+    .filter((r) => r.kind === 'receipt' && !revoked.has(r.id) && !r.settled_settlement_id && (!r.disposal_id || db.prepare("SELECT 1 FROM deposit_disposals d JOIN deposit_retains t ON t.id=d.retain_id WHERE d.id=? AND d.action='retain' AND t.status='active'").get(r.disposal_id)))
     .reduce((n, r) => n + (r.amount_cents || 0), 0)
 }
 
@@ -7375,13 +7360,16 @@ function serializeDepositReceipt(row) {
 /* 标记已收定金。幂等:同一张预约已经有有效记录时,直接把那条还回去,不再写一行。
    金额一律由**后端**按本店 deposit_config 算(前端只显示),前端传的金额一概不认。 */
 function markDepositReceived({ booking, technicianId = '', payChannel = 'offline', actor = 'admin' }) {
+  if(booking.status==='CANCELLED')throw apiError(409,'BOOKING_CANCELLED','已取消的预约不能再收定金。')
+  if(['stored_value','migrate_stored','retain_carry','refund_due'].includes(payChannel))throw apiError(400,'INVALID_DEPOSIT_CHANNEL','储值抵扣必须由顾客预约确认，不能按线下收款标记。')
   const tenantId = currentTenantId()
   const already = activeDepositReceipts(booking.id, tenantId)
-  if (already.length) return { receipt: serializeDepositReceipt(already[0]), created: false }
+  if(already.some(r=>r.settled_settlement_id))return {receipt:serializeDepositReceipt(already[0]),created:false}
   const config = getDepositConfig(tenantId)
   if (!config.enabled) throw apiError(400, 'DEPOSIT_DISABLED', '本店没有开启定金,先到门店设置里配定金规则。')
   const service = booking.service_id ? getService(booking.service_id) : null
-  const amountCents = depositAmountForService(service, config, tenantId)
+  const collected=already.reduce((n,r)=>n+r.amount_cents,0),amountCents=Math.max(0,depositAmountForService(service,config,tenantId)-collected)
+  if(!amountCents&&already.length)return {receipt:serializeDepositReceipt(already[0]),created:false}
   if (!(amountCents > 0)) throw apiError(400, 'DEPOSIT_AMOUNT_ZERO', '本店定金金额算下来是 0,先到门店设置里配定金规则。')
   if (technicianId && !db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(technicianId, tenantId)) {
     throw apiError(404, 'NOT_FOUND', '经手技师不存在。')
@@ -7395,7 +7383,8 @@ function markDepositReceived({ booking, technicianId = '', payChannel = 'offline
       .run(id, tenantId, booking.id, booking.user_id || null, amountCents, technicianId, payChannel, actor, now)
     // 预约上同步落金额并摘掉「未付定金」标 —— 结算时 computeSettlement 就能按它抵扣
     db.prepare('UPDATE bookings SET deposit_cents = ?, final_due_cents = MAX(0, service_price_cents - ?), direct_deposit_unpaid = 0, updated_at = ? WHERE id = ? AND tenant_id = ?')
-      .run(amountCents, amountCents, now, booking.id, tenantId)
+      .run(amountCents+collected, config.deductible?amountCents+collected:0, now, booking.id, tenantId)
+    db.prepare("UPDATE payments SET status='SUCCEEDED',updated_at=? WHERE booking_id=? AND provider='OFFLINE' AND status='REQUIRES_PAYMENT'").run(now,booking.id)
     db.exec('COMMIT')
   } catch (error) { db.exec('ROLLBACK'); throw error }
   return { receipt: serializeDepositReceipt(db.prepare('SELECT * FROM deposit_receipts WHERE id = ?').get(id)), created: true }
@@ -7406,6 +7395,7 @@ function revokeDepositReceipt({ booking, reason = '', actor = 'admin' }) {
   const tenantId = currentTenantId()
   const active = activeDepositReceipts(booking.id, tenantId)
   if (!active.length) throw apiError(400, 'NO_DEPOSIT_RECEIPT', '这张预约没有可撤销的定金记录。')
+  if(active.some(r=>bookingDepositFunding.parts(r).slice(0,3).some(Boolean)))throw apiError(409,'STORED_DEPOSIT_REQUIRES_CANCEL','这笔定金来自储值，请取消预约按原账户退款，不能按误标撤销。')
   const target = active[0]
   if (target.settled_settlement_id) throw apiError(400, 'DEPOSIT_ALREADY_SETTLED', '这笔定金已经在结算单上兑现了,不能撤销;要改请走金额更正。')
   const id = randomId('dep')
@@ -7455,15 +7445,16 @@ function sweepExpiredNoShowRetains(tenantId = currentTenantId()) {
       db.prepare(`INSERT INTO deposit_disposals (id, tenant_id, booking_id, user_id, action, amount_cents, retain_id, note, actor, created_at)
         VALUES (?, ?, ?, ?, 'auto_forfeit', ?, ?, '留存到期自动没收', 'system', ?)`)
         .run(did, tenantId, r.source_booking_id || '', r.user_id, r.amount_cents, r.id, now)
-      db.exec('COMMIT')
-    } catch (error) { db.exec('ROLLBACK'); throw error }
-    // 收入行在事务外记(finance 有自己的哈希链);tags=处置 id,审计按它对账
+    const origin=db.prepare("SELECT dr.* FROM deposit_receipts dr JOIN deposit_disposals dd ON dd.id=dr.disposal_id WHERE dd.retain_id=? AND dd.action='retain' AND dr.kind='receipt'").all(r.id)
+    const legacy=origin.reduce((n,x)=>n+bookingDepositFunding.parts(x)[0],0)
     insertFinanceTransaction({
       tenantId, type: 'income', source: 'deposit_disposal', tags: did,
-      category: '定金收入·爽约没收', amountCents: r.amount_cents, payChannel: 'offline',
+      category: '定金收入·爽约没收', amountCents: r.amount_cents-legacy, payChannel: origin[0]?.pay_channel||'offline',
       occurredOn: todayOf(tenantId), bookingId: r.source_booking_id || null,
       note: '留存到期自动没收', createdBy: 'system'
     })
+      db.exec('COMMIT')
+    } catch (error) { db.exec('ROLLBACK'); throw error }
   }
   return rows.length
 }
@@ -7511,17 +7502,17 @@ function disposeNoShowDeposit({ booking, action, note = '', actor = 'owner' }) {
     }
     const mark = db.prepare('UPDATE deposit_receipts SET disposal_id = ? WHERE id = ?')
     for (const r of receipts) mark.run(did, r.id)
-    db.exec('COMMIT')
-  } catch (error) { db.exec('ROLLBACK'); throw error }
   if (action === 'forfeit') {
     // A③:按处置确认时刻记独立收入行;不进业绩、不进任何日结区(source 独立,日结/业绩只认 settlements)
     insertFinanceTransaction({
       tenantId, type: 'income', source: 'deposit_disposal', tags: did,
-      category: '定金收入·爽约没收', amountCents: amount, payChannel: receipts[0].pay_channel || 'offline',
+      category: '定金收入·爽约没收', amountCents: receipts.reduce((n,r)=>n+bookingDepositFunding.normalAmount(r),0), payChannel: receipts[0].pay_channel || 'offline',
       occurredOn: todayOf(tenantId), bookingId: booking.id,
       note: `爽约没收${note ? ` · ${String(note).slice(0, 160)}` : ''}`, createdBy: actor
     })
   }
+    db.exec('COMMIT')
+  } catch (error) { db.exec('ROLLBACK'); throw error }
   return { disposal: db.prepare('SELECT * FROM deposit_disposals WHERE id = ?').get(did), retain }
 }
 
@@ -7536,6 +7527,7 @@ function revokeNoShowDisposal({ booking, reason = '', actor = 'owner' }) {
       throw apiError(409, 'RETAIN_ALREADY_USED', '这笔留存已经被使用或已到期,不能撤销;要纠错走更正链。')
     }
   }
+  if(bookingCheckout.oldCancel(booking))throw apiError(409,'CANCEL_ALREADY_REFUNDED','取消退款已完成，不能按爽约误处置撤销；请核对退款回执。')
   const now = iso(new Date())
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -7547,8 +7539,6 @@ function revokeNoShowDisposal({ booking, reason = '', actor = 'owner' }) {
     }
     // 收取记录回到「未处置」—— 负债重新挂回预约
     db.prepare('UPDATE deposit_receipts SET disposal_id = NULL WHERE disposal_id = ?').run(target.id)
-    db.exec('COMMIT')
-  } catch (error) { db.exec('ROLLBACK'); throw error }
   if (target.action === 'forfeit' || target.action === 'auto_forfeit') {
     // 已入账的没收收入 → 红字冲销(账本只追加)
     const original = db.prepare("SELECT * FROM finance_transactions WHERE tenant_id = ? AND tags = ? AND source = 'deposit_disposal' AND reversal_of IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 1").get(tenantId, target.id)
@@ -7561,6 +7551,8 @@ function revokeNoShowDisposal({ booking, reason = '', actor = 'owner' }) {
       })
     }
   }
+    db.exec('COMMIT')
+  } catch (error) { db.exec('ROLLBACK'); throw error }
   return { revoked: true, revokeOf: target.id }
 }
 
@@ -7583,7 +7575,7 @@ function settleDepositReceiptsOnSign(settlement, actor = 'system') {
       tenantId, // 签署页是公开路由,必须显式带租户
       type: 'income', source: 'settlement', tags: settlement.code,
       category: deductible ? '服务收入-定金' : '定金收入',
-      amountCents: r.amount_cents, payChannel: r.pay_channel || 'offline',
+      amountCents: bookingDepositFunding.normalAmount(r), payChannel: r.pay_channel || 'offline',
       occurredOn: todayOf(tenantId), bookingId: settlement.booking_id,
       note: deductible
         ? `服务单 ${settlement.code} 定金腿转收入(定金预收 −${r.amount_cents / 100})`
@@ -7619,7 +7611,7 @@ function auditDepositConservation(tenantId = currentTenantId()) {
         }
       } else {
         const income = db.prepare("SELECT COALESCE(SUM(amount_cents), 0) AS n FROM finance_transactions WHERE tenant_id = ? AND tags = ? AND source IN ('deposit_disposal', 'reversal')").get(tenantId, d.id).n
-        if (income !== d.amount_cents) {
+        if (income !== db.prepare("SELECT * FROM deposit_receipts WHERE disposal_id=? AND kind='receipt'").all(d.id).reduce((n,x)=>n+bookingDepositFunding.normalAmount(x),0)) {
           broken.push({ receiptId: r.id, bookingId: r.booking_id, amountCents: r.amount_cents, incomeCents: income, reason: '没收处置缺少等额的「定金收入·爽约没收」行' })
         }
       }
@@ -7631,7 +7623,7 @@ function auditDepositConservation(tenantId = currentTenantId()) {
       SELECT COALESCE(SUM(amount_cents), 0) AS n FROM finance_transactions
       WHERE tenant_id = ? AND tags = ? AND category IN ('服务收入-定金', '定金收入')
     `).get(tenantId, stl ? stl.code : '').n
-    if (income !== r.amount_cents) {
+    if (income !== rows.filter(x=>x.kind==='receipt'&&!revoked.has(x.id)&&x.settled_settlement_id===r.settled_settlement_id).reduce((n,x)=>n+bookingDepositFunding.normalAmount(x),0)) {
       broken.push({
         receiptId: r.id, bookingId: r.booking_id, amountCents: r.amount_cents,
         settlementCode: stl ? stl.code : '', incomeCents: income,
@@ -8618,6 +8610,7 @@ function amendSettlement(settlementId, body = {}, adminSession = {}, options = {
   const serviceDay = settlementServiceDate(row, tenantId)
   const closeOfDay = db.prepare('SELECT status FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tenantId, serviceDay)
   const perfMode = closeOfDay && closeOfDay.status === 'confirmed' ? 'deduct' : 'base'
+  if(options.preview)return {amountDeltaCents:delta,autoBalanceAdjustCents:autoAdjust}
   db.exec(options.personDocument?'SAVEPOINT amend_settlement':'BEGIN IMMEDIATE')
   try {
     db.prepare(`INSERT INTO settlement_amendments (id, tenant_id, settlement_id, before_json, after_json, reason, amount_delta_cents, auto_balance_adjust_cents, amended_by, amended_at, created_at)
@@ -8830,7 +8823,7 @@ function financeTrend(granularity, periods, tenantId = currentTenantId()) {
   const monthTargetCents = targets.targetMode === 'revenue' ? targets.monthTargetCents : 0
 
   // 单量按「顾客签了字的服务单」算,与日结、员工业绩同一口径
-  const signed = db.prepare("SELECT signed_at, total_cents FROM settlements WHERE tenant_id = ? AND status = 'signed' AND signed_at IS NOT NULL").all(tenantId)
+  const signed = signedServiceRows(db,tenantId,amendmentShape)
     .map((r) => ({ date: localParts(r.signed_at, tz).date, cents: r.total_cents }))
   const sv = db.prepare("SELECT type, amount_cents, created_at FROM stored_value_transactions WHERE tenant_id = ?").all(tenantId)
     .map((r) => ({ date: localParts(r.created_at, tz).date, type: r.type, cents: r.amount_cents }))
@@ -8994,7 +8987,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     const unallocated = needsAllocation(r, tenantId)
     if (unallocated) {
       pending.push({
-        settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date), totalCents: r.total_cents,
+        serviceDocument:db.prepare('SELECT d.id,d.group_id AS groupId FROM member_document_components c JOIN member_service_documents d ON d.id=c.document_id WHERE c.settlement_id=?').get(r.id)||null,settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date), totalCents: r.total_cents,
         // 分成按业绩基数走(券不扣技师);无券时两个数相等
         perfBaseCents: settlementPerfBaseCents(r), perfRowText: rowPerfText(r),
         amendBadgeText: amendmentShape(r).amendBadgeText, couponDiscountCents: r.coupon_discount_cents || 0,
@@ -9036,7 +9029,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     }
     if (!unallocated && (!closeRow || closeRow.status !== 'confirmed')) {
       awaitingConfirm.push({
-        settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date),
+        serviceDocument:db.prepare('SELECT d.id,d.group_id AS groupId FROM member_document_components c JOIN member_service_documents d ON d.id=c.document_id WHERE c.settlement_id=?').get(r.id)||null,settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date),
         perfBaseCents: settlementPerfBaseCents(r), perfRowText: rowPerfText(r),
         amendBadgeText: amendmentShape(r).amendBadgeText,
         couponDiscountCents: r.coupon_discount_cents || 0,
@@ -9057,8 +9050,8 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
        已确认那天的**快照**不动(冻结的就是冻结的),差异照旧由 R1「数字已过期」那条路解释。 */
     const amd = amendmentShape(r)
     return {
-      settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date),
-      totalCents: amd.amendedCount ? amd.actualDueCents : r.total_cents,
+      serviceDocument:db.prepare('SELECT d.id,d.group_id AS groupId FROM member_document_components c JOIN member_service_documents d ON d.id=c.document_id WHERE c.settlement_id=?').get(r.id)||null,settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date),
+      totalCents: memberDailyServiceAmount(db,r,amd),
       originalTotalCents: r.total_cents, amendBadgeText: amd.amendBadgeText, amendedCount: amd.amendedCount,
       cardUsedCents: cardUsed,
       perfBaseCents: settlementPerfBaseCents(r),
@@ -9223,6 +9216,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     /* 裁①(队列 B3-2 验收第2点)+§十-7 v1.6:日结汇总单列区——
        「次卡售卡」独立行(与充值并列,预收负债不混现金实收)+「次卡核销 n 次(折算 ¥xxx)」单列。
        技师表零改动;营业额口径不动(Σ应收本就含购卡收款,本行自证其中预收部分)。 */
+    personDocuments:dailyMemberDocuments(db,rows,tenantId,n=>formatMoneyCents(n,tenantId,2),amendmentShape),
     timecardSummary: (() => {
       const sold = rows.filter((r) => r.purchase_json).map((r) => { try { return JSON.parse(r.purchase_json) } catch { return null } }).filter(Boolean)
       const redeems = rows.length
@@ -9443,7 +9437,7 @@ function reopenDailyClose(date, reason, adminSession = {}) {
    月度锁定的前置条件也是它 —— 有一天没结,当月工资就不许锁。 */
 function monthlyCloseStatus(month, tenantId) {
   const tz = tenantTimezone(tenantId)
-  const signed = db.prepare("SELECT signed_at, total_cents FROM settlements WHERE tenant_id = ? AND status = 'signed' AND signed_at IS NOT NULL").all(tenantId)
+  const signed = signedServiceRows(db,tenantId,amendmentShape)
   const byDate = {}
   for (const r of signed) {
     const d = localParts(r.signed_at, tz).date
@@ -9677,7 +9671,7 @@ function staffPerformanceView(techId, month, tenantId) {
     view.trend = []
     view.note = '本店设置为只向员工展示工资,不展示业绩明细。'
   }
-  return view
+  view.memberPricingDetails=memberPricingPerformanceDetails(db,{tenantId,technicianId:techId,month,view,localDate:s=>localParts(s,tenantTimezone(tenantId)).date,money:c=>formatMoneyCents(c,tenantId,2)});return view
 }
 
 /* 对象存储那一族已搬到 `./cos-upload.mjs`(10b,公约②「边改边拆」;(甲) 抽取抵掉本批新增的分发行) */
@@ -9925,7 +9919,7 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
   const booking = row.booking_id ? db.prepare('SELECT appointment_start FROM bookings WHERE id = ?').get(row.booking_id) : null
   return {
     id: row.id,
-    serviceDocument:db.prepare('SELECT d.id,d.status,d.beneficiary_key AS beneficiaryKey FROM member_document_components c JOIN member_service_documents d ON d.id=c.document_id WHERE c.settlement_id=?').get(row.id)||null,
+    serviceDocument:db.prepare('SELECT d.id,d.group_id AS groupId,d.status,d.beneficiary_key AS beneficiaryKey FROM member_document_components c JOIN member_service_documents d ON d.id=c.document_id WHERE c.settlement_id=?').get(row.id)||null,
     code: row.code,
     // 原始开单身份；只读显示，不回填历史，不以当前查看者替代经手人。
     operatorText: row.created_by || '历史未记录',
@@ -10104,10 +10098,10 @@ const settlementRead = createSettlementReadAccess({secret:WECHAT_MINI_TOKEN_SECR
 const {signLedger,signSettlement}=createSettlementSigner({db,apiError,iso,randomId,cosPutObject,storedValueBalanceDetail,insertFinanceTransaction,timecardExpired:(...a)=>timecardExpired(...a),timecardRemainingOf:(...a)=>timecardRemainingOf(...a),insertStoredValueTransaction,logCouponGrant,formatMoneyCents,settleDepositReceiptsOnSign,renderSettlementSnapshotSvg,serializeSettlement,todayOf,settlementRead})
 const storedValueRechargeRoutes=createStoredValueRechargeRoutes({db,apiError,readBody,json,currentTenantId,isUserBound,DATA_SCOPE_NAME,giftSnapshotOfPackage,actorOf:a=>actorOf(a),insertStoredValueTransaction,storedValueOverview,storedValueBalanceCents,pricingTransactions})
 const memberDocuments=createMemberServiceDocuments({db,policy:memberPricing,preview:memberPricingPreview,apiError,currentTenantId,createSettlementGroup,signLedger,
-  balanceOf:storedValueBalanceDetail,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,amendSettlement:(id,b,a)=>amendSettlement(id,b,a,{personDocument:true}),amendmentShape,assertStaff:(a,r)=>settlementAccess.assertStaff(a,r)})
-const memberDocumentRoutes=createMemberDocumentRoutes({db,policy:memberPricing,documents:memberDocuments,json,readBody,currentTenantId,apiError,requireCustomer})
+  balanceOf:storedValueBalanceDetail,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,amendSettlement:(id,b,a,o={})=>amendSettlement(id,b,a,{...o,personDocument:true}),amendmentShape,formatMoneyCents,formatSignedAt:(v,t)=>{const p=localParts(v,tenantTimezone(t));return `${p.date} ${p.time}（${tenantTimezone(t)}）`},assertStaff:(a,r)=>settlementAccess.assertStaff(a,r)})
+const memberDocumentRoutes=createMemberDocumentRoutes({db,policy:memberPricing,documents:memberDocuments,json,readBody,currentTenantId,apiError,requireCustomer,isUserBound})
 
-
+const serviceEditRoutes=createServiceEditRoutes({db,apiError,currentTenantId,servicePayload,assertServicePriceOk,assertCategoryOk,serviceIdFrom,upsertServicePrice,serializeService,getService,pricingItemShape,writePricingItemPrices,serializePricingItem,memberPricing,json,readBody})
 async function route(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {})
   const url = new URL(req.url, `http://${req.headers.host}`)
@@ -10802,6 +10796,14 @@ async function route(req, res) {
     publicDraft.store = draft.store ? {id:draft.store.id,name:draft.store.name} : null
     return json(res, 200, { bookingDraft: publicDraft }, {'cache-control':'no-store'})
   }
+  if(req.method==='POST'&&(path==='/my/booking-checkout/preview'||path==='/my/booking-checkout')){
+    const customer=requireCustomer(req),tid=resolveTenant(req,query),uid=profileIdInTenant(customer.id,tid),body=await readBody(req)
+    return json(res,path.endsWith('/preview')?200:201,path.endsWith('/preview')?bookingCheckout.quote(tid,uid,body):bookingCheckout.submit(tid,uid,body,{demoSeed:demoSeedTag(req)}))
+  }
+  if(req.method==='GET'&&/^\/bookings\/[^/]+\/cancel-preview$/.test(path)){
+    const customer=requireCustomer(req),tid=resolveTenant(req,query),uid=profileIdInTenant(customer.id,tid),booking=db.prepare('SELECT * FROM bookings WHERE id=? AND tenant_id=? AND user_id=?').get(path.split('/')[2],tid,uid)
+    if(!booking)throw apiError(404,'NOT_FOUND','找不到这张预约。');return json(res,200,bookingCheckout.cancelPreview(booking))
+  }
   if (req.method === 'POST' && path === '/bookings') {
     // 安全:必须登录,且强制以登录用户下单(此前不鉴权 + userId 取自请求体,可匿名/冒用他人下单)
     const customer = requireCustomer(req)
@@ -10856,6 +10858,7 @@ async function route(req, res) {
         // 充值套餐:实收与赠送分行(§十-8 赠送=营销让利,不与实收混成一个数)
         bonusCents: isTimes ? 0 : (r.bonus_cents || 0),
         bonusText: !isTimes && r.bonus_cents > 0 ? `赠 ${m(r.bonus_cents)}` : '',
+        defaultDiscountText:!isTimes&&memberPricing.config(tid).active?'默认个人折扣：'+discountLabel(memberPricing.packageDiscount(tid,r.id).rateBps)+'；充值时由门店确认，可调整。':'',
         titleText: isTimes ? `${r.name} ${m(r.price_cents)}` : `充 ${m(r.price_cents)} 得 ${m(r.price_cents + (r.bonus_cents || 0))}`,
         // 次卡卡片:次数/单次折算/项目组/有效期(假设②:顾客买前必须看得到)
         timesCount: isTimes ? r.times_count : 0,
@@ -10966,7 +10969,9 @@ async function route(req, res) {
     const rows = db.prepare("SELECT id, code, created_at, total_cents, group_id FROM settlements WHERE tenant_id = ? AND user_id = ? AND status = 'pending_sign' ORDER BY created_at DESC LIMIT 20").all(tid, customer.id)
     const tz = tenantTimezone(tid)
     return json(res, 200, {
-      pendingSign: rows.map((r) => {
+      pendingSign: rows.filter((r,i,all)=>!db.prepare('SELECT 1 FROM member_document_components WHERE settlement_id=?').get(r.id)||all.findIndex(x=>x.group_id===r.group_id)===i).map((r) => {
+        const doc=db.prepare('SELECT d.* FROM member_document_components c JOIN member_service_documents d ON d.id=c.document_id WHERE c.settlement_id=?').get(r.id)
+        if(doc){const all=db.prepare("SELECT quote_json FROM member_service_documents WHERE group_id=? AND status='pending_sign'").all(doc.group_id),cash=all.reduce((n,x)=>n+JSON.parse(x.quote_json).components.reduce((a,c)=>a+c.payment.offlineCents,0),0),p=localParts(new Date(r.created_at),tz);return {code:r.code,memberDocumentGroupId:doc.group_id,cashDueCents:cash,cashDueText:formatMoneyCents(cash,tid,'auto'),at:`${p.date.slice(5)} ${p.time.slice(0,5)}`,groupTotal:all.length,titleText:`本次服务确认单 · 待签 ${all.length} 张`}}
         const p = localParts(new Date(r.created_at), tz)
         // D65-b:顾客待签卡金额=头条「本单到店支付」(五步⑤),不再给价值总额裸数字
         const cashDue = db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg = 'offline'").get(r.id).n
@@ -10992,9 +10997,9 @@ async function route(req, res) {
     return json(res, 200, {
       balanceCents: storedValueBalanceCents(customer.id, tid),
       pendingConfirm: txns.filter((t) => t.type === 'recharge' && !t.customer_confirmed_at)
-        .map((t) => ({ id: t.id, giftItems:readGiftItems(t), amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at })),
+        .map((t) => ({ discountReceipt:memberDiscountReceipt(db,tid,customer.id,t.id,tenantTimezone(tid)),id: t.id, giftItems:readGiftItems(t), amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at })),
       txns: txns.map((t) => ({
-        id: t.id, giftItems:readGiftItems(t), type: t.type, amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at,
+        discountReceipt:memberDiscountReceipt(db,tid,customer.id,t.id,tenantTimezone(tid)),id: t.id, giftItems:readGiftItems(t), type: t.type, amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at,
         // N-5:类型文案**后端唯一出口** —— 以前两端各存一份本地词典,新增 refund 类型时会显示空白
         typeText: storedValueTypeText(t.type),
         needsConfirm: t.type === 'recharge' && !t.customer_confirmed_at
@@ -11117,9 +11122,10 @@ async function route(req, res) {
     // 安全:必须登录,且只能取消自己的订单(此前无鉴权,可取消任意订单)
     const customer = requireCustomer(req)
     const bid = path.split('/')[2]
-    const target = db.prepare('SELECT user_id FROM bookings WHERE id = ?').get(bid)
+    const tid=resolveTenant(req,query),uid=profileIdInTenant(customer.id,tid)
+    const target = db.prepare('SELECT user_id FROM bookings WHERE id = ? AND tenant_id=?').get(bid,tid)
     if (!target) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
-    if (target.user_id !== customer.id) throw apiError(403, 'FORBIDDEN', 'You can only cancel your own booking.')
+    if (target.user_id !== uid) throw apiError(403, 'FORBIDDEN', 'You can only cancel your own booking.')
     return json(res, 200, cancelBooking(bid, await readBody(req)))
   }
   // 参考图分析:原先**无任何身份校验、无套餐闸门**,任何人拿到域名就能循环烧 AI 额度(单图 300KB、每次 3 张)。
@@ -11178,6 +11184,7 @@ async function route(req, res) {
   if(await storedValueRechargeRoutes(req,res,{path,adminSession}))return;
   if(await memberDocumentRoutes(req,res,{path,query,adminSession}))return;
   if(await memberPricingRoutes(req,res,{path,adminSession}))return;
+  if(await serviceEditRoutes(req,res,{path,adminSession}))return;
   if(await bookingAcceptance.route(req,res,{path,tid:currentTenantId(),admin:adminSession}))return;
   if(await storeGuideApi.route(req,res,{path,query,admin:adminSession,tid:currentTenantId(),json,readBody}))return; if (req.method === 'GET' && path === '/admin/store/mini-code') {
     if (adminSession.role !== 'owner') throw apiError(403,'FORBIDDEN','仅店主可获取门店码。')
@@ -11467,7 +11474,7 @@ async function route(req, res) {
           lastVisitDate: c.lastVisitDate,
           tags: c.tags,
           memberCode: c.memberCode,
-          scope: 'mine'
+          scope: 'mine', ...(memberPricing.config(currentTenantId()).active?{personalDiscount:((d)=>({active:d.active,eligible:d.eligible,discountText:d.discountText,statusText:d.statusText}))(memberPricing.discount(currentTenantId(),c.id))}:{})
         }))
       return json(res, 200, { customers: rows, scope: 'mine', scopeNote: '只显示你服务过的顾客;金额与储值信息不对员工开放' })
     }
@@ -11484,7 +11491,7 @@ async function route(req, res) {
       "SELECT user_id, SUM(amount_cents) AS s, MIN(expires_at) AS e FROM deposit_retains WHERE tenant_id = ? AND status = 'active' AND source = 'no_show' GROUP BY user_id"
     ).all(currentTenantId()).map((r) => [r.user_id, r]))
     const withRetain = (c) => {
-      const r = retainMap.get(c.id)
+      if(memberPricing.config(currentTenantId()).active&&db.prepare('SELECT id FROM users WHERE id=? AND tenant_id=?').get(c.id,currentTenantId()))c={...c,personalDiscount:memberPricing.discount(currentTenantId(),c.id)}; const r = retainMap.get(c.id)
       if (!r) return c
       return Object.assign({}, c, {
         depositRetainedCents: r.s,
@@ -11542,27 +11549,6 @@ async function route(req, res) {
     countAiUsage()
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, brandName: tenantKbFacts(currentTenantId()).brandName || '', platform: body.platform || 'xiaohongshu', audience: body.audience || 'staff', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
-  if (req.method === 'GET' && path === '/admin/services') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    return json(res, 200, { services: db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY type ASC, sort_order ASC').all(currentTenantId()).map(serializeService) })
-  }
-  if (req.method === 'POST' && path === '/admin/services') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const payload = servicePayload(await readBody(req))
-    if (!['NAIL', 'LASH', 'CARE', 'OTHER'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', '服务类型须为 美甲/美睫/护理/其他。')
-    if (!payload.nameZh || !payload.nameEn) throw apiError(400, 'BAD_REQUEST', 'Service name is required.')
-    assertServicePriceOk(payload)                              // 08-28 A5:价格/定金/时长后端兜底(前端拦不算数)
-    assertCategoryOk(payload.categoryId, currentTenantId())   // 分类唯一真相律③:上架项目必须挂大类
-    const id = serviceIdFrom(payload)
-    db.prepare(`INSERT INTO services
-      (id, tenant_id, type, category, category_id, name_zh, name_en, description_zh, description_en, image_url, image_view_json, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json, storefront, is_timecard)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, currentTenantId(), payload.type, payload.category, payload.categoryId, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.imageViewJson, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), 1, 0)
-    // 2026-08-06:老「服务管理」页也走多价位模型的 list 档,保证 price_cents 与 service_prices(list) 永不漂移
-    upsertServicePrice(currentTenantId(), id, 'list', payload.priceCents)
-    const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
-    for (const tech of db.prepare('SELECT id FROM technicians WHERE is_active = 1 AND tenant_id = ?').all(currentTenantId())) assign.run(tech.id, id)
-    return json(res, 201, { service: serializeService(getService(id)) })
-  }
   if (req.method === 'GET' && path === '/admin/technicians') {
     // roster=1:本店在职名单(结算开单要勾主/副技师,员工也得看得见同事)。
     // 台面日视图早就把整店技师列给员工看了,这里不多暴露任何东西;默认行为不变。
@@ -11570,23 +11556,6 @@ async function route(req, res) {
       ? db.prepare('SELECT * FROM technicians WHERE tenant_id = ? AND id = ? ORDER BY name ASC').all(currentTenantId(), adminSession.technicianId)
       : db.prepare('SELECT * FROM technicians WHERE tenant_id = ? ORDER BY name ASC').all(currentTenantId())
     return json(res, 200, { technicians })
-  }
-  if (req.method === 'PATCH' && path.startsWith('/admin/services/')) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const id = path.split('/')[3]
-    const body = await readBody(req)
-    const current = getService(id)
-    if (!current || (current.tenant_id && current.tenant_id !== currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Service not found.')
-    if (Number(current.is_timecard) === 1) throw apiError(400, 'TIMECARD_MIGRATED', '次卡已迁出「服务与价目」,请在次卡管理中维护。')
-    const payload = servicePayload(body, current)
-    assertServicePriceOk(payload)                              // 08-28 A5:改价这条路同样兜底(建/改两口都过闸)
-    assertCategoryOk(payload.categoryId, currentTenantId())   // 分类唯一真相律③
-    db.prepare(`UPDATE services SET
-      type = ?, category = ?, category_id = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?, image_view_json = ?,
-      price_cents = ?, deposit_cents = ?, base_duration_min = ?, is_active = ?, sort_order = ?, process_json = ?, notice_json = ?
-      WHERE id = ?`).run(payload.type, payload.category, payload.categoryId, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.imageViewJson, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), id)
-    upsertServicePrice(currentTenantId(), id, 'list', payload.priceCents) // 同上:改价即同步 list 档
-    return json(res, 200, { service: serializeService(getService(id)) })
   }
   // ===== P1 结算(技师端开单)=====
   // 开单三条路由(preview / 建单 / 列表)搬进 ./settlement-routes.mjs(批次三边改边拆,只搬不改)
@@ -11876,79 +11845,6 @@ async function route(req, res) {
     if (req.method === 'DELETE' && catId) return json(res, 200, pricingCategoryApi.remove(tid, catId))
   }
   { const hit = await serviceImportApi.ownerRoute({ req, res, path, adminSession, tenantId: currentTenantId() }); if (hit) return hit }   // D214 商家自导价目表,整条口住在 import-services.mjs
-  if (path === '/admin/pricing/items' || path.startsWith('/admin/pricing/items/')) {
-    const tid = currentTenantId()
-    const itemId = path.split('/')[4] || null
-    if (req.method === 'GET' && !itemId) {
-      const rows = db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY item_kind ASC, sort_order ASC, rowid ASC').all(tid)
-      return json(res, 200, { items: rows.map(serializePricingItem) })
-    }
-    if (req.method === 'POST' && !itemId) {
-      const body = await readBody(req)
-      const nameZh = String(body.nameZh || body.name || '').trim()
-      if (!nameZh) throw apiError(400, 'BAD_REQUEST', '项目名称必填。')
-      const id = serviceIdFrom({ type: body.type || 'OTHER', nameEn: body.nameEn, nameZh })
-      const shape = pricingItemShape(body, {}, tid)
-      const listCents = Math.max(0, Math.round(Number(body.listPriceCents ?? body.priceCents ?? 0) || 0))
-      db.prepare(`INSERT INTO services
-        (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json,
-         item_kind, category_id, unit, price_rule, price_rule_value, addon_scope_json, addon_group, storefront, is_timecard, price_mode)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        id, tid, shape.type, shape.categoryName, nameZh, String(body.nameEn || nameZh), String(body.descriptionZh || ''), String(body.descriptionEn || ''),
-        String(body.imageUrl || ''), listCents,   // 同上:加项也不塞默认图
-        Math.max(0, Math.round(Number(body.depositCents ?? 0) || 0)),
-        Math.max(0, Math.round(Number(body.baseDurationMin ?? 60) || 0)),
-        Math.round(Number(body.sortOrder) || 0), body.isActive === false ? 0 : 1, '[]', '[]',
-        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), shape.addonGroup || null,
-        shape.itemKind === 'main' ? (body.storefront === false ? 0 : 1) : 0, 0, shape.priceMode)
-      writePricingItemPrices(tid, id, body, listCents)
-      // 主项目自动分配给全部在职技师(与 /admin/services 同规则);加项不占技师能力位
-      if (shape.itemKind === 'main') {
-        const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
-        for (const tech of db.prepare('SELECT id FROM technicians WHERE is_active = 1 AND tenant_id = ?').all(tid)) assign.run(tech.id, id)
-      }
-      return json(res, 201, { item: serializePricingItem(db.prepare('SELECT * FROM services WHERE id = ?').get(id)) })
-    }
-    if (req.method === 'PATCH' && itemId) {
-      const cur = db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(itemId, tid)
-      if (!cur) throw apiError(404, 'NOT_FOUND', 'Item not found.')
-      /* S1 合同规则③:次卡不属于服务目录,已迁出本页;编辑一律拒绝,S2 次卡管理接手。 */
-      if (Number(cur.is_timecard) === 1) throw apiError(400, 'TIMECARD_MIGRATED', '次卡已迁出「服务与价目」,请在次卡管理中维护。')
-      const body = await readBody(req)
-      const shape = pricingItemShape(body, cur, tid)
-      const listCents = body.listPriceCents === undefined && body.priceCents === undefined
-        ? cur.price_cents
-        : Math.max(0, Math.round(Number(body.listPriceCents ?? body.priceCents) || 0))
-      db.prepare(`UPDATE services SET type = ?, category = ?, name_zh = ?, name_en = ?, price_cents = ?, deposit_cents = ?, base_duration_min = ?,
-        sort_order = ?, is_active = ?, storefront = ?, item_kind = ?, category_id = ?, unit = ?, price_rule = ?, price_rule_value = ?, addon_scope_json = ?, addon_group = ?, price_mode = ? WHERE id = ?`).run(
-        shape.type, shape.categoryName,
-        body.nameZh === undefined ? cur.name_zh : String(body.nameZh).trim().slice(0, 60) || cur.name_zh,
-        body.nameEn === undefined ? cur.name_en : String(body.nameEn).trim().slice(0, 80),
-        listCents,
-        body.depositCents === undefined ? cur.deposit_cents : Math.max(0, Math.round(Number(body.depositCents) || 0)),
-        body.baseDurationMin === undefined ? cur.base_duration_min : Math.max(0, Math.round(Number(body.baseDurationMin) || 0)),
-        body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0),
-        body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0),
-        body.storefront === undefined ? (cur.storefront === null ? (cur.item_kind === 'main' && cur.is_active ? 1 : 0) : cur.storefront) : (body.storefront ? 1 : 0),
-        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), shape.addonGroup || null, shape.priceMode, itemId)
-      writePricingItemPrices(tid, itemId, body, listCents)
-      return json(res, 200, { item: serializePricingItem(db.prepare('SELECT * FROM services WHERE id = ?').get(itemId)) })
-    }
-    if (req.method === 'DELETE' && itemId) {
-      const cur = db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(itemId, tid)
-      if (!cur) throw apiError(404, 'NOT_FOUND', 'Item not found.')
-      // 有历史订单引用的项目不能物理删(会断掉订单溯源),改为下架
-      const used = db.prepare('SELECT COUNT(*) AS n FROM bookings WHERE service_id = ?').get(itemId).n
-      if (used > 0) {
-        db.prepare('UPDATE services SET is_active = 0 WHERE id = ?').run(itemId)
-        return json(res, 200, { deleted: false, disabled: true, reason: `该项目有 ${used} 笔历史订单,已改为下架而非删除。` })
-      }
-      db.prepare('DELETE FROM service_prices WHERE service_id = ?').run(itemId)
-      db.prepare('DELETE FROM technician_services WHERE service_id = ?').run(itemId)
-      db.prepare('DELETE FROM services WHERE id = ?').run(itemId)
-      return json(res, 200, { deleted: true })
-    }
-  }
   if (path === '/admin/pricing/rules') {
     const tid = currentTenantId()
     if (req.method === 'GET') return json(res, 200, { rules: getPricingRules(tid) })
@@ -13213,7 +13109,7 @@ async function route(req, res) {
       FROM stored_value_transactions s
       LEFT JOIN users u ON u.id = s.user_id
       LEFT JOIN technicians t ON t.id = s.technician_id
-      WHERE s.tenant_id = ? AND s.type IN ('recharge', 'consume', 'bonus', 'reversal') AND substr(s.created_at, 1, 7) = ?
+      WHERE s.tenant_id = ? AND s.type IN ('recharge', 'consume', 'bonus', 'reversal','deposit_hold','deposit_return') AND substr(s.created_at, 1, 7) = ?
       ORDER BY s.created_at DESC
     `).all(currentTenantId(), month)
     const tz = tenantTimezone(currentTenantId())
@@ -13229,11 +13125,11 @@ async function route(req, res) {
         const codeMatch = r.type === 'consume' ? String(r.note || '').match(/服务单\s+(\S+)\s+结算扣卡/) : null
         /* B5 走查双端同病(四之九):渠道裸英文串(cash/wechat/manual)两端都在渲染——
            句子后端唯一,这里出中文;顾客端 /my 流水渠道映射同批已对齐 */
-        const CH_ZH = { cash: '现金', wechat: '微信支付', alipay: '支付宝', card: '银行卡', manual: '门店补录', marketing: '营销赠送', unknown: '—' }
+        const CH_ZH = { stored_value:'储值账户', cash: '现金', wechat: '微信支付', alipay: '支付宝', card: '银行卡', manual: '门店补录', marketing: '营销赠送', unknown: '—' }
         return {
-          id: r.id, type: r.type, at: `${p.date.slice(5)} ${p.time.slice(0, 5)}`,
+          id: r.id, type: r.type, typeText:storedValueTypeText(r.type), at: `${p.date.slice(5)} ${p.time.slice(0, 5)}`,
           userId: r.user_id, occurredOn: p.date,
-          reversed: Boolean(r.reversed), reversalOf: r.reversal_of || null,
+          reversed: Boolean(r.reversed), reversalOf: r.reversal_of || null, reversalFacts:storedValueReversalFacts(db,currentTenantId(),r),
           userName: r.user_name || '—', amountCents: r.amount_cents,
           handler: r.type === 'recharge' ? (r.technician_name || (r.created_by || '—')) : '',
           settlementCode: codeMatch ? codeMatch[1] : '',
@@ -15026,6 +14922,7 @@ async function route(req, res) {
         .run(now, canRetain ? 0 : forfeitedDepositCents(booking, config), now, id)
       db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
         .run(randomId('hist'), id, booking.status, 'CANCELLED', body.reason || (canRetain ? '合规改期(定金保留)' : '改期'), now)
+      if(!canRetain)bookingCheckout.refundCancellation(booking,body)
       if (canRetain) {
         retain = issueDepositRetain({ tenantId: tid, userId: booking.user_id, bookingId: booking.id, amountCents: booking.deposit_cents, timesUsed: nextTimes })
       }
@@ -15107,12 +15004,13 @@ async function route(req, res) {
     assertStaffCanAccessBooking(adminSession, booking)
     const noteIn = String(body.note || '').trim()
     // 必填校验也在状态机里(裁 B:结束售后必须填处理结果)—— 路由只把用户填的字传进去
+    if(actionKey==='cancel'&&activeDepositReceipts(id,booking.tenant_id).some(r=>bookingDepositFunding.parts(r).slice(0,3).some(Boolean)))return json(res,200,cancelBooking(id,{reason:noteIn}))
     bookingState.assertTransition(booking, actionKey, { actor: 'merchant', role: adminSession.role === 'owner' ? 'owner' : 'staff', apiError, note: noteIn })
     const nowIso = iso(new Date())
     bookingState.applyTransition(booking, actionKey, {
       now: nowIso,
       note: noteIn,
-      actorEmail: adminSession.email || 'admin',
+      actorEmail: actorOf(adminSession),
       deleteSlots: () => db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id),
       reverseIncome: (who) => reverseBookingIncome(id, who),
       writeHistory: ({ from, to, note: n, at }) => db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(randomId('hist'), id, from, to, n, at),
@@ -15330,14 +15228,7 @@ try {
    ① 默认关闭,全商户一律 —— 以前是「进财务区就被迫先设一个密码」,等于默认开;
    ② 归属商家自助:老板在自己的门店设置里开/关/改密,不用找平台;
    ③ 迁移只把旗舰店置为开(它现在就是开着的,现状不动),其余商户一律关。 */
-try {
-  db.exec('ALTER TABLE tenants ADD COLUMN finance_lock_enabled INTEGER')
-} catch (error) {
-  if (!String(error.message || '').includes('duplicate column')) throw error
-}
-db.exec(`UPDATE tenants SET finance_lock_enabled =
-  CASE WHEN id = '${DEFAULT_TENANT_ID}' AND finance_password_hash IS NOT NULL AND finance_password_hash != '' THEN 1 ELSE 0 END
-  WHERE finance_lock_enabled IS NULL`)
+ensureFinanceLockColumn(db, DEFAULT_TENANT_ID)
 /* 平台运维操作日志(2026-08-08):平台侧动了商家的什么,留一行,可追溯。
    目前只有「重置财务密码」一种,后续平台侧动作照此追加。 */
 db.exec(`

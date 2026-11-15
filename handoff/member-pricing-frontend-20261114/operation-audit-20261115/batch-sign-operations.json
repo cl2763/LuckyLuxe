@@ -1,0 +1,193 @@
+{
+  "status": "passed",
+  "screenIds": [
+    "U18",
+    "U19",
+    "U20",
+    "U21",
+    "S10",
+    "S11",
+    "S12"
+  ],
+  "level": "native IAB checkbox/canvas drag/submit + API persisted verification",
+  "actions": [
+    "empty confirmation blocked",
+    "missing signature blocked",
+    "clear signature then submit blocked",
+    "first signature commits recharge + discount + debit",
+    "auto opens second without merchant resend",
+    "second requires independent signature",
+    "second commits remaining balance + offline difference",
+    "reload remains signed with no submit controls"
+  ],
+  "member": {
+    "balanceCents": 0,
+    "rateBps": 8000
+  },
+  "documents": [
+    {
+      "id": "6aaf5dee-7f31-454c-95c7-447c18bb0eb5",
+      "status": "signed",
+      "person": "小程序操作验收顾客",
+      "discount": "8.0折",
+      "lines": [
+        {
+          "name": "纯色美甲",
+          "technicians": "核验技师",
+          "amountText": "CAD $163.20",
+          "listText": "CAD $204.00"
+        },
+        {
+          "name": "纯色美甲",
+          "technicians": "核验技师",
+          "amountText": "CAD $163.20",
+          "listText": "CAD $204.00"
+        },
+        {
+          "name": "纯色美甲 · 次卡核销 第 2/10 次(操作核销测试卡)",
+          "technicians": "核验技师",
+          "amountText": "CAD $10.00",
+          "listText": "CAD $10.00"
+        }
+      ],
+      "rows": [
+        {
+          "label": "服务原价",
+          "value": "CAD $418.00"
+        },
+        {
+          "label": "个人会员优惠 · 8.0折",
+          "value": "−CAD $81.60"
+        },
+        {
+          "label": "服务折后小计",
+          "value": "CAD $336.40"
+        },
+        {
+          "label": "优惠券",
+          "value": "−CAD $10.00"
+        },
+        {
+          "label": "已付定金",
+          "value": "CAD $0.00"
+        },
+        {
+          "label": "服务应付",
+          "value": "CAD $326.40"
+        }
+      ],
+      "paymentRows": [
+        {
+          "label": "次卡抵扣",
+          "value": "CAD $10.00"
+        },
+        {
+          "label": "储值余额扣款",
+          "value": "CAD $316.40"
+        },
+        {
+          "label": "到店收款 · 服务差额",
+          "value": "CAD $0.00"
+        },
+        {
+          "label": "签署前账户余额（预计）",
+          "value": "CAD $500.00"
+        },
+        {
+          "label": "线下收款 · 充值本金",
+          "value": "CAD $100.00"
+        },
+        {
+          "label": "充值赠金（不另收款）",
+          "value": "CAD $10.00"
+        },
+        {
+          "label": "本单扣款后余额（预计）",
+          "value": "CAD $293.60"
+        }
+      ],
+      "before": "CAD $500.00",
+      "after": "CAD $293.60",
+      "signatureStrokeCount": 2,
+      "signaturePointCount": 18
+    },
+    {
+      "id": "47806ba6-ddd6-490f-b5c6-d7b90e6e95d7",
+      "status": "signed",
+      "person": "同行朋友1",
+      "discount": "8.0折",
+      "lines": [
+        {
+          "name": "纯色美甲",
+          "technicians": "核验技师",
+          "amountText": "CAD $163.20",
+          "listText": "CAD $204.00"
+        },
+        {
+          "name": "纯色美甲",
+          "technicians": "核验技师",
+          "amountText": "CAD $163.20",
+          "listText": "CAD $204.00"
+        }
+      ],
+      "rows": [
+        {
+          "label": "服务原价",
+          "value": "CAD $408.00"
+        },
+        {
+          "label": "个人会员优惠 · 8.0折",
+          "value": "−CAD $81.60"
+        },
+        {
+          "label": "服务折后小计",
+          "value": "CAD $326.40"
+        },
+        {
+          "label": "优惠券",
+          "value": "CAD $0.00"
+        },
+        {
+          "label": "已付定金",
+          "value": "CAD $0.00"
+        },
+        {
+          "label": "服务应付",
+          "value": "CAD $326.40"
+        }
+      ],
+      "paymentRows": [
+        {
+          "label": "次卡抵扣",
+          "value": "CAD $0.00"
+        },
+        {
+          "label": "储值余额扣款",
+          "value": "CAD $293.60"
+        },
+        {
+          "label": "到店收款 · 服务差额",
+          "value": "CAD $32.80"
+        },
+        {
+          "label": "签署前账户余额（预计）",
+          "value": "CAD $293.60"
+        },
+        {
+          "label": "本单扣款后余额（预计）",
+          "value": "CAD $0.00"
+        }
+      ],
+      "before": "CAD $293.60",
+      "after": "CAD $0.00",
+      "signatureStrokeCount": 2,
+      "signaturePointCount": 18
+    }
+  ],
+  "timecard": {
+    "name": "操作核销测试卡",
+    "remaining": 8
+  },
+  "screenshot": "batch-signed.png",
+  "note": "All synthetic local test data. Actual WeChat push delivery and physical handset not covered."
+}

@@ -1,3 +1,4 @@
+const P=require('../../../utils/member-pricing')
 const rechargeCents=raw=>{const s=String(raw??'').trim();return !s?0:/^\d+(?:\.\d{1,2})?$/.test(s)?Math.round(Number(s)*100):NaN}
 /* 客户档案 →「账户调整」(店主 08-30c 裁定·入口总收敛:凡针对特定顾客、改其账户余额的动作
    —— 充值 / 赠送 / 退卡 / 冲销 —— 唯一 UI 入口就是本页,两端同此)。
@@ -49,7 +50,9 @@ Page({
   },
 
   async load() {
+    this.pendingDetails()
     try {
+      const pricing=await api.adminGet('/admin/member-pricing/members/'+encodeURIComponent(this.data.userId));this._pricingRetry={};this.setData({pricing,rateBps:pricing.rateBps,discountConfirmed:false})
       const [f, pack, lk, pkgs, techs] = await Promise.all([
         api.adminGet(`/admin/account-adjust/facts?userId=${encodeURIComponent(this.data.userId)}`),
         api.adminGet(`/admin/customers/${encodeURIComponent(this.data.userId)}/timecards`).catch(() => ({ timecards: [] })),
@@ -72,7 +75,7 @@ Page({
 
   pickTab(e) {
     const tab = e.currentTarget.dataset.k
-    this.setData({ tab })
+    this.setData({ tab,discountConfirmed:false })
     if (tab === 'reversal' && !this.data.month) this.loadTxns(this.curMonth())
   },
 
@@ -84,12 +87,19 @@ Page({
     if (!p) return
     /* 套餐快捷=自动填金额+赠送(可再改)—— 与网页原「按套餐」同口径 */
     this.setData({
+      rateBps:P.chosenRate(p,this.data.pricing),
       rvPkgId: id,
       rvAmount: (p.priceCents / 100).toFixed(2),
       rvBonus: p.bonusCents ? (p.bonusCents / 100).toFixed(2) : ''
     })
     this.rvText()
   },
+  onDiscount(e){this.setData({rateBps:e.detail.rateBps,discountConfirmed:false})},
+  onDiscountConfirm(e){this.setData({discountConfirmed:e.detail.value.length>0})},
+  async pricingMutation(path,body,retry=false){if(!this.data.pricing.active&&!retry)return api.adminPost(path,body);try{return await P.mutation('account:'+this.data.userId,path,body,(u,b)=>api.adminPost(u,b),retry)}finally{this.pendingDetails()}},
+  pendingDetails(){const p=P.pending('account:'+this.data.userId),b=p?.body||{};this.setData({pendingMutation:!!p,pendingAmount:Number.isSafeInteger(b.amountCents)?storeMoney(b.amountCents,2):'见原交易',pendingBonus:p?.path==='/admin/stored-value/recharge'?storeMoney(b.bonusCents||0,2):'',pendingRate:P.label(b.discountConfirmation?.rateBps??null)})},
+  async recoverMutation(){if(this.data.busy)return;this.setData({busy:true});try{await this.pricingMutation('',{},true);wx.showToast({title:'原操作已完成',icon:'success'});await this.load()}catch(e){wx.showToast({title:e.message,icon:'none'})}finally{this.setData({busy:false})}},
+  pricingPayload(body){if(!this.data.pricing.active)return {};const discountConfirmation={rateBps:this.data.rateBps,expectedRevision:this.data.pricing.revision,reason:this.data.reason.trim()||'本次充值确认'};return {operationId:P.retryKey(this._pricingRetry,{...body,discountConfirmation}),discountConfirmation}},
   onRvAmount(e) { this.setData({ rvAmount: e.detail.value, rvPkgId: '' }); this.rvTextSoon() },
   onRvBonus(e) { this.setData({ rvBonus: e.detail.value, rvPkgId: '' }); this.rvTextSoon() },
   onRvChannel(e) { this.setData({ rvChannelIdx: Number(e.detail.value) || 0 }) },
@@ -108,7 +118,8 @@ Page({
     if (this.data.busy) return
     this.setData({ busy: true })
     try {
-      await api.adminPost('/admin/stored-value/recharge', {
+      await this.pricingMutation('/admin/stored-value/recharge', {
+        ...this.pricingPayload({amountCents:cents,bonusCents:bonus,packageId:this.data.rvPkgId,payChannel:this.data.rvChannels[this.data.rvChannelIdx].id,technicianId:this.data.techIds[this.data.techIdx]}),
         userId: this.data.userId, amountCents: cents, bonusCents: bonus, packageId: this.data.rvPkgId || undefined,
         payChannel: this.data.rvChannels[this.data.rvChannelIdx].id,
         technicianId: this.data.techIds[this.data.techIdx] || undefined
@@ -160,8 +171,8 @@ Page({
       const svRows = (sv.txns || [])
         .filter((t) => t.userId === this.data.userId && t.type !== 'consume')
         .map((t) => ({
-          id: t.id, kind: 'sv', occurredOn: t.occurredOn,
-          note: `${SV_LABEL[t.type] || t.type}${t.note ? ' · ' + t.note : ''}`,
+          id: t.id, kind: 'sv', reversalFacts:t.reversalFacts, occurredOn: t.occurredOn,
+          note: `${t.typeText || SV_LABEL[t.type] || '储值调整'}${t.note ? ' · ' + t.note : ''}`,
           amountText: storeMoney(Math.abs(t.amountCents), 2),
           negative: t.amountCents < 0,
           isReversal: t.type === 'reversal',
@@ -177,10 +188,13 @@ Page({
   },
   reverseTxn(e) {
     const { id, note, kind } = e.currentTarget.dataset
+    if(!this.data.reason.trim()){wx.showToast({title:'请填写冲销原因',icon:'none'});return}
+    const row=this.data.txns.find(t=>t.id===id),facts=row?.reversalFacts,detail=kind==='sv'?'原本金：'+(facts?storeMoney(facts.principalCents,2):row.amountText)+'；关联赠金：'+(facts?.bonusLinkKnown?storeMoney(facts.bonusCents,2):'旧记录未留明确关联，请先核对原记录')+'；确认折扣：'+P.label(this.data.rateBps)+'；':''
+    if(kind==='sv'&&this.data.pricing.active&&!this.data.discountConfirmed){wx.showToast({title:'请先重新确认冲销后的个人折扣',icon:'none'});return}
     if (this.data.busy) return
     wx.showModal({
       title: '确认冲销?',
-      content: `将生成一条等额红字反向记录纠错,原始记录保留:${note || id}`,
+      content: `${detail}冲销原因：${this.data.reason.trim()}。将生成红字反向记录纠错，原始记录保留：${note || id}`,
       success: async (r) => {
         if (!r.confirm) return
         this.setData({ busy: true })
@@ -188,12 +202,12 @@ Page({
           const url = kind === 'sv'
             ? `/admin/stored-value/txns/${encodeURIComponent(id)}/reverse`
             : `/admin/finance/transactions/${encodeURIComponent(id)}/reverse`
-          await api.adminPost(url, {})
+          await this.pricingMutation(url, {reason:this.data.reason.trim(),...(kind==='sv'?this.pricingPayload({url}):{})})
           wx.showToast({ title: '已冲销(红字反向记录已生成)', icon: 'none' })
           this.setData({ busy: false })
           const f = await api.adminGet(`/admin/account-adjust/facts?userId=${encodeURIComponent(this.data.userId)}`).catch(() => null)
           if (f) this.setData({ facts: f.facts })   // 判据⑤:四参考数联动=真值重拉
-          this.loadTxns(this.data.month)
+          const pricing=await api.adminGet('/admin/member-pricing/members/'+encodeURIComponent(this.data.userId));this._pricingRetry={};this.setData({pricing,rateBps:pricing.rateBps,discountConfirmed:false});this.loadTxns(this.data.month)
         } catch (err) {
           this.setData({ busy: false })
           wx.showToast({ title: (err && err.message) || '冲销失败', icon: 'none' })
@@ -245,6 +259,7 @@ Page({
   },
 
   async submitRefund() {
+    if(this.data.pricing.active&&!this.data.discountConfirmed){wx.showToast({title:'请先重新确认退款后的个人折扣',icon:'none'});return}
     const cents = Math.round(Number(String(this.data.amount || '').replace(/[^\d.]/g, '')) * 100) || 0
     const reason = String(this.data.reason || '').trim()
     if (!reason) { wx.showToast({ title: '退款原因必填', icon: 'none' }); return }
@@ -252,7 +267,8 @@ Page({
     this.setData({ busy: true })
     try {
       this._rid = this._rid || `rf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-      const r = await api.adminPost('/admin/stored-value/refund', {
+      const r = await this.pricingMutation('/admin/stored-value/refund', {
+        ...this.pricingPayload({amountCents:cents,payChannel:this.data.channels[this.data.channelIdx].id,reason}),
         userId: this.data.userId, amountCents: cents,
         payChannel: this.data.channels[this.data.channelIdx].id, reason, requestId: this._rid
       })

@@ -834,7 +834,7 @@ const main = async () => {
 
       // 规则③ 次卡剥离:现库无次卡行可走行为断言,先机械断言两条编辑路由都装了拦截(S2 有数据后升级为行为断言)
       const ROOT31 = localFilePath(new URL('../../', import.meta.url))
-      const srv = readFileSync(join(ROOT31, 'apps/api/local-server.mjs'), 'utf8')
+      const srv = ['local-server.mjs','service-edit-routes.mjs'].map(f=>readFileSync(join(ROOT31, 'apps/api',f), 'utf8')).join('\n')
       check('㉛ 规则③ 次卡编辑拒绝装在两条路由(TIMECARD_MIGRATED×2)', (srv.match(/TIMECARD_MIGRATED/g) || []).length >= 2)
       check('㉛ 规则⑥ 迁移块在(幂等标记 s1_storefront)', srv.includes("s1_storefront"))
 
@@ -2351,7 +2351,7 @@ const main = async () => {
     // ===== ㊶ D50:原生弹窗链返工 —— 会员与营销页 0 prompt+全文件基线只减不增 =====
     {
       const ROOT41 = localFilePath(new URL('../../', import.meta.url))
-      const adminJs = readFileSync(join(ROOT41, 'apps/web/admin.js'), 'utf8')
+      const adminJs = ['admin.js','member-pricing-editors.js'].map(f=>readFileSync(join(ROOT41, 'apps/web',f), 'utf8')).join('\n')
       const memberSeg = adminJs.slice(adminJs.indexOf('function renderMemberTabs'), adminJs.indexOf('// 发券表单是每次重画的'))
       const memberHits = (memberSeg.match(/window\.(prompt|confirm|alert)\(/g) || []).length
       check('㊶ D50 会员与营销页原生弹窗=0(全部页内表单弹层)', memberHits === 0, `hits=${memberHits}`)
@@ -2392,7 +2392,7 @@ const main = async () => {
     // ===== ㊷ 首日四小件机制护栏(2026-08-20 批② 首日):D51 前端在场+五页签+勾选框同行 =====
     {
       const ROOT42 = localFilePath(new URL('../../', import.meta.url))
-      const adminJs = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
+      const adminJs = ['admin.js','member-pricing-editors.js'].map(f=>readFileSync(join(ROOT42, 'apps/web',f), 'utf8')).join('\n')
       const adminHtml = readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8')
       const css = readFileSync(join(ROOT42, 'apps/web/styles.css'), 'utf8')
       /* 断言跟着被测物走:筛选判定 2026-08-24 随订单状态域搬到 /web/order-state.js。
@@ -2406,11 +2406,11 @@ const main = async () => {
       check('㊷ v1.2 五页签:积分商城独立第④签(mall 页签+容器+切换逻辑)', adminHtml.includes('data-member-tab="mall"') && adminHtml.includes('id="mtabMall"') && adminJs.includes("tab === 'mall'"))
       check('㊷ 弹层勾选框与文字同一行(fm-check 横排,组件级)', readFileSync(join(ROOT42, 'apps/web/form-modal.js'), 'utf8').includes('class="fm-check"') && /label\.fm-check\{[^}]*flex-direction:row/.test(css))
       // ㊸ D52(店主 08-20):订单列表日期组倒序=最近优先,双端同口径(小程序 orders 本来就是倒序,网页对齐)
-      const miniOrders = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.js'), 'utf8')
+      const miniOrders = ['index.js', 'booking-view.js'].map(file => readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders', file), 'utf8')).join('\n')
       check('㊸ D52 网页全部预约日期组倒序(最近日期优先)', /Object\.keys\(grouped\)\.sort\(\(a, b\) => b\.localeCompare\(a\)\)/.test(adminJs) && !/Object\.keys\(grouped\)\.sort\(\)\.map/.test(adminJs))
       check('㊸ D52 商家小程序全部订单日期组倒序在场(双端同口径锚)', /Object\.keys\(map\)\.sort\(\(a, b\) => b\.localeCompare\(a\)\)/.test(miniOrders))
       // B1/B1-6:结算页次卡大类+现场购卡入口 wiring 在场(伪类/选卡/选套餐/三态互斥/sheet 字段)
-      const settleJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/index.js'), 'utf8')
+      const settleJs = ['index.js','preview-signing.js','member-pricing.js'].map(f=>readFileSync(join(ROOT42,'miniprogram/pages/merchant/settlement',f),'utf8')).join('\n')
       const settleWxml = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/index.wxml'), 'utf8')
       check('B1 结算页次卡大类 wiring 在场', settleJs.includes("'__timecard'") && settleJs.includes('gPickTimecard') && settleJs.includes('timecardId: g.timecardId || undefined'))
       check('B1-6 现场购卡入口 wiring 在场(选套餐+三态互斥+sheet 字段)', settleJs.includes('gPickPurchasePkg') && settleJs.includes('purchasePackageId: g.purchasePackageId || undefined') && settleWxml.includes('现场购卡(顾客没卡?当场买当场用)'))
@@ -2422,7 +2422,7 @@ const main = async () => {
       const csvJs = readFileSync(join(ROOT42, 'miniprogram/pages/stored-value/index.js'), 'utf8')
       const csvWxml = readFileSync(join(ROOT42, 'miniprogram/pages/stored-value/index.wxml'), 'utf8')
       const mfinWxml = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/finance/index.wxml'), 'utf8')
-      check('㋁ 顾客端回执卡+确认钮 wiring 在场', csvJs.includes('confirmRecharge') && csvJs.includes('pendingConfirm') && csvWxml.includes('确认到账') && csvWxml.includes('到账回执 · 待确认'))
+      check('㋁ 顾客端回执卡+确认钮 wiring 在场', csvJs.includes('confirmRecharge') && csvJs.includes('pendingConfirm') && csvWxml.includes('确认已核对') && csvWxml.includes('bindtap="confirmRecharge"') && csvWxml.includes('到账回执 · 待确认') && csvJs.includes('api.confirmStoredRecharge(id)'))
       // ㋂ D55/D56 wiring:联动勾选已删/0 额腿不勾/次卡组校验认内容/D22 护栏认核销行/价格体系整排隐藏
       check('㋂ D55 挂充值不再联动勾储值(强制 useBalance:true 已删)', !settleJs.includes('payMenu: { useBalance: true, recharge: true }') && settleJs.includes('useBalance: this.data.payMenu.useBalance, recharge: true'))
       check('㋂ D55 0 额支付腿不得勾选态(储值/定金 ✓ 与金额同条件)', settleWxml.includes("payMenu.useBalance && view.hasStored ? '✓'") && settleWxml.includes("depositApplied && view.hasDeposit ? '✓'"))
@@ -2497,8 +2497,8 @@ const main = async () => {
       check('㋊ D67② 签署单卡小字无 Emoji(✍ 双端扫尽:mini+web 顾客端)', !odWx2.includes('✍') && !custWeb.includes('✍'))
       // D68② 再升级:原件入口=悬浮查看器(openViewer / data-snap-open),跳页式 goSheetSnapshot 已销案
       check('㋊→㋌ 逐张卡+原件入口双端 wiring(mini sheets 循环+openViewer;web sheets 循环+lightbox)', odWx2.includes('order.pay.sheets') && odWx2.includes('openViewer') && custWeb.includes('order.payment.sheets') && custWeb.includes('data-snap-open'))
-      check('㋊ D67① 全组签完回订单台面(老板/员工共用,非退一层)', readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/index.js'), 'utf8').includes("relaunch('/pages/merchant/orders/index')"))
-      check('㋊ D59 提示句双端 wiring(mini rechargeNote+web rechargeUnassignedText)', readFileSync(join(ROOT42, 'miniprogram/utils/dailyclose.js'), 'utf8').includes('rechargeUnassignedText') && readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8').includes('p.rechargeNote') && readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8').includes('p.rechargeUnassignedText'))
+      check('㋊ D67① 全组签完回订单台面(老板/员工共用,非退一层)', readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/preview-signing.js'), 'utf8').includes("relaunch('/pages/merchant/orders/index')"))
+      check('㋊ D59 提示句双端 wiring(mini rechargeNote+web rechargeUnassignedText)', readFileSync(join(ROOT42, 'miniprogram/utils/dailyclose.js'), 'utf8').includes('rechargeUnassignedText') && readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8').includes('p.rechargeNote') && ['admin.js','member-pricing-editors.js'].map(f=>readFileSync(join(ROOT42, 'apps/web',f), 'utf8')).join('\n').includes('p.rechargeUnassignedText'))
       // ㋋ 五裁 wiring:详情逐张卡双端+台面售后蓝徽标+到店计数三读方同一出口
       const srvAll = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
       check('㋋ wiring 详情逐张卡双端(mini sheets 循环+组汇总;web 同构)', readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8').includes('order.pay.sheets') && readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8').includes('order.payment.sheets'))
@@ -2585,7 +2585,7 @@ const main = async () => {
       /* 待拍②(改「敬请期待」)→ 裁定A 返工后那张资产卡整块被分类总页取代:
          原句所在的卡不复存在,所以判据从"改成敬请期待"收敛为"旧句零残留 + 积分行进资产页" */
       check('㋐ 待拍②→勘误:网页「积分商城后续接入」旧句零残留(积分保持原有入口,不降级不塞总页)', !custWeb.includes('积分商城后续接入') && custWeb.includes('data-me-target="pointsMall"'))
-      check('㋐ C5 网页财务帮助文案不再教人点「耗卡」', !readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8').includes('点「耗卡」'))
+      check('㋐ C5 网页财务帮助文案不再教人点「耗卡」', !['admin.js','member-pricing-editors.js'].map(f=>readFileSync(join(ROOT42, 'apps/web',f), 'utf8')).join('\n').includes('点「耗卡」'))
       /* 补件① L2 话术层扫描:用户可见文案不写死支付方式(与币种红线同族,这次扫话术) */
       const payWordHits = []
       for (const f of ['miniprogram/pages/mall/index.wxml', 'miniprogram/pages/card-pack/index.wxml',
@@ -2737,7 +2737,7 @@ const main = async () => {
       // S9:商家端只读展示 + 双端同源 + 无等级店不出等级结构
       const memberWx98 = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/member/index.wxml'), 'utf8')
       const memberJs98 = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/member/index.js'), 'utf8')
-      const adminJs98 = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
+      const adminJs98 = ['admin.js','member-pricing-editors.js'].map(f=>readFileSync(join(ROOT42, 'apps/web',f), 'utf8')).join('\n')
       check('㋖ S9:双端同源(商家小程序与网页读同一个 /admin/membership/config 出口,不各查各的)',
         memberWx98.includes('msRows') && memberJs98.includes("adminGet('/admin/membership/config')")
         && adminJs98.includes('summaryRows: c.summaryRows') && adminJs98.includes('membershipSettings.editHint'))
@@ -2936,8 +2936,8 @@ const main = async () => {
         svWeb.includes('openSnapViewer') && svWeb.includes('data-snap-prev') && svWeb.includes('touchend')
         && readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8').includes('snapshot-viewer.js')
         && readFileSync(join(ROOT42, 'apps/web/index.html'), 'utf8').includes('snapshot-viewer.js')
-        && readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8').includes("/snapshots`")
-        && !/window\.open\(`\/settlements\//.test(readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')))
+        && ['admin.js','member-pricing-editors.js'].map(f=>readFileSync(join(ROOT42, 'apps/web',f), 'utf8')).join('\n').includes("/snapshots`")
+        && !/window\.open\(`\/settlements\//.test(['admin.js','member-pricing-editors.js'].map(f=>readFileSync(join(ROOT42, 'apps/web',f), 'utf8')).join('\n')))
       check('㋌→㋍ D68②补 两侧箭头键双端(小程序共用组件 prev/next+首末隐边;网页共用模块 arrowCss+条件渲染)',
         svComp.includes('catchtap="prev"') && svComp.includes('catchtap="next"')   // catchtap:点箭头不穿透到遮罩(否则一点就关)
         && svCompJs.includes('prev()') && svCompJs.includes('next()')
@@ -3271,7 +3271,7 @@ const main = async () => {
         catDb.close()
 
         // 商家端只剩一个分类输入口(编辑项目只选大类)
-        const admJs2 = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
+        const admJs2 = ['admin.js','member-pricing-editors.js'].map(f=>readFileSync(join(ROOT42, 'apps/web',f), 'utf8')).join('\n')
         const catInputs = (admJs2.match(/name="category"/g) || []).length
         check('㋦⑨ 商家编辑项目只选大类:自由文本分类输入框零残留',
           catInputs === 0 && admJs2.includes('name="categoryId"') && !/category: form\.get\('category'\)/.test(admJs2))
@@ -3280,7 +3280,7 @@ const main = async () => {
       /* ===== ㋥ 波次2 网页后台功能波(店主 2026-08-25:S4 / S5-a / S6 / S13)===== */
       {
         const admHtml = readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8')
-        const admJs = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
+        const admJs = ['admin.js','member-pricing-editors.js'].map(f=>readFileSync(join(ROOT42, 'apps/web',f), 'utf8')).join('\n')
         const platHtml = readFileSync(join(ROOT42, 'apps/web/platform.html'), 'utf8')
 
         // S4:四板块顺序 + 业绩目标并入技师业绩 + 重复的「本月趋势」卡已删(入口没跟着丢)

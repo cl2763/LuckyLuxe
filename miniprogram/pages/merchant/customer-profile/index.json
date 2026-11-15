@@ -1,1 +1,6 @@
-{ "navigationBarTitleText": "顾客画像", "usingComponents": {} }
+{
+  "navigationBarTitleText": "顾客画像",
+  "usingComponents": {
+    "member-pricing": "/components/member-pricing/index"
+  }
+}

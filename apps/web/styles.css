@@ -7356,7 +7356,8 @@ section.card > .section-row:first-child { margin-top: 0; }
 .dh-hero-card + .dh-ai{margin:12px 0;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:14px 18px}
 .dh-hero-card + .dh-ai .dh-ai-at{color:var(--sub);font-size:13px}
 .dc-alloc .dc-links{padding:6px 0 2px}
-.dc-alloc .dc-links a{font-size:12.5px;color:var(--bronze);cursor:pointer;text-decoration:underline}
+.dc-alloc .dc-links a,.dc-alloc .dc-links .dc-link-action{font-size:12.5px;color:var(--bronze);cursor:pointer;text-decoration:underline}
+.dc-link-action{background:transparent;border:0;border-radius:0;box-shadow:none;padding:4px 0;font:inherit}
 
 /* 切换门店弹层(v1.4 批,参照小程序 shop-select) */
 .store-switch-overlay{position:fixed;inset:0;background: rgba(30,24,18,.45);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px}
@@ -7690,7 +7691,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .tb-setup-wall { border: 1px dashed var(--brand); border-radius: 10px; padding: 28px; text-align: center; display: grid; gap: 10px; justify-items: center; }
 .tb-setup-wall p { color: var(--muted); font-size: 13px; max-width: 420px; }
 /* 死口清剿·三接回(2026-08-30):随单充值行内件 + 双技师数字排(镜像小程序 rvsheet/numlist) */
-.sw-rvlink { color: var(--brandd); font-weight: 600; cursor: pointer; }
+.sw-rvlink { color: var(--brandd); font:inherit; font-weight:600; cursor:pointer; background:transparent; border:0; padding:4px 0; box-shadow:none; }
 .sw-rvlink.dis { opacity: .5; }
 .sw-bindbar { display: block; font-size: 12px; color: var(--brandd); background: rgba(176,141,87,.1); border-radius: 6px; padding: 4px 8px; margin: 4px 0; }
 .sw-cpnsheet input#swRvAmt { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 15px; width: 100%; box-sizing: border-box; }

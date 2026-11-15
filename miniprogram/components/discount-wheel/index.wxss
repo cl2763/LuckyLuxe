@@ -1,0 +1,1 @@
+.discount-field{padding:24rpx;border:1rpx solid var(--line);border-radius:12rpx;background:var(--card)}.choice{padding:20rpx 0;color:var(--ink)}.hint{font-size:22rpx;color:var(--sub)}

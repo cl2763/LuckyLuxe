@@ -24,6 +24,7 @@ Page({
   }catch(e){if(generation===this._request)wx.showToast({title:this.data.en?'Please retry':'读取失败，请重试',icon:'none'})}
   finally{this._opening=false}
  },
+ openDocuments(){const id=this.data.detail?.memberDocumentGroupId;if(id)require('../../utils/nav').to('/pages/sign/index?memberGroup='+encodeURIComponent(id))},
  close(){this.setData({detail:null})},
  login(){require('../../utils/nav').tab('/pages/me/index')}
 })

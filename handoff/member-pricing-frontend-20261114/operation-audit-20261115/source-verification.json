@@ -1,0 +1,10 @@
+{
+  "previewSourceMatches": true,
+  "intentionalPreviewDifferences": [
+    "project.config.json: local DevTools SDK/project configuration",
+    "utils/api.js: isolated local sandbox instead of production API"
+  ],
+  "wxmlFilesCompiled": 95,
+  "productionRequests": false,
+  "published": false
+}

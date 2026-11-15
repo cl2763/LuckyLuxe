@@ -14,7 +14,7 @@ function renderServices() {
   const rows = owner.services.filter((svc) => (svc.itemKind || 'main') === 'main' && !svc.isTimecard && svc.isActive !== false)
   const tierNote = (svc) => {
     const it = pricingState.items.find((i) => i.id === svc.id)
-    if (!it) return ''
+    if (!it||it.displayReference) return ''
     const tiers = []
     if (it.listPriceCents) tiers.push(zh ? '普通' : 'list')
     if (it.sharePriceCents) tiers.push(zh ? '分享' : 'share')
@@ -32,7 +32,7 @@ function renderServices() {
         <div>
           <h3 style="display:inline">${escapeHtml(svc.nameZh)}</h3>
           <span class="status ${svc.storefront ? 'CONFIRMED' : 'CANCELLED'}" style="margin-left:8px">${svc.storefront ? (zh ? '已上架' : 'Listed') : (zh ? '已下架' : 'Unlisted')}</span>
-          <p class="subtle" style="margin:4px 0 0">${zh ? '关联项目' : 'Catalog item'}：${escapeHtml(svc.nameZh)}${zh ? '（目录同项）' : ''} · ${zh ? '展示价' : 'From'} ${money(svc.startingPriceCents ?? svc.priceCents)} ${zh ? '起' : ''}${tierNote(svc)} · ${zh ? '约' : '~'} ${svc.durationMin} ${zh ? '分钟' : 'min'}</p>
+          <p class="subtle" style="margin:4px 0 0">${zh ? '关联项目' : 'Catalog item'}：${escapeHtml(svc.nameZh)}${zh ? '（目录同项）' : ''} · ${zh ? '展示原价' : 'Display list price'} ${money(pricingState.items.find(i=>i.id===svc.id)?.displayReference?.prices.list?.priceCents ?? svc.startingPriceCents ?? svc.priceCents)}${tierNote(svc)} · ${zh ? '约' : '~'} ${svc.durationMin} ${zh ? '分钟' : 'min'}</p>
         </div>
       </div>
       <div style="display:flex;gap:10px;align-items:center">

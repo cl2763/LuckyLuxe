@@ -15,7 +15,8 @@ async function renderMessagesWeb() {
       try{
         await request('/my/messages/'+encodeURIComponent(item.id)+'/read',{method:'POST',body:JSON.stringify({})})
         if(id!==messagesRenderId||state.view!=='messages')return
-        els.screen.innerHTML=head+`<article class="card"><p>${escapeHtml(item.text)}</p><small>${escapeHtml(item.timeText||'')}</small></article><button type="button" data-me-target="messages">${en?'Back to messages':'返回消息列表'}</button></section>`
+        els.screen.innerHTML=head+`<article class="card"><p>${escapeHtml(item.text)}</p><small>${escapeHtml(item.timeText||'')}</small>${item.memberDocumentGroupId?`<p><button type="button" data-message-sign>${en?'View service documents':'核对本次全部服务单'}</button></p>`:''}</article><button type="button" data-me-target="messages">${en?'Back to messages':'返回消息列表'}</button></section>`
+        const signButton=els.screen.querySelector('[data-message-sign]');if(signButton)signButton.onclick=async()=>{signButton.disabled=true;try{const r=await request('/my/member-document-groups/'+encodeURIComponent(item.memberDocumentGroupId)+'/sign-link',{method:'POST',body:'{}'});location.href=(window.WebScope?.prefix||'')+r.url}catch(e){signButton.disabled=false;toast(e.message)}}
       }catch(e){if(id===messagesRenderId&&state.view==='messages'){button.disabled=false;button.textContent=en?'Failed. Retry':'读取失败，请重试'}}
     }))
   } catch(e) {

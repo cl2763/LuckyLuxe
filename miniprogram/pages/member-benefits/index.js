@@ -1,128 +1,114 @@
 const api = require('../../utils/api')
 const { curOf } = require('../../utils/storecurrency')
 const i18n = require('../../utils/i18n')
-
 const BENEFITS_ZH = {
-  silver: {
-    note: '基础会员等级，适合首次体验与偶尔到店顾客。',
-    benefits: ['会员档案与作品留档', '护理说明与售后提醒', '消费累计成长值', '预约需支付 ${curOf().p}${curOf().s}50 定金'],
-    gifts: ['新人护理说明', '基础会员档案']
-  },
-  gold: {
-    note: '累计消费达到 ${curOf().p}${curOf().s}500 后解锁，预约可免定金。',
-    benefits: ['预约免 ${curOf().p}${curOf().s}50 定金', '生日月礼遇', '优先查看护理建议', '推荐返利记录'],
-    gifts: ['生日月优惠券', 'VIP 护理提醒']
-  },
-  platinum: {
-    note: '累计消费达到 ${curOf().p}${curOf().s}1200 后解锁，适合高频到店顾客。',
-    benefits: ['预约免定金', '优先预约热门时段', '更完整作品档案', '季度护理建议'],
-    gifts: ['季度护理礼包', '优先指定技师']
-  },
-  diamond: {
-    note: '累计消费达到 ${curOf().p}${curOf().s}2500 后解锁，当前最高会员等级。',
-    benefits: ['预约免定金', '最高等级会员标识', '优先排期与服务提醒', '专属复购/护理回访'],
-    gifts: ['Diamond 专属礼遇', '节日福利提醒']
-  }
+silver: {
+note: '基础会员等级，适合首次体验与偶尔到店顾客。',
+benefits: ['会员档案与作品留档', '护理说明与售后提醒', '消费累计成长值', '预约需支付 ${curOf().p}${curOf().s}50 定金'],
+},
+gold: {
+note: '累计消费达到 ${curOf().p}${curOf().s}500 后解锁，预约可免定金。',
+benefits: ['预约免 ${curOf().p}${curOf().s}50 定金', '生日月礼遇', '优先查看护理建议', '推荐返利记录'],
+},
+platinum: {
+note: '累计消费达到 ${curOf().p}${curOf().s}1200 后解锁，适合高频到店顾客。',
+benefits: ['预约免定金', '优先预约热门时段', '更完整作品档案', '季度护理建议'],
+},
+diamond: {
+note: '累计消费达到 ${curOf().p}${curOf().s}2500 后解锁，当前最高会员等级。',
+benefits: ['预约免定金', '最高等级会员标识', '优先排期与服务提醒', '专属复购/护理回访'],
 }
-
+}
 const BENEFITS_EN = {
-  silver: {
-    note: 'Entry tier for first-time and occasional guests.',
-    benefits: ['Member profile and work archive', 'Aftercare and follow-up reminders', 'Growth value from completed services', '${curOf().p}${curOf().s}50 booking deposit required'],
-    gifts: ['New member aftercare guide', 'Basic member profile']
-  },
-  gold: {
-    note: 'Unlocked at ${curOf().p}${curOf().s}500 lifetime spend. Booking deposit is waived.',
-    benefits: ['${curOf().p}${curOf().s}50 deposit waived', 'Birthday-month perk', 'Priority aftercare suggestions', 'Referral reward tracking'],
-    gifts: ['Birthday-month coupon', 'VIP aftercare reminder']
-  },
-  platinum: {
-    note: 'Unlocked at ${curOf().p}${curOf().s}1200 lifetime spend for frequent guests.',
-    benefits: ['Deposit waived', 'Priority popular time slots', 'Richer work archive', 'Seasonal care suggestions'],
-    gifts: ['Seasonal care package', 'Priority artist request']
-  },
-  diamond: {
-    note: 'Unlocked at ${curOf().p}${curOf().s}2500 lifetime spend. Current highest tier.',
-    benefits: ['Deposit waived', 'Highest member badge', 'Priority scheduling and reminders', 'Dedicated repurchase follow-up'],
-    gifts: ['Diamond exclusive perk', 'Holiday perk reminder']
-  }
+silver: {
+note: 'Entry tier for first-time and occasional guests.',
+benefits: ['Member profile and work archive', 'Aftercare and follow-up reminders', 'Growth value from completed services', '${curOf().p}${curOf().s}50 booking deposit required'],
+},
+gold: {
+note: 'Unlocked at ${curOf().p}${curOf().s}500 lifetime spend. Booking deposit is waived.',
+benefits: ['${curOf().p}${curOf().s}50 deposit waived', 'Birthday-month perk', 'Priority aftercare suggestions', 'Referral reward tracking'],
+},
+platinum: {
+note: 'Unlocked at ${curOf().p}${curOf().s}1200 lifetime spend for frequent guests.',
+benefits: ['Deposit waived', 'Priority popular time slots', 'Richer work archive', 'Seasonal care suggestions'],
+},
+diamond: {
+note: 'Unlocked at ${curOf().p}${curOf().s}2500 lifetime spend. Current highest tier.',
+benefits: ['Deposit waived', 'Highest member badge', 'Priority scheduling and reminders', 'Dedicated repurchase follow-up'],
 }
-
+}
 Page({
-  data: {
-    lang: 'zh',
-    member: {},
-    currentLevelIndex: 0,
-    levels: [],
-    benefits: [],
-    gifts: []
-  },
-
-  onShow() {
-    const lang = i18n.getLang()
-    const member = Object.assign(api.miniMember({}), wx.getStorageSync('lucky_member') || {})
-    const levels = this.getLevels(lang, member)
-    const currentLevelIndex = Math.max(0, levels.findIndex((item) => item.key === member.memberTier))
-    const activeLevel = levels[currentLevelIndex] || levels[0]
-    wx.setNavigationBarTitle({ title: lang === 'en' ? 'Member Benefits' : '会员权益' })
-    this.setData({
-      lang,
-      member,
-      currentLevelIndex,
-      levels,
-      benefits: activeLevel.benefits,
-      gifts: activeLevel.gifts
-    })
-  },
-
-  onLevelChange(event) {
-    const currentLevelIndex = event.detail.current
-    const level = this.data.levels[currentLevelIndex]
-    if (!level) return
-    this.setData({
-      currentLevelIndex,
-      benefits: level.benefits,
-      gifts: level.gifts
-    })
-  },
-
-  getLevels(lang, member) {
-    const copy = lang === 'en' ? BENEFITS_EN : BENEFITS_ZH
-    // S9 小件:不分级店权益卡区留空(tiers 空数组 → wxml 区块不渲染)
-    // F3 单源:梯子只认后端下发;后端没给=不分级/未配置,留空(不再落本地梯子副本)
-    const tiers = member.tiersEnabled === false ? [] : (member.memberTiers || [])
-    // 店主追加:不分级店权益页承接「成为会员」——资格说明(按 any_recharge 口径)+商家自定义权益(写了才展示)
-    this.setData({
-      plainStore: member.tiersEnabled === false,
-      isMemberNow: member.memberLevel === '会员',
-      memberPerks: member.memberPerks || []
-    })
-    const currentIndex = Math.max(0, tiers.findIndex((item) => item.key === member.memberTier))
-    const spend = Number(member.growthValue || 0)
-    return tiers.map((tier, index) => {
-      const nextSpend = tier.nextSpend
-      const tierCopy = copy[tier.key] || copy.silver
-      const isCurrent = tier.key === member.memberTier
-      const progress = nextSpend
-        ? Math.min(100, Math.max(0, Math.round(((spend - tier.minSpend) / (nextSpend - tier.minSpend)) * 100)))
-        : 100
-      return {
-        key: tier.key,
-        name: tier.label,
-        threshold: nextSpend
-          ? `${curOf().p}${curOf().s}${tier.minSpend}+`
-          : (lang === 'en' ? 'Highest tier' : '最高等级'),
-        note: tierCopy.note,
-        progress: index < currentIndex ? 100 : (isCurrent ? progress : 0),
-        statusText: isCurrent
-          ? (lang === 'en' ? 'Current tier' : '当前等级')
-          : (spend >= tier.minSpend ? (lang === 'en' ? 'Unlocked' : '已解锁') : `${lang === 'en' ? 'Need' : '还差'} ${curOf().p}${curOf().s}${tier.minSpend - spend}`),
-        depositText: tier.depositWaived
-          ? (lang === 'en' ? 'Deposit waived' : '免预约定金')
-          : (lang === 'en' ? '${curOf().p}${curOf().s}50 deposit required' : '需支付 ${curOf().p}${curOf().s}50 定金'),
-        benefits: tierCopy.benefits.map((title) => ({ title })),
-        gifts: tierCopy.gifts.map((title, giftIndex) => ({ count: String(giftIndex + 1), title }))
-      }
-    })
-  }
+data: {
+lang: 'zh',
+member: {},
+currentLevelIndex: 0,
+levels: [],
+benefits: [],
+gifts: []
+},
+async onShow() {
+const lang = i18n.getLang()
+const fresh=await api.refreshMember();const member = fresh || Object.assign(api.miniMember({}), wx.getStorageSync('lucky_member') || {})
+const levels = this.getLevels(lang, member)
+const currentLevelIndex = Math.max(0, levels.findIndex((item) => item.key === member.memberTier))
+const activeLevel = levels[currentLevelIndex] || levels[0]
+wx.setNavigationBarTitle({ title: lang === 'en' ? 'Member Benefits' : '会员权益' })
+this.setData({
+lang,
+member,
+currentLevelIndex,
+levels,
+benefits: activeLevel?.benefits || [],
+gifts: []
+})
+},
+goCardPack(){require('../../utils/nav').to('/pages/card-pack/index')},
+onLevelChange(event) {
+const currentLevelIndex = event.detail.current
+const level = this.data.levels[currentLevelIndex]
+if (!level) return
+this.setData({
+currentLevelIndex,
+benefits: level.benefits,
+gifts: []
+})
+},
+getLevels(lang, member) {
+const copy = lang === 'en' ? BENEFITS_EN : BENEFITS_ZH
+// S9 小件:不分级店权益卡区留空(tiers 空数组 → wxml 区块不渲染)
+// F3 单源:梯子只认后端下发;后端没给=不分级/未配置,留空(不再落本地梯子副本)
+const tiers = member.tiersEnabled === false ? [] : (member.memberTiers || [])
+// 店主追加:不分级店权益页承接「成为会员」——资格说明(按 any_recharge 口径)+商家自定义权益(写了才展示)
+this.setData({
+plainStore: member.tiersEnabled === false,
+isMemberNow: member.memberLevel === '会员',
+memberPerks: member.memberPerks || []
+})
+const currentIndex = Math.max(0, tiers.findIndex((item) => item.key === member.memberTier))
+const spend = Number(member.growthValue || 0)
+return tiers.map((tier, index) => {
+const nextSpend = tier.nextSpend
+const tierCopy = copy[tier.key] || copy.silver
+const isCurrent = tier.key === member.memberTier
+const progress = nextSpend
+? Math.min(100, Math.max(0, Math.round(((spend - tier.minSpend) / (nextSpend - tier.minSpend)) * 100)))
+: 100
+return {
+key: tier.key,
+name: tier.label,
+threshold: nextSpend
+? `${curOf().p}${curOf().s}${tier.minSpend}+`
+: (lang === 'en' ? 'Highest tier' : '最高等级'),
+note: tierCopy.note,
+progress: index < currentIndex ? 100 : (isCurrent ? progress : 0),
+statusText: isCurrent
+? (lang === 'en' ? 'Current tier' : '当前等级')
+: (spend >= tier.minSpend ? (lang === 'en' ? 'Unlocked' : '已解锁') : `${lang === 'en' ? 'Need' : '还差'} ${curOf().p}${curOf().s}${tier.minSpend - spend}`),
+depositText: tier.depositWaived
+? (lang === 'en' ? 'Deposit waived' : '免预约定金')
+: (lang === 'en' ? '${curOf().p}${curOf().s}50 deposit required' : '需支付 ${curOf().p}${curOf().s}50 定金'),
+benefits: tierCopy.benefits.map((title) => ({ title })),
+}
+})
+}
 })

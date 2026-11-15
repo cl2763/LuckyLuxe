@@ -1,4 +1,6 @@
 <view class="page {{themeClass}}" wx:if="{{c}}">
+<member-pricing user-id="{{c.id}}"/>
+
   <view class="hero">
     <view class="av">{{c.av}}</view>
     <view class="hmain">

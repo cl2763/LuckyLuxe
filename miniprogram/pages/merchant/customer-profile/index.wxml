@@ -1,4 +1,6 @@
 <view class="pg {{themeClass}}">
+<member-pricing user-id="{{userId}}" read-only="{{true}}"/>
+
   <include src="../../../templates/media-privacy.wxml" />
   <view class="pcard">
     <view class="top">

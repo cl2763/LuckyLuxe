@@ -16,3 +16,4 @@ page{background:var(--paper)}
 .chip{display:inline-block;font-size:21rpx;color:var(--brandd);background:var(--wall);border:1rpx solid var(--line);border-radius:999rpx;padding:4rpx 16rpx;margin:0 10rpx 10rpx 0}
 .note{font-size:21rpx;color:var(--sub);line-height:1.6;margin-top:18rpx;text-align:center}
 .link{margin-top:14rpx;text-align:center;font-size:24rpx;color:var(--brandd);text-decoration:underline}
+.row button{flex:0 0 auto;width:auto;min-width:100rpx;min-height:72rpx;font-size:24rpx;line-height:1.4;padding:14rpx 20rpx;margin:0;border:1rpx solid var(--line);border-radius:999rpx}.row .sw{width:90rpx;margin:0}.page>button{width:100%;min-height:88rpx;line-height:1.4;padding:18rpx 24rpx;font-size:26rpx;border:1rpx solid var(--line);border-radius:999rpx}.category-head{font-size:28rpx;font-weight:600;margin:32rpx 0 16rpx;display:flex;justify-content:space-between}

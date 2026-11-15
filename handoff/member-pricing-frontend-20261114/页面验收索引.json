@@ -1,0 +1,592 @@
+[
+  {
+    "id": "U01",
+    "title": "上架服务 · 展示价格类型",
+    "webSource": "apps/web/admin.html #pricingPage; apps/web/service-catalog.js; admin.js renderPricingItemEditor",
+    "miniSource": "miniprogram/pages/merchant/services/index.wxml",
+    "webEvidence": "evidence/web-review/U01.png",
+    "miniEvidence": "evidence/U01-mini.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U02",
+    "title": "上架服务 · 修改展示价格",
+    "webSource": "apps/web/admin.html #pricingPage; apps/web/service-catalog.js; admin.js renderPricingItemEditor",
+    "miniSource": "miniprogram/pages/merchant/service-edit/index.wxml",
+    "webEvidence": "evidence/web-review/U02-prices.png",
+    "miniEvidence": "evidence/U02-mini.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U03",
+    "title": "结算单目录 · 结算价格类型",
+    "webSource": "apps/web/admin.html #pricingPage; apps/web/service-catalog.js; admin.js renderPricingItemEditor",
+    "miniSource": "miniprogram/pages/merchant/services/index.wxml",
+    "webEvidence": "evidence/web-review/U03.png",
+    "miniEvidence": "evidence/U03-mini.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U03B",
+    "title": "结算单目录 · 编辑价档",
+    "webSource": "apps/web/admin.html #pricingPage; apps/web/service-catalog.js; admin.js renderPricingItemEditor",
+    "miniSource": "miniprogram/pages/merchant/service-edit/index.wxml",
+    "webEvidence": "evidence/web-review/U03B-fixed.png",
+    "miniEvidence": "evidence/U03B-mini.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U04",
+    "title": "会员与营销 · 会员体系",
+    "webSource": "apps/web/admin.html #membershipPage; admin.js renderMembership/savePackage; membership-summary.js",
+    "miniSource": "miniprogram/pages/merchant/member/index.wxml",
+    "webEvidence": "evidence/web-review/U04-fixed.png",
+    "miniEvidence": "evidence/U04-system-mini.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U05",
+    "title": "充值套餐 · 编辑弹窗",
+    "webSource": "apps/web/admin.html #membershipPage; admin.js renderMembership/savePackage; membership-summary.js",
+    "miniSource": "miniprogram/pages/merchant/package-edit/index.wxml",
+    "webEvidence": "evidence/web-review/U05-wheel.png",
+    "miniEvidence": "evidence/customer-review/U05-mini-package-fixed.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U06",
+    "title": "商城 · 充值套餐",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/mall/index.wxml",
+    "webEvidence": "evidence/customer-review/U06-mall-fixed.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U07",
+    "title": "顾客服务列表 · 展示价格",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/services/index.wxml",
+    "webEvidence": "evidence/customer-review/U07-services.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U08",
+    "title": "确认预约 · 参考价与定金",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/checkout/index.wxml",
+    "webEvidence": "evidence/customer-review/U08-batch-preview-on.png",
+    "miniEvidence": "evidence/customer-review/U08-mini-toggle.png",
+    "sharedSignPage": false,
+    "note": "新增真实储值定金：足额/不足额、取消全退/部分退、改期留存、签署抵扣均走服务端；线下退款明确待门店办理。"
+  },
+  {
+    "id": "U09",
+    "title": "客户档案 · 个人折扣",
+    "webSource": "apps/web/admin.js renderCustomers/renderCustomerDetail; apps/web/account-adjust.js",
+    "miniSource": "miniprogram/pages/merchant/customer/index.wxml",
+    "webEvidence": "evidence/web-review/U09.png",
+    "miniEvidence": "evidence/U09-mini.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U10",
+    "title": "客户档案 · 老板调整折扣",
+    "webSource": "apps/web/admin.js renderCustomers/renderCustomerDetail; apps/web/account-adjust.js",
+    "miniSource": "miniprogram/pages/merchant/customer/index.wxml",
+    "webEvidence": "evidence/web-review/U10-U28-fixed.png",
+    "miniEvidence": "evidence/customer-review/U10-mini-edit-final.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U11",
+    "title": "账户调整 · 充值",
+    "webSource": "apps/web/admin.js renderCustomers/renderCustomerDetail; apps/web/account-adjust.js",
+    "miniSource": "miniprogram/pages/merchant/account-adjust/index.wxml",
+    "webEvidence": "evidence/U11-fixed-web.png",
+    "miniEvidence": "evidence/customer-review/U11-mini-compact.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U12",
+    "title": "充值回执 · 折扣留痕",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/stored-value/index.wxml",
+    "webEvidence": "evidence/web-review/U12-qa-receipt-final.png",
+    "miniEvidence": "evidence/customer-review/U12-mini-receipt-fixed.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U13",
+    "title": "结算开单 · 本人多个项目",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/root-review/U13-self-second-final.png",
+    "miniEvidence": "evidence/customer-review/U13-mini-add-project.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U14",
+    "title": "结算开单 · 本人与朋友共卡",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/root-review/U14-shared-card.png",
+    "miniEvidence": "evidence/customer-review/U14-mini-friend-heading.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U14B",
+    "title": "结算开单 · 为朋友新增第2个项目",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/root-review/U14B-friend-second-project.png",
+    "miniEvidence": "evidence/customer-review/U14B-mini-friend-second-project.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U15",
+    "title": "结算开单 · 随单充值弹层",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/U15-web.png",
+    "miniEvidence": "evidence/customer-review/U15-mini-recharge-draft.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U16",
+    "title": "结算开单 · 支付与批量生成",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/U16-web.png",
+    "miniEvidence": "evidence/customer-review/U16-mini-payment-preview.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U17",
+    "title": "结算开单 · 选券弹层",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/root-review/U17-coupon-final.png",
+    "miniEvidence": "evidence/customer-review/U17-mini-coupon-panel.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U18",
+    "title": "开单送签 · 整批一次推送",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/U18-web.png",
+    "miniEvidence": "evidence/customer-review/U18-mini-sign-pending-final.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U19",
+    "title": "服务确认单 · 第1张（含充值）",
+    "webSource": "apps/web/sign.html; miniprogram/pages/sign/index.wxml（web-view）",
+    "miniSource": "miniprogram/pages/sign/index.wxml",
+    "webEvidence": "evidence/U19-final-web.png",
+    "miniEvidence": null,
+    "sharedSignPage": true,
+    "note": "网页与小程序 web-view 共用新版签署页面；先签含充值的单。"
+  },
+  {
+    "id": "U20",
+    "title": "签署完成 · 本次2张均已完成",
+    "webSource": "apps/web/sign.html; miniprogram/pages/sign/index.wxml（web-view）",
+    "miniSource": "miniprogram/pages/sign/index.wxml",
+    "webEvidence": "evidence/U20-final-web.png",
+    "miniEvidence": null,
+    "sharedSignPage": true,
+    "note": "共用签署页面；每人独立签署留档，全部完成后不重复扣款。"
+  },
+  {
+    "id": "U21",
+    "title": "会员权益 · 保留等级卡",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/member-benefits/index.wxml",
+    "webEvidence": "evidence/customer-review/U21-benefits-fixed.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U22",
+    "title": "订单管理 · 本次单据待签",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/orders/index.wxml",
+    "webEvidence": "evidence/web-review/U22-qa-pending-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U23",
+    "title": "账户调整 · 退储值",
+    "webSource": "apps/web/admin.js renderCustomers/renderCustomerDetail; apps/web/account-adjust.js",
+    "miniSource": "miniprogram/pages/merchant/account-adjust/index.wxml",
+    "webEvidence": "evidence/web-review/U23.png",
+    "miniEvidence": "evidence/customer-review/U23-mini-refund.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U24",
+    "title": "原系统资料 · 旧权益核对",
+    "webSource": "apps/web/admin.js renderCustomers/renderCustomerDetail; apps/web/account-adjust.js",
+    "miniSource": "miniprogram/pages/merchant/migration-archive/index.wxml",
+    "webEvidence": "evidence/web-review/U24-legacy-content-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "保留原系统资料与未激活旧余额；不按历史充值推算个人折扣。"
+  },
+  {
+    "id": "U25",
+    "title": "日结 · 按人单据与项目归属",
+    "webSource": "apps/web/admin.html 财务日结; miniprogram/pages/merchant/daily-close/index.wxml",
+    "miniSource": "miniprogram/pages/merchant/daily-close/index.wxml",
+    "webEvidence": "evidence/web-review/U25-qa-daily-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U26",
+    "title": "会员档案 · 折扣记录",
+    "webSource": "apps/web/admin.js renderCustomers/renderCustomerDetail; apps/web/account-adjust.js",
+    "miniSource": "miniprogram/pages/merchant/customer/index.wxml",
+    "webEvidence": "evidence/web-review/U26-history-modal-final.png",
+    "miniEvidence": "evidence/customer-review/U26-mini-history-modal-final.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "U27",
+    "title": "客服报价 · 公开价格口径",
+    "webSource": "apps/web/admin.html 客服工作台; miniprogram/pages/merchant/quote-calc/index.wxml",
+    "miniSource": "miniprogram/pages/merchant/quote-calc/index.wxml",
+    "webEvidence": "evidence/web-review/U27-public-price-content-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "保留实际客服工作台；只展示公开报价，不把会员本人结算价冒作公开报价。"
+  },
+  {
+    "id": "U28",
+    "title": "统一折扣滚轮 · 弹层",
+    "webSource": "apps/web/admin.js renderCustomers/renderCustomerDetail; apps/web/account-adjust.js",
+    "miniSource": "miniprogram/pages/merchant/account-adjust/index.wxml",
+    "webEvidence": "evidence/customer-review/U28-web-no-unset.png",
+    "miniEvidence": "evidence/customer-review/U28-mini-native-picker.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S01",
+    "title": "首页 · 保持现状，不纳入改版",
+    "webSource": "apps/web/customer.js renderHome；customer-recommend.js；home-image-preview.js（直接复用渲染输出）",
+    "miniSource": "miniprogram/pages/home/index.wxml",
+    "webEvidence": "evidence/customer-review/S01-home.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "主页结构和非价格内容保留；不是重新设计首页。"
+  },
+  {
+    "id": "S02",
+    "title": "服务详情 · 价格说明",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/service-detail/index.wxml",
+    "webEvidence": "evidence/customer-review/S02-detail-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S03",
+    "title": "客户档案列表 · 折扣摘要",
+    "webSource": "apps/web/admin.js renderCustomers/renderCustomerDetail; apps/web/account-adjust.js",
+    "miniSource": "miniprogram/pages/merchant/customers/index.wxml",
+    "webEvidence": "evidence/S03-fixed-web.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S04",
+    "title": "购物车 · 服务参考价",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/cart/index.wxml",
+    "webEvidence": "evidence/customer-review/S04-cart-fixed.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S05",
+    "title": "储值流水 · 折扣变化",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/stored-value/index.wxml",
+    "webEvidence": "evidence/customer-review/S05-stored-value.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S06",
+    "title": "员工 · 只读客人档案",
+    "webSource": "apps/web/my-customers.js; miniprogram/pages/merchant/customer-profile/index.wxml; merchant/my-performance/index.wxml",
+    "miniSource": "miniprogram/pages/merchant/customer-profile/index.wxml",
+    "webEvidence": "evidence/web-review/S06-qa-staff-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S07",
+    "title": "会员权益 · 零余额失去资格",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/member-benefits/index.wxml",
+    "webEvidence": "evidence/web-review/S07-zero-drop-final.png",
+    "miniEvidence": "evidence/customer-review/S07-mini-zero-drop.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S08",
+    "title": "会员权益 · 零余额仍保留会员",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/member-benefits/index.wxml",
+    "webEvidence": "evidence/web-review/S08-zero-keep-final.png",
+    "miniEvidence": "evidence/customer-review/S08-mini-zero-keep-fixed.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S09",
+    "title": "结算开单 · 已选择无折扣",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/root-review/S09-no-discount.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S09B",
+    "title": "结算开单 · 尚未设置个人折扣",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/root-review/S09B-default.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S10",
+    "title": "签署前有变动 · 请店员重新核对",
+    "webSource": "apps/web/sign.html; miniprogram/pages/sign/index.wxml（web-view）",
+    "miniSource": "miniprogram/pages/sign/index.wxml",
+    "webEvidence": "evidence/S10-final-web.png",
+    "miniEvidence": null,
+    "sharedSignPage": true,
+    "note": "共用签署页面；只在价格/权益变化时重新核对，不按待签时长作废。"
+  },
+  {
+    "id": "S11",
+    "title": "开单加载失败 · 原页重试",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/root-review/S11-load-failure-fixed.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S11B",
+    "title": "充值提交结果未知 · 原弹窗核对",
+    "webSource": "apps/web/admin.js renderCustomers/renderCustomerDetail; apps/web/account-adjust.js",
+    "miniSource": "miniprogram/pages/merchant/account-adjust/index.wxml",
+    "webEvidence": "evidence/root-review/S11B-unknown-recharge-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "按钮明确为查询／重试原操作，使用原operationId和冻结请求；不是单独只读GET。"
+  },
+  {
+    "id": "S12",
+    "title": "日结 · 服务金额更正",
+    "webSource": "apps/web/admin.html 财务日结; miniprogram/pages/merchant/daily-close/index.wxml",
+    "miniSource": "miniprogram/pages/merchant/daily-close/index.wxml",
+    "webEvidence": "evidence/web-review/S12-qa-correction-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S13",
+    "title": "历史凭证 · 保留原记录",
+    "webSource": "apps/web/sign.html; miniprogram/pages/sign/index.wxml（web-view）",
+    "miniSource": "miniprogram/pages/sign/index.wxml",
+    "webEvidence": "evidence/web-review/S13-legacy-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "旧图片原件保持；添加旧单未记录个人折扣说明，不重算原金额。"
+  },
+  {
+    "id": "S14",
+    "title": "会员权益 · 英文状态",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/member-benefits/index.wxml",
+    "webEvidence": "evidence/customer-review/S14-benefits-en-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S15",
+    "title": "结算目录 · 原价为空／需报价",
+    "webSource": "apps/web/admin.html #pricingPage; apps/web/service-catalog.js; admin.js renderPricingItemEditor",
+    "miniSource": "miniprogram/pages/merchant/service-edit/index.wxml",
+    "webEvidence": "evidence/web-review/S15-editor-title-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S16",
+    "title": "会员与营销 · 无充值套餐",
+    "webSource": "apps/web/admin.html #membershipPage; admin.js renderMembership/savePackage; membership-summary.js",
+    "miniSource": "miniprogram/pages/merchant/member/index.wxml",
+    "webEvidence": "evidence/web-review/S16-empty-recharge-final.png",
+    "miniEvidence": "evidence/customer-review/S16-mini-empty-packages.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S17",
+    "title": "订单管理 · 已签1张，剩余1张",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/orders/index.wxml",
+    "webEvidence": "evidence/web-review/S17-qa-partial-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S18",
+    "title": "非会员门店 · 结算目录设置",
+    "webSource": "apps/web/admin.html #pricingPage; apps/web/service-catalog.js; admin.js renderPricingItemEditor",
+    "miniSource": "miniprogram/pages/merchant/services/index.wxml",
+    "webEvidence": "evidence/web-review/S18-qa-nonmember-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S18B",
+    "title": "结算开单 · 顾客会员资格失效",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/web-review/S18B-ineligible-composer-final.png",
+    "miniEvidence": "evidence/customer-review/S18B-mini-ineligible-composer.png",
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S19",
+    "title": "平台商家配置 · 会员制度",
+    "webSource": "apps/web/platform.html 商家配置 → 会员制度",
+    "miniSource": "miniprogram/pages/merchant/member/index.wxml",
+    "webEvidence": "evidence/web-review/S19-qa-platform-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "平台网页可配置；小程序沿用商家只读说明，不新增平台管理入口。"
+  },
+  {
+    "id": "S20",
+    "title": "账户调整 · 充值后优惠减少",
+    "webSource": "apps/web/admin.js renderCustomers/renderCustomerDetail; apps/web/account-adjust.js",
+    "miniSource": "miniprogram/pages/merchant/account-adjust/index.wxml",
+    "webEvidence": "evidence/web-review/S20.png",
+    "miniEvidence": "evidence/customer-review/S20-mini-base.png",
+    "sharedSignPage": false,
+    "note": "优惠减少须明确再次确认；不将旧折扣静默覆盖。"
+  },
+  {
+    "id": "S21",
+    "title": "账户调整 · 冲销充值",
+    "webSource": "apps/web/admin.js renderCustomers/renderCustomerDetail; apps/web/account-adjust.js",
+    "miniSource": "miniprogram/pages/merchant/account-adjust/index.wxml",
+    "webEvidence": "evidence/web-review/S21-confirm-final.png",
+    "miniEvidence": "evidence/customer-review/S21-mini-native-confirm.png",
+    "sharedSignPage": false,
+    "note": "充值冲销必须重新确认个人折扣，旧未知赠金不猜测。"
+  },
+  {
+    "id": "S22",
+    "title": "我的业绩 · 服务与充值分列",
+    "webSource": "apps/web/my-customers.js; miniprogram/pages/merchant/customer-profile/index.wxml; merchant/my-performance/index.wxml",
+    "miniSource": "miniprogram/pages/merchant/my-performance/index.wxml",
+    "webEvidence": "evidence/web-review/S22-qa-performance-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S23",
+    "title": "服务确认单 · 第2张（朋友项目）",
+    "webSource": "apps/web/sign.html; miniprogram/pages/sign/index.wxml（web-view）",
+    "miniSource": "miniprogram/pages/sign/index.wxml",
+    "webEvidence": "evidence/S23-final-web.png",
+    "miniEvidence": null,
+    "sharedSignPage": true,
+    "note": "与U19同一入口连续签署；本张只列朋友项目。"
+  },
+  {
+    "id": "S24",
+    "title": "顾客订单详情 · 一次进入全部服务单",
+    "webSource": "apps/web/index.html; apps/web/customer.js; apps/web/customer-wallet.js",
+    "miniSource": "miniprogram/pages/order-detail/index.wxml",
+    "webEvidence": "evidence/customer-review/S24-order-detail.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S25",
+    "title": "上架服务 · 启用会员与分享展示价",
+    "webSource": "apps/web/admin.html #pricingPage; apps/web/service-catalog.js; admin.js renderPricingItemEditor",
+    "miniSource": "miniprogram/pages/merchant/service-edit/index.wxml",
+    "webEvidence": "evidence/root-review/S25-display-member-share.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "已对照确认图接入既有页面；图中姓名金额为示意，产品显示真实服务端数据。"
+  },
+  {
+    "id": "S26",
+    "title": "结算开单 · 次卡与收费项目归同一人",
+    "webSource": "apps/web/admin.html #bookingsPage; apps/web/settlement-web.js",
+    "miniSource": "miniprogram/pages/merchant/settlement/index.wxml",
+    "webEvidence": "evidence/root-review/S26-timecard-payment-final.png",
+    "miniEvidence": null,
+    "sharedSignPage": false,
+    "note": "同人次卡核销和收费服务归一张单，次卡不重复折扣。"
+  }
+]

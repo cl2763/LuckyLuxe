@@ -1,0 +1,27 @@
+[
+  {
+    "round": 1,
+    "retried": true,
+    "ready": true
+  },
+  {
+    "round": 2,
+    "retried": true,
+    "ready": true
+  },
+  {
+    "round": 3,
+    "retried": true,
+    "ready": true
+  },
+  {
+    "round": 4,
+    "retried": true,
+    "ready": true
+  },
+  {
+    "round": 5,
+    "retried": true,
+    "ready": true
+  }
+]

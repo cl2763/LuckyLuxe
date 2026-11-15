@@ -358,7 +358,7 @@ async function request(path, options = {}) {
   if (!response.ok) {
     const authExpired = isAuthExpiredMessage(data.error?.message)
     if (authExpired) clearCustomerAuth()
-    const error = new Error(data.error?.message || 'Request failed')
+    const error = new Error(data.error?.message || 'Request failed');error.status=response.status;error.code=data.error?.code
     if (authExpired) error.code = 'AUTH_EXPIRED'
     throw error
   }
@@ -428,12 +428,17 @@ function requireLogin(pending = {}) {
   renderAuth()
 }
 
-function setView(view) {
+async function setView(view) {
+  const sequence=state.viewRequest=(state.viewRequest||0)+1
   if (requiresAuth(view) && !state.user) {
     requireLogin({ view })
     return
   }
+  if (state.user && ['me','memberBenefits','checkout','cart','storedValue'].includes(view)) { try { await window.MemberPricingCustomer.refreshUser(state,request,user=>writeTenantJson('lucky-web-user',user)) } catch(e){toast(e.message)} }
+  if(sequence!==state.viewRequest)return
+  if(requiresAuth(view)&&!state.user){requireLogin({view});return}
   state.view = view
+  if(view==='checkout'){state.tenant=TENANT_ID;state.storeId=storeId;window.BookingCheckout.preview(state,request,render)}
   if (['me', 'orders'].includes(view) && state.user) { state.ordersLoading = true; state.ordersError = '' }
   els.tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.view === view))
   render()
@@ -1049,7 +1054,6 @@ function renderDetail() {
         <div class="price-boundary-box">
           <strong>${t('priceBoundary')}</strong>
           <p>${escapeHtml(priceExplanation(service))}</p>
-          <small>${escapeHtml(quoteHint(service))}</small>
         </div>
         <div class="detail-tags">
           <span>${service.durationMin}${t('minutes')}</span>
@@ -1089,6 +1093,7 @@ async function prepareBooking(mode, options = {}) {
     requireLogin({ view: 'booking', serviceId: state.service?.id, bookingMode: mode })
     return
   }
+  state.editCartId = null
   state.bookingMode = mode
   state.selectedAddOns = new Set()
   state.referenceImages = []
@@ -1231,24 +1236,23 @@ function buildCartItem() {
 function saveCurrentToCart(goCheckout = false) {
   if (!state.selectedSlot) return toast(t('noSlots'))
   const item = buildCartItem()
-  state.cart.push(item)
+  if(state.editCartId){const i=state.cart.findIndex(x=>x.id===state.editCartId);item.id=state.editCartId;if(i>=0)state.cart.splice(i,1,item);else state.cart.push(item);state.editCartId=null}else state.cart.push(item)
   writeJson(`lucky-web-cart:${TENANT_ID}`, state.cart)
   toast(t('created'))
-  state.view = goCheckout ? 'checkout' : 'cart'
-  render()
+  setView(goCheckout ? 'checkout' : 'cart')
 }
 
 function renderCart() {
   const total = state.cart.filter((item) => item.selected).reduce((sum, item) => sum + payableDepositFor(item), 0)
   els.screen.innerHTML = `
-    <section class="cart-page-web">
+    <section class="cart-page-web"><p class="subtle">${state.lang==='zh'?'个人会员折扣用于服务结算。购物车显示预约参考价，当前确认的是预约定金。':'Service prices are for reference. Personal discounts apply at service settlement; this checkout confirms the booking deposit.'}</p>
       <div class="section-row"><h1>${t('cart')}</h1><span class="subtle">${t('pendingCheckout')}</span></div>
       ${state.cart.length ? state.cart.map((item) => renderCartItem(item)).join('') : `
         <div class="empty-state tall"><strong>${t('emptyCart')}</strong><span>${t('emptyCartHint')}</span><button class="primary" data-view-target="services" type="button">${t('chooseService')}</button></div>
       `}
       ${state.cart.length ? `
         <div class="summary-bar">
-          <div><span>${t('selectedDeposit')}</span><strong>${money(total)}</strong></div>
+          <button class="ghost" data-select-all-cart type="button">${state.cart.every(x=>x.selected)?'✓ ':''}${state.lang==='zh'?'全选':'Select all'}</button><div><span>${t('selectedDeposit')}</span><strong>${money(total)}</strong></div>
           <button class="primary" data-view-target="checkout" type="button">${t('checkout')}</button>
         </div>` : ''}
     </section>
@@ -1261,27 +1265,23 @@ function renderCartItem(item) {
       <button class="check ${item.selected ? 'checked' : ''}" data-toggle-cart="${item.id}" type="button">${item.selected ? '✓' : ''}</button>
       <div class="cart-copy">
         <div class="cart-title-row"><h2>${item.service.name}</h2><span class="status">${t('pendingCheckout')}</span></div>
-        <p>${item.date} · ${item.time} · ${partyName(item.technician)}</p>
-        <p><strong>${t('deposit')} ${money(payableDepositFor(item))}</strong> · ${t('servicePrice')} ${money(item.servicePriceCents)}</p>
+        <p>${item.date} · ${item.time} · ${partyName(item.technician)} · ${item.service.durationMin}${t('minutes')}</p>
+        <p><strong>${t('deposit')} ${money(payableDepositFor(item))}</strong> · ${state.lang==='zh'?'服务参考价':'Service reference price'} ${money(item.servicePriceCents)}</p>
         ${userWaivesDeposit() ? `<p class="subtle">${state.lang === 'zh' ? '会员等级已减免预约定金' : 'Member tier deposit waiver applied'}</p>` : ''}
         ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => image ? `<img src="${image}" alt="${t('reference')} ${index + 1}">` : '').join('')}</div>` : ''}
       </div>
       ${window.ImgPlaceholder.tag(item.service.imageUrl, { imageView: item.service.imageView, alt: item.service.name, zh: state.lang !== 'en' })}
-      <button class="ghost" data-remove-cart="${item.id}" type="button">Remove</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" data-edit-cart="${item.id}" type="button">${state.lang==='zh'?'编辑':'Edit'}</button><button class="ghost" data-remove-cart="${item.id}" type="button">${state.lang==='zh'?'移除':'Remove'}</button></div>
     </article>
   `
 }
 
 function renderCheckout() {
   const selected = state.cart.filter((item) => item.selected)
-  const requiredDeposit = selected.reduce((sum, item) => sum + item.depositCents, 0)
-  const deposit = selected.reduce((sum, item) => sum + payableDepositFor(item), 0)
-  const waivedDeposit = Math.max(0, requiredDeposit - deposit)
-  const coupon = 0
-  const payable = deposit
+  const payableText=state.checkoutPreview?.display?.offlineText||'—'
   els.screen.innerHTML = `
-    <section class="checkout-page-web">
-      <div class="section-row"><h1>${t('confirmOrder')}</h1><span class="subtle">${t('mockPay')}</span></div>
+    <section class="checkout-page-web"><p class="subtle">${state.lang==='zh'?'服务参考价格用于预约；个人折扣及符合条件的优惠将在服务确认单中核对。':'Reference prices are used for booking. Your personal discount and eligible offers will be confirmed on the service document.'}</p>
+      <div class="section-row"><h1>${t('confirmOrder')}</h1></div>
       ${selected.length ? selected.map((item) => `
         <article class="checkout-item-web card">
           <div class="checkout-copy-web">
@@ -1291,24 +1291,16 @@ function renderCheckout() {
               <span>${item.time}</span>
               <span>${partyName(item.technician)}</span>
             </div>
-            <p><strong>${t('deposit')} ${money(payableDepositFor(item))}</strong><span>${t('servicePrice')} ${money(item.servicePriceCents)}</span></p>
+            <p><strong>${t('deposit')} ${money(payableDepositFor(item))}</strong><span>${state.lang==='zh'?'服务参考价':'Service reference price'} ${money(item.servicePriceCents)}</span></p>
             ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => image ? `<img src="${image}" alt="${t('reference')} ${index + 1}">` : '').join('')}</div>` : ''}
           </div>
         </article>
       `).join('') : `<div class="empty-state">${t('emptyCart')}</div>`}
-      <section class="section">
-        <div class="section-row"><h2>${t('discount')}</h2></div>
-        <div class="cost-card card">
-          <p><span>${t('appointment')}</span><strong>${money(deposit)}</strong></p>
-          ${waivedDeposit ? `<p><span>${state.lang === 'zh' ? '会员定金减免' : 'Member deposit waiver'}</span><strong>-${money(waivedDeposit)}</strong></p>` : ''}
-          <p><span>${t('coupon')}</span><strong>-${money(coupon)}</strong></p>
-          <p><span>${t('balance')}</span><strong>${moneyY(300)}</strong></p>
-        </div>
-      </section>
+      ${window.BookingCheckout.panel(state,escapeHtml)}
       <section class="section">
         <div class="deposit-policy-card card">
           <h2>${t('depositPolicyTitle')}</h2>
-          <p>${t('depositPolicyText')}</p>
+          <p>${escapeHtml(state.checkoutPolicy?.text?.[state.lang]||'请向门店核对预约定金与取消规则。')}</p>
         </div>
       </section>
       <section class="section">
@@ -1316,8 +1308,8 @@ function renderCheckout() {
         <div class="store-box card"><strong>${currentStore().name || ''}</strong><span>${[storeContactLine(currentStore()), storeHoursSummary(currentStore())].filter(Boolean).join(' · ')}</span></div>
       </section>
       <div class="summary-bar">
-        <div><span>${t('requiredDeposit')}</span><strong>${money(payable)}</strong></div>
-        <button class="primary" data-submit-payment type="button" ${selected.length ? '' : 'disabled'}>${t('payAction')}</button>
+        <div><span>${t('requiredDeposit')}</span><strong>${escapeHtml(payableText)}</strong></div>
+        <button class="primary" data-submit-payment type="button" ${selected.length&&state.checkoutPreview&&!window.BookingCheckout.pending(state)?'':'disabled'}>确认预约</button>
       </div>
     </section>
   `
@@ -1329,34 +1321,16 @@ async function submitPayment() {
     return
   }
   const selected = state.cart.filter((item) => item.selected)
-  const completed = []
-  for (const item of selected) {
-    const bookingData = await request('/bookings', {
-      method: 'POST',
-      body: JSON.stringify({
-        userId: state.user.id,
-        storeId: item.storeId || storeId,
-        serviceId: item.service.id,
-        technicianId: partyId(item.technician),
-        date: item.date,
-        time: item.time,
-        addOns: item.addOns,
-        referenceImages: item.referenceImages || [],
-        sourceChannel: item.sourceChannel || 'web',
-        notes: item.remark || '',
-        bookingDraftId: item.bookingDraftId || item.draftId || null
-      })
-    })
-    completed.push(bookingData.booking)
-  }
-  const selectedIds = new Set(selected.map((item) => item.id))
+  state.tenant=TENANT_ID;state.storeId=storeId
+  const pending=window.BookingCheckout.pending(state),out=await window.BookingCheckout.submit(state,request,!!pending);if(!out)return;const completed=out.bookings;state.checkoutReceipt=out.preview
+  const selectedIds = new Set((pending?.body.items||selected).map((item) => item.clientItemId||item.id))
   state.cart = state.cart.filter((item) => !selectedIds.has(item.id))
   state.orders = [...completed, ...state.orders]
   writeJson(`lucky-web-cart:${TENANT_ID}`, state.cart)
   writeTenantJson('lucky-web-orders', state.orders)
   /* 🔴 A1-M4(店主 08-25):下完单要有明确的"成了"的屏 —— 基准是小程序 booking-done(已拍)。
      原来这里 toast 一下就甩回「我的」页,顾客得自己去列表里找刚下的单,没有落点。 */
-  toast(t('paidDone'))
+  toast(state.lang==='zh'?'预约已提交，请核对定金收据':'Booking submitted. Please review your deposit receipt.')
   state.lastBookedIds = completed.map((b) => b.id)
   state.view = 'bookingDone'
   render()
@@ -1622,8 +1596,8 @@ function renderOrdersWeb() {
       ${(state.pendingSign || []).length ? `
       <div class="section-row compact"><h2 style="color:#8a3a33;font-size:15px">${state.lang === 'zh' ? `待你签字确认 · ${state.pendingSign.length} 单` : `Awaiting your signature · ${state.pendingSign.length}`}</h2></div>
       ${state.pendingSign.map((p) => `
-        <a class="order-card-web card" style="display:flex;justify-content:space-between;align-items:center;text-decoration:none" href="${window.WebScope?.prefix || ''}/sign/${encodeURIComponent(p.code)}" target="_blank" rel="noreferrer">
-          <span><strong>${escapeHtml(state.lang === 'zh' ? '服务确认单 ' : 'Sheet ')}${escapeHtml(p.code)}</strong><br><small class="subtle">${escapeHtml(p.at)} · ${state.lang === 'zh' ? '到店支付' : 'Pay in store'} ${escapeHtml(p.cashDueText)}</small></span>
+        <a class="order-card-web card" style="display:flex;justify-content:space-between;align-items:center;text-decoration:none" ${p.memberDocumentGroupId?`data-member-group="${escapeHtml(p.memberDocumentGroupId)}" href="#"`:`href="${window.WebScope?.prefix||''}/sign/${encodeURIComponent(p.code)}"`} target="_blank" rel="noreferrer">
+          <span><strong>${escapeHtml(p.titleText)}</strong><br><small class="subtle">${escapeHtml(p.at)} · ${state.lang === 'zh' ? '到店支付' : 'Pay in store'} ${escapeHtml(p.cashDueText)}</small></span>
           <span class="primary button-link" style="padding:8px 16px;border-radius:10px">${state.lang === 'zh' ? '去签字 ›' : 'Sign ›'}</span>
         </a>`).join('')}` : ''}
       <div class="order-list-web">
@@ -1722,8 +1696,9 @@ function renderBookingDoneWeb() {
           <p><span>${escapeHtml(c.service)}</span><strong>${escapeHtml(o.service?.name || '—')}</strong></p>
           <p><span>${escapeHtml(c.arrival)}</span><strong>${escapeHtml(`${o.appointmentDate || ''} ${o.appointmentTime || ''}`.trim() || '—')}</strong></p>
           <p><span>${escapeHtml(c.address)}</span><strong>${escapeHtml(window.LLPlaceholder.realValue(o.store?.address) || '—')}</strong></p>
-          <p><span>${escapeHtml(c.paidDeposit)}</span><strong class="price">${escapeHtml(depositText(o.depositCents))}</strong></p>
+          <p><span>已扣储值</span><strong class="price">${escapeHtml(o.depositPayment?.storedDeductionText||'—')}</strong></p>
         </div>`).join('')}
+      ${state.checkoutReceipt?`<div class="info-card-web card"><p>到店还需支付定金：${escapeHtml(state.checkoutReceipt.display.offlineText)}</p><p>扣款后余额：${escapeHtml(state.checkoutReceipt.display.balanceAfterText)}</p><p>${escapeHtml(state.checkoutReceipt.display.note)}</p></div>`:''}
       <div class="row" style="gap:10px;margin-top:12px">
         <button class="primary" data-view-target="orders" type="button" style="flex:1">${escapeHtml(c.viewOrders)}</button>
         <button class="ghost" data-view-target="home" type="button" style="flex:1">${escapeHtml(c.home)}</button>
@@ -1760,7 +1735,7 @@ function renderOrderDetailWeb() {
           <p><span>${t('remark')}</span><strong>${order.notes || t('none')}</strong></p>
         </div>
       </section>
-      <section class="section">
+      ${window.BookingCheckout.receipt(order.depositPayment,escapeHtml)}${window.MemberPricingCustomer.documents(order.memberDocuments,escapeHtml,state.lang==='en')}<section class="section" ${order.memberDocuments||order.depositPayment&&!order.payment?'hidden':''}>
         <div class="section-row"><h2>${state.lang === 'zh' ? '服务签署单' : 'Signed sheet'}</h2>${order.payment ? `<span class="subtle">${state.lang === 'zh' ? '已签署' : 'Signed'} ${escapeHtml(String(order.payment.signedAt || '').slice(0, 16).replace('T', ' '))}</span>` : ''}</div>
         <div class="info-card-web card">
           ${order.payment && (order.payment.sheets || []).length > 1 ? `
@@ -1842,7 +1817,7 @@ function renderCardPackWeb() {
   window.CustomerWallet.renderCardPack({ state, els, zh: state.lang === 'zh', escapeHtml, render, loadCardPack })
 }
 function renderStoredValueWeb() {
-  window.CustomerWallet.renderStoredValue({ state, els, zh: state.lang === 'zh', escapeHtml, money, render, loadWallet })
+  window.CustomerWallet.renderStoredValue({ state, els, zh: state.lang === 'zh', escapeHtml, money, render, loadWallet, request })
 }
 /* N-5:顾客侧要看得见退款 —— 网页端此前没有储值流水页,这里补上取数口。 */
 async function loadWallet() {
@@ -1869,6 +1844,7 @@ function renderMallWeb() {
         ${mall.items.filter((it) => it.section === sec.key).map((it) => `
         <div class="info-card-web card">
           <p><span><strong>${escapeHtml(it.titleText)}</strong></span>${it.bonusText ? `<strong class="price">${escapeHtml(it.bonusText)}</strong>` : ''}</p>
+          ${it.defaultDiscountText?`<p class="subtle">${escapeHtml(it.defaultDiscountText)}</p>`:''}
           ${it.unitText ? `<p class="subtle">${escapeHtml(it.unitText)}</p>` : ''}
           ${it.projectGroupText ? `<p class="subtle">${zh ? '适用项目组:' : 'Scope: '}${escapeHtml(it.projectGroupText)}</p>` : ''}
           ${it.validText ? `<p class="subtle">${escapeHtml(it.validText)}</p>` : ''}
@@ -1964,7 +1940,7 @@ function renderMemberBenefitsWeb() {
         <p class="subtle">${user.memberLevel === '会员' ? (state.lang === 'zh' ? '您已是本店会员(充值即入会)。' : 'You are a member (join by recharging).') : (state.lang === 'zh' ? '在本店充值即可成为会员。' : 'Recharge at this store to become a member.')}</p>
         ${(user.memberPerks || []).length ? `<p style="font-weight:600;margin:10px 0 4px">${state.lang === 'zh' ? '本店会员专属权益' : 'Member perks'}</p>${user.memberPerks.map((x) => `<p class="subtle">· ${x}</p>`).join('')}` : ''}
       </section>` : ''}
-      <section class="tier-grid-web">
+      <div id="memberPersonalBenefits"></div><section class="tier-grid-web">
         ${(tiersDisabled(user) ? [] : user.memberTiers).map((tier) => {
           const active = tier.key === tierInfo.tier.key
           return `
@@ -1986,12 +1962,13 @@ function renderMemberBenefitsWeb() {
       <section class="upgrade-gifts-web card">
         <div>
           <h2>${t('upgradeGift')}</h2>
-          <p>${state.lang === 'zh' ? '升级权益可用于后续优惠券、护理提醒、复购回访和会员专属活动。具体礼遇会在正式上线前由店主确认。' : 'Upgrade perks can later connect coupons, after-care reminders, rebooking follow-ups, and member-only events. Final benefits will be confirmed before launch.'}</p>
+          <p>${state.lang === 'zh' ? '升级赠送的优惠券和次卡可在卡包中查看。' : 'View any upgrade coupons and passes in your card pack.'}</p>
         </div>
-        <button class="primary slim" data-view-target="services" type="button">${t('bookNow')}</button>
+        <button class="primary slim" data-view-target="cardPack" type="button">${state.lang==='zh'?'查看卡包':'View card pack'}</button>
       </section>
     </section>
   `
+  window.MemberPricingCustomer.benefits(document.getElementById('memberPersonalBenefits'),{request,escapeHtml,en:state.lang==='en',money})
 }
 
 function renderStoreWeb() {
@@ -2014,6 +1991,7 @@ function renderStoreWeb() {
    最后一个用它的「设置」卡已撤,函数不留(留着下次又会有人往里塞占位页)。 */
 
 async function handleScreenClick(event) {
+  const memberGroup=event.target.closest('[data-member-group]');if(memberGroup){event.preventDefault();if(memberGroup.disabled)return;memberGroup.disabled=true;try{await window.MemberPricingCustomer.open(memberGroup.dataset.memberGroup,request)}catch(e){toast(e.message);memberGroup.disabled=false}return}
   const guidePhoto = event.target.closest('[data-guide-photo]')
   if (guidePhoto) {
     const step=state.stores[0]?.arrivalGuide?.[Number(guidePhoto.dataset.guidePhoto)]
@@ -2023,6 +2001,9 @@ async function handleScreenClick(event) {
     document.body.append(dialog);dialog.querySelector('button').onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();dialog.showModal();return
   }
 
+  if(event.target.closest('[data-checkout-refresh]')){window.BookingCheckout.preview(state,request,render);return}
+  if(event.target.closest('[data-checkout-balance]')){state.checkoutUseBalance=event.target.checked;window.BookingCheckout.preview(state,request,render);render();return}
+  if(event.target.closest('[data-checkout-recover]')){submitPayment().catch(e=>{if(e.code==='CHECKOUT_CHANGED')window.BookingCheckout.preview(state,request,render);toast(e.message);render()});return}
   const retryLoad = event.target.closest('[data-customer-retry]')
   if (retryLoad) { if (retryLoad.dataset.customerRetry === 'mall') { state.mallError = ''; render() } else setView(state.view); return }
 
@@ -2112,12 +2093,8 @@ async function handleScreenClick(event) {
     if (key === 'openAfterSales') { state.asPanelOpen = !state.asPanelOpen; render(); return }
     if (key === 'cancel') {
       const zh = state.lang === 'zh'
-      if (!await window.UIDialog.confirm(zh ? '确定取消这个预约吗?' : 'Cancel this booking?', { hint: `${order.appointmentDate} ${order.appointmentTime}` + (zh ? ' · 取消后时段将释放' : ''), danger: true })) return
       try {
-        /* 真取消:改服务器状态 + 放开占位。顾客小程序那边同刀(D70 顺手修的那处:
-           原来只改本地缓存,服务器上单还在、时段还锁着)。 */
-        await request(`/bookings/${encodeURIComponent(order.id)}/cancel`, { method: 'POST', body: JSON.stringify({}) })
-        toast(zh ? '已取消' : 'Cancelled')
+        const out=await window.BookingCheckout.cancel(order.id,request,d=>window.UIDialog.confirm(zh?'确定取消这个预约吗？':'Cancel this booking?',{hint:['已收定金 '+d.paidText,'退回储值 '+d.storedRefundText,'不退部分 '+d.forfeitText,'线下退款 '+d.cashRefundText,d.note].filter(Boolean).join(' · '),danger:true}));if(!out)return;toast(out.refundReceipt?.display?.note||(zh?'已取消':'Cancelled'))
         await loadUserOrders()
         render()
       } catch (error) { toast(error.message) }
@@ -2315,6 +2292,8 @@ async function handleScreenClick(event) {
     saveCurrentToCart(true)
     return
   }
+  if(event.target.closest('[data-select-all-cart]')){const selected=!state.cart.every(x=>x.selected);state.cart.forEach(x=>x.selected=selected);writeJson(`lucky-web-cart:${TENANT_ID}`,state.cart);renderCart();return}
+  const editCart=event.target.closest('[data-edit-cart]');if(editCart){window.MemberPricingCustomer.editCart(state,editCart.dataset.editCart,{prepareBooking,loadAvailability,render,toast});return}
   const toggle = event.target.closest('[data-toggle-cart]')
   if (toggle) {
     state.cart = state.cart.map((item) => item.id === toggle.dataset.toggleCart ? { ...item, selected: !item.selected } : item)
@@ -2337,7 +2316,7 @@ async function handleScreenClick(event) {
         toast(t('sessionExpired'))
         return
       }
-      toast(error.message)
+      if(error.code==='CHECKOUT_CHANGED')window.BookingCheckout.preview(state,request,render);toast(error.message);render()
     })
     return
   }

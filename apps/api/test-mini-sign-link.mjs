@@ -80,7 +80,9 @@ returnState.window.wx=null;returnState.returnToMe()
 check('网页签完返回当前环境我的页',assigned[0]==='/experience/?tab=me')
 let merchant,timers=[],navs=[],status={state:'signed',text:'已签署'}
 const merchantApi={adminGet:async()=>status}
-vm.runInNewContext(readFileSync(new URL('../../miniprogram/pages/merchant/settlement/index.js',import.meta.url),'utf8'),{Page:p=>merchant=p,require:p=>p.endsWith('/nav')?{relaunch:u=>navs.push(u)}:p.endsWith('/api')?merchantApi:{},setTimeout:(f,ms)=>{timers.push({f,ms});return timers.length},clearTimeout:()=>{},wx:{showToast:()=>{}}})
+const merchantContext={Page:p=>merchant=p,setTimeout:(f,ms)=>{timers.push({f,ms});return timers.length},clearTimeout:()=>{},wx:{showToast:()=>{}}}
+const merchantRequire=p=>{if(p==='./preview-signing'||p==='./member-pricing'){const c={...merchantContext,module:{exports:{}},require:merchantRequire};vm.runInNewContext(readFileSync(new URL('../../miniprogram/pages/merchant/settlement/'+p.slice(2)+'.js',import.meta.url),'utf8'),c);return c.module.exports}return p.endsWith('/nav')?{relaunch:u=>navs.push(u)}:p.endsWith('/api')?merchantApi:{}}
+vm.runInNewContext(readFileSync(new URL('../../miniprogram/pages/merchant/settlement/index.js',import.meta.url),'utf8'),{...merchantContext,require:merchantRequire})
 merchant.data={qr:{settlementId:'isolated-test'}};merchant.setData=v=>Object.assign(merchant.data,v)
 merchant.pollQr();await timers.shift().f();await timers.shift().f()
 check('商家收到最终已签状态直接回今日台面',navs[0]==='/pages/merchant/orders/index'&&merchant.data.qr===null)
@@ -89,7 +91,7 @@ merchant.pollQr();await timers.shift().f();await timers.shift().f()
 check('多份服务单先接下一份，不提前返回丢失待签单',navs[0]?.id==='second')
 // 售后详情中的订单操作必须保留原订单上下文并复用全订单入口。
 let orders;const orderToasts=[]
-vm.runInNewContext(readFileSync(new URL('../../miniprogram/pages/merchant/orders/index.js',import.meta.url),'utf8'),{Page:p=>orders=p,require:p=>p.endsWith('/storeclock')?{storeToday:()=> '2030-10-07'}:{},wx:{showToast:o=>orderToasts.push(o)}})
+vm.runInNewContext(readFileSync(new URL('../../miniprogram/pages/merchant/orders/index.js',import.meta.url),'utf8'),{Page:p=>orders=p,require:p=>p==='./booking-view'?realRequire('../../miniprogram/pages/merchant/orders/booking-view.js'):p.endsWith('/storeclock')?{storeToday:()=> '2030-10-07'}:{},wx:{showToast:o=>orderToasts.push(o)}})
 const asBooking={id:'as-own',status:'COMPLETED',user:{id:'as-customer',displayName:'原顾客'},service:{id:'as-service',name:'原项目'},technician:{name:'原技师'},afterSalesStatus:'pending'}
 orders.data={raw:[asBooking],asPanel:{bookingId:asBooking.id}};orders.setData=v=>Object.assign(orders.data,v)
 let actionDataset;orders.orderActions=async e=>{actionDataset=e.currentTarget.dataset}

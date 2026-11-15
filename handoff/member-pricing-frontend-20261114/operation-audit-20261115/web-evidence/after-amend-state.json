@@ -1,0 +1,18 @@
+{
+  "copyEn": {
+    "eligibilityText": "Active",
+    "discountText": "1% off · Pay 99%",
+    "statusText": "Your personal discount applies to all chargeable services."
+  },
+  "active": true,
+  "eligibilityText": "有效",
+  "discountText": "9.9折",
+  "statusText": "所有收费服务按本人折扣结算。",
+  "userId": "user_mwgo6f56_5yssab",
+  "rateBps": 9900,
+  "revision": 16,
+  "eligible": true,
+  "effectiveRateBps": 9900,
+  "status": "active",
+  "balanceCents": 76900
+}

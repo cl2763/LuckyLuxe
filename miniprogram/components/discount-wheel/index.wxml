@@ -1,0 +1,1 @@
+<view class="discount-field"><text>个人折扣</text><picker mode="selector" range="{{options}}" range-key="label" value="{{index[0]}}" bindchange="change" disabled="{{disabled}}"><view class="choice">{{selectedText}} ›</view></picker><text class="hint">滚动选择，支持一位小数；确认后生效。</text></view>

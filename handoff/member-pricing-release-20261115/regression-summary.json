@@ -1,0 +1,20 @@
+{
+  "log": "full-regression.log",
+  "sha256": "1295c9cdef75afa73695f5c32b74a8072869029d52b34cbff00c997d8162203e",
+  "exitCode": 0,
+  "mainSuites": 213,
+  "mainAssertions": 6528,
+  "permissionSuites": 43,
+  "miniSuites": 3,
+  "miniAssertions": 16,
+  "notRun": 0,
+  "durationSeconds": 275,
+  "exactProductionNode": "22.11.0",
+  "productionRuntimeChecks": [
+    "32 timezone checks",
+    "8 mutation checks",
+    "finance lock migration and repeated startup",
+    "full production-mode startup"
+  ],
+  "retainedDataRehearsal": "存量升级核对.json"
+}

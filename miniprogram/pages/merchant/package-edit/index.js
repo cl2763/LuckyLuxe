@@ -2,9 +2,11 @@ const api = require('../../../utils/api')
 const { refreshStoreClock, storeCurrencyPrefix } = require('../../../utils/storeclock')
 
 Page({
+  cancel(){if(!this.data.saving)require('../../../utils/nav').back()},
   // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
   async onShow() { if (!(await api.guardOwner())) return; await refreshStoreClock().catch(() => {}); this.setData({ currency: storeCurrencyPrefix() }) },
   data: {
+    rateBps:null,discountRevision:0,
     id: '', isNew: true, kind: 'recharge',
     name: '', price: '', bonus: '', times: '', scope: '', benefits: '', active: true,
     giftItems: [], currency: '', saving: false
@@ -27,7 +29,8 @@ Page({
       const r = await api.adminGet('/admin/packages')
       const p = (r.packages || []).find((x) => x.id === id)
       if (!p) { wx.showToast({ title: '未找到', icon: 'none' }); return }
-      this.setData({
+      const discount=p.kind==='recharge'?await api.adminGet('/admin/member-pricing/packages/'+encodeURIComponent(id)):{rateBps:null,revision:0}
+      this.setData({rateBps:discount.rateBps,discountRevision:discount.revision,
         kind: p.kind, name: p.name,
         price: String((p.priceCents || 0) / 100),
         bonus: p.bonusCents ? String(p.bonusCents / 100) : '',
@@ -38,6 +41,7 @@ Page({
     } catch (e) { wx.showToast({ title: '加载失败', icon: 'none' }) }
   },
 
+  onRate(e){this.setData({rateBps:e.detail.rateBps})},
   onName(e) { this.setData({ name: e.detail.value }) },
   onPrice(e) { this.setData({ price: e.detail.value }) },
   onBonus(e) { this.setData({ bonus: e.detail.value }) },
@@ -69,6 +73,7 @@ Page({
       }
     }
     const body = {
+      ...(kind==='recharge'?{defaultPersonalDiscount:{expectedRevision:this.data.discountRevision,rateBps:this.data.rateBps}}:{}),
       kind, giftItems, name: name.trim(),
       priceCents: Math.round(p * 100),
       bonusCents: kind === 'recharge' ? Math.round((Number(bonus) || 0) * 100) : 0,

@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "服务与目录",
-  "usingComponents": {}
+  "usingComponents": {
+    "price-system": "/components/price-system/index"
+  }
 }

@@ -1,7 +1,8 @@
+const bookingSubscription=require('./booking-subscription')
 const api=require('./api')
 function key(){const a=api.getAuth(),id=a?.user?.id||a?.userId;return id?'subscription-welcome:'+api.currentTenantId()+':'+id:''}
 module.exports={
-  ...require('./booking-subscription'),
+  ...bookingSubscription,
   async offerSubscription() {
     const k=key();if(!k||wx.getStorageSync(k))return
     await this.openSubscriptionSettings()

@@ -1,12 +1,13 @@
-/* 屏 1｜技师端 · 结算开单 —— 服务分组完整版(图 v2.2 = 合同,2026-08-12)
-   金额红线:本页一处运算都没有。所有金额(各组行/合计/优惠/抵扣/应收/支付腿)
-   都来自 POST /admin/settlements/preview 的**组级预览**,与正式开单同一个 computeSettlement;
-   组级加总与储值顺序抵扣也在后端做 —— 前端只负责:每组勾了什么 → 发给后端 → 显示。
-   结构:组内六件套(价格体系/服务项目/加项/自选/技师/被服务者)× N 组 + 单级四件
-   (定金/支付菜单/分组明细合计/推送签署)。 */
+
+
+
+
+
+
 const api = require('../../../utils/api')
 const { formatMoney, displayOf } = require('../../../utils/money')
 const { storeMoney } = require('../../../utils/storeclock')
+const MemberPricingInput=require('../../../utils/member-pricing')
 const TIERS = [
   { key: 'list', label: '原价' },
   { key: 'share', label: '分享价' },
@@ -15,8 +16,8 @@ const TIERS = [
 ]
 const TIER_PRICE_FIELD = { list: 'listPriceCents', share: 'sharePriceCents', member: 'memberPriceCents', course: 'coursePriceCents' }
 const TIER_LABEL = { list: '原价', share: '分享价', member: '会员价', course: '疗程价' }
-/* 加项按主项目类别过滤(合同规则①③):正式映射日后在 S1 可配,眼下用「甲/睫」域启发式 ——
-   类别名含「睫」=lash,含「甲」=nail,其余=other;未归类(无类别)的加项各组都显示。 */
+
+
 function domainOfName(name) {
   const n = String(name || '')
   if (n.includes('睫')) return 'lash'
@@ -34,20 +35,20 @@ function newGroup(tierDefault, firstCat) {
     addonIds: {},               // serviceId -> qty(按指用数量,其余恒 1)
     customItems: [], customName: '', customAmount: '',
     selectedTechs: [],
-    servedPersonName: '',
+    servedPersonName: '', beneficiaryKey:'self',
     collapsed: false,
-    // 规则⑧(v2.3 原样恢复):双技师时各自点选自己做的条目编号;{techId: [itemNo,...]}
-    // 考据结论:原实现按**数字位**保留(条目重排后不跟随也不清空,与重构前一致)
+
+
     techItems: {},
-    // 渲染缓存(renderGroup / doPreview 填)
+
     mainItems: [], addonGroups: [], mainName: '', summary: '', techRows: null, numbered: null
   }
 }
-// 条目编号显示位(规则⑧):后端 itemNo 从 1 起;超过 10 直接显示数字
+
 const NO_MARKS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩']
 const noMark = (n) => NO_MARKS[n - 1] || String(n)
-Page({
-  // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
+const definition={
+
   onShow() { api.guardMerchant() },
   data: {
     ready: false,
@@ -58,11 +59,11 @@ Page({
     cats: [], roster: [],
     groups: [],
     depositApplied: true, depositDeductible: true,
-    /* 单级支付菜单(合同规则③):勾"路",钱后端算。
-       useBalance=储值卡抵扣;useDeposit=已收定金抵扣(=depositApplied);
-       recharge=现场充值再抵扣;线下收款行 = 差额去处,由后端 offlineDue 回显。 */
+
+
+
     payMenu: { useBalance: true, recharge: false },
-    // 整单规则(足部加收/甲片重复利用):图 v2.2 未画,按现状保留为单级,发给组①(记假设)
+
     applyFootSurcharge: false, applyTipReuse: false,
     couponGrantId: '', couponPanel: false, couponOptions: [], couponUsableCount: 0, couponPicked: null,
     preview: null, view: null,
@@ -70,14 +71,14 @@ Page({
     qr: null,
     bindQr: null,      // 出示绑定码弹层(规则⑦)
     rvPanel: null,      // 内嵌充值面板(合同规则③-2)
-    /* B3-1 随单充值(挂单随签):面板只挂草稿,签字那一刻后端才写充值行——
-       充完即抵本单,签署单三行分行(实收/本单抵扣/充后余额)一次签。 */
+
+
     rvDraft: null,
-    ctaText: '推送签署',
+    ctaText: '核对并生成本次服务单',
     submitting: false
   },
   onLoad(q) {
-    /* D9 规则⑤:?qrFor=<settlementId> = 纯出码模式(台面「递给顾客签」的未绑定客通道) */
+
     if (q.qrFor) {
       this._qrOnly = true
       this.setData({ qrOnly: true })
@@ -95,9 +96,10 @@ Page({
   async boot(preselectServiceId) {
     this.setData({bootError:''})
     try {
-      // These reads do not depend on each other. On a phone each proxy hop has
-      // noticeable latency; serial timecard/package/member reads previously
-      // added several full round trips before the first usable screen.
+      await this.bootMemberPricing()
+
+
+
       const [cats, items, techs, dep, tc, tp, m, existing] = await Promise.all([
         api.adminGet('/admin/pricing/categories'),
         api.adminGet('/admin/pricing/items'),
@@ -111,12 +113,12 @@ Page({
       const categories = (cats.categories || []).filter((c) => c.isBookable !== false)
       const all = (items.items || []).filter((i) => i.isActive !== false)
       this.allItems = all
-      /* B1(图 §四 屏1):次卡大类——该顾客有可用卡才亮起,角标=可核销数;
-         数据源=三端同一持卡接口(剩0接口层已隐,过期带位置灰)。 */
+
+
       const timecards = (tc && tc.timecards) || []
-      // B1-6:现场购卡套餐(员工可读口;有在售 times 套餐才出「+现场购卡」入口)
+
       const timecardPackages = (tp && tp.packages) || []
-      // 组内价格体系:默认按系统会员判定自动选档(现有口径,落到每一组;可手动改,改档留痕)
+
       let tierDefault = 'list'
       if (this.data.userId) {
         const one = m && (m.members || [])[0]
@@ -124,7 +126,7 @@ Page({
       }
       const firstCat = (categories[0] || {}).id || ''
       const g0 = newGroup(tierDefault, firstCat)
-      // 预约带入的主项目 = 组① 的单选位
+
       if (preselectServiceId && all.some((i) => i.id === preselectServiceId)) {
         g0.mainId = preselectServiceId
         g0.catId = this.catOf(preselectServiceId) || firstCat
@@ -143,14 +145,14 @@ Page({
       this.loadBindState()
       this.renderAll()
       this.refresh()
-      /* D28 规则①「继续结算」:本预约已有待签单 → 自动回到出码态续办。
-         非 qrOnly:整页都在,关掉码还能操作绑定/充值;重复开单后端 409 挡着(双单口径)。 */
+
+
       if (this.data.bookingId) {
         try {
           const pending = ((existing && existing.settlements) || []).filter((s) => s.status === 'pending_sign')
           if (pending.length) {
             wx.showToast({ title: `该预约已有待签单 ${pending.length} 张,继续办理`, icon: 'none', duration: 2200 })
-            this.openQr(pending[0])
+            if(this.data.pricingConfig.active&&pending[0].serviceDocument){const d=await api.adminGet('/admin/member-pricing/documents/'+encodeURIComponent(pending[0].serviceDocument.id));await this.mpLoadBatch(d.visitGroupId||d.groupId)}else this.openQr(pending[0])
           }
         } catch (e) { /* 拉不到不挡页面 */ }
       }
@@ -181,22 +183,23 @@ Page({
     return ((this.data.cats || []).find((c) => c.id === catId) || {}).name || ''
   },
 
-  /* ===== 组渲染(目录挑行,零金额运算) ===== */
+
   renderGroup(g) {
     const field = TIER_PRICE_FIELD[g.tierKey] || 'listPriceCents'
     const d = this.data.display
     const priceOf = (it) => {
+      if(this.data.pricingConfig?.active){const p=this.catalogPrices?.items.find(p=>p.id===it.id),n=p?.prices[g.tierKey];return {cents:n,text:!p?'读取中…':p.requiresQuote?'需报价':n===undefined?'未配置':formatMoney(n,d,d&&d.trimZeroDecimals?0:2)}}
       const cents = it[field] === null || it[field] === undefined ? it.listPriceCents : it[field]
       return { cents, text: formatMoney(cents, d, d && d.trimZeroDecimals ? 0 : 2) }
     }
-    const listOf = (it) => formatMoney(it.listPriceCents, d, d && d.trimZeroDecimals ? 0 : 2)
+    const listOf = (it,p) => {const n=this.data.pricingConfig?.active?this.catalogPrices?.items.find(x=>x.id===it.id)?.prices.list:it.listPriceCents;return n==null||n===p.cents?'':formatMoney(n,d,d&&d.trimZeroDecimals?0:2)}
     const decorate = (it) => {
       const p = priceOf(it)
       return {
         id: it.id, name: it.nameZh, unit: it.unit,
         priceText: p.cents === 0 ? '免收' : p.text,
         isFree: p.cents === 0,
-        listText: it.listPriceCents !== p.cents ? listOf(it) : '',
+        listText: listOf(it,p),
         perFinger: it.unit === 'per_finger',
         qty: it.itemKind === 'addon' ? (g.addonIds[it.id] || 0) : (g.mainId === it.id ? 1 : 0),
         on: it.itemKind === 'addon'
@@ -205,8 +208,9 @@ Page({
       }
     }
     const all = this.allItems || []
+    g.quoteInputs=all.filter(it=>(it.id===g.mainId||Object.prototype.hasOwnProperty.call(g.addonIds,it.id))&&this.catalogPrices?.items.find(x=>x.id===it.id)?.requiresQuote).map(it=>({id:it.id,name:it.nameZh,value:g.quotedPrices?.[it.id]==null?'':String(g.quotedPrices[it.id]/100)}))
     g.mainItems = all.filter((i) => (i.itemKind || 'main') === 'main' && (i.categoryId || '') === g.catId).map(decorate)
-    // B1 次卡核销组:卡列表(label 后端句/过期灰)+组内项目 chips(project_group→同名二级分类,空组=全部主项目)
+
     if (g.catId === '__timecard') {
       g.tcCards = (this.data.timecards || []).map((c) => Object.assign({}, c, { on: g.timecardId === c.id }))
       g.tcPkgs = (this.data.timecardPackages || []).map((p) => Object.assign({}, p, { on: g.purchasePackageId === p.id }))
@@ -221,7 +225,7 @@ Page({
       g.tcName = card ? card.name : (pkg ? pkg.name : '')
       g.tcMode = card ? 'redeem' : (pkg ? 'purchase' : '')
     } else { g.tcCards = []; g.tcPkgs = []; g.tcServices = []; g.tcName = ''; g.tcMode = '' }
-    // 加项按本组主项目类别过滤(甲/睫域启发式;未归类各组都显示;S1 可配映射落地前的代行)
+
     const main = all.find((x) => x.id === g.mainId)
     const groupDomain = main ? domainOfName(this.catNameOf(main.categoryId)) : null
     const addons = all.filter((i) => i.itemKind === 'addon').filter((i) => {
@@ -239,7 +243,7 @@ Page({
     const sorted = order.filter((k) => k !== '其他加项').concat(order.includes('其他加项') ? ['其他加项'] : [])
     g.addonGroups = sorted.map((k) => groupMap[k])
     g.mainName = main ? main.nameZh : (g.timecardId ? `次卡核销 · ${g.tcName}` : (g.purchasePackageId ? `现场购卡 · ${g.tcName}(当场核销第 1 次)` : ''))
-    // 收起态摘要(图 屏2 上半):主项 · 技师;下一行 档位 · 加项 · 自选 · 被服务者
+
     const techNames = g.selectedTechs.map((id) => ((this.data.roster.find((t) => t.id === id) || {}).name)).filter(Boolean)
     const addonNames = Object.keys(g.addonIds).map((id) => ((all.find((x) => x.id === id) || {}).nameZh)).filter(Boolean)
     g.summary = [
@@ -258,10 +262,10 @@ Page({
       g.label = marks[i] || String(i + 1)
       return this.renderGroup(g)
     })
-    this.setData({ groups })
+    this.setData({ groups,people:this.data.pricingConfig?.active?MemberPricingInput.people(groups):groups.map((g,i)=>({key:String(i),groups:[{...g,index:i}]})) })
   },
 
-  /* ===== 组内六件套操作(全部带 data-g) ===== */
+
   gPickTier(e) {
     const { g, k } = e.currentTarget.dataset
     const groups = this.data.groups.slice()
@@ -277,20 +281,20 @@ Page({
     this.setData({ groups })
     this.renderAll()
   },
-  // 服务项目:组内单选自动替换(e8ea109 逻辑,作用域=本组);再点已选=取消
+
   gToggleMain(e) {
     const { g, id } = e.currentTarget.dataset
     const groups = this.data.groups.slice()
     const grp = groups[g]
     grp.mainId = grp.mainId === id ? '' : id
     if (grp.mainId && (grp.timecardId || grp.purchasePackageId)) { grp.timecardId = ''; grp.purchasePackageId = ''; grp.timecardServiceId = ''; wx.showToast({ title: '本组切回普通开单,已取消次卡', icon: 'none' }) }
-    // 合同规则④:换主项目后,类别不符的加项自动清除并提示
+
     const dropped = this.dropMismatchedAddons(grp)
     this.setData({ groups })
     this.renderAll(); this.refresh()
     if (dropped.length) wx.showToast({ title: `已清除类别不符的加项:${dropped.join('、')}`, icon: 'none', duration: 2500 })
   },
-  // B1:选卡(过期/用完点击拦;与主项目互斥=一组要么核销要么普通;再点已选=取消)
+
   gPickTimecard(e) {
     const { g, id } = e.currentTarget.dataset
     const groups = this.data.groups.slice()
@@ -307,7 +311,7 @@ Page({
     }
     this.setData({ groups }); this.renderAll(); this.refresh()
   },
-  // B1-6:现场购卡选套餐(三态互斥:清已有卡与主项目;当场核销第 1 次=仍需组内选项目)
+
   gPickPurchasePkg(e) {
     const { g, id } = e.currentTarget.dataset
     const groups = this.data.groups.slice()
@@ -403,11 +407,11 @@ Page({
     else { if (sel.length >= 2) { wx.showToast({ title: '每组最多两位技师', icon: 'none' }); return } sel.push(id) }
     groups[g].selectedTechs = sel
     this.setData({ groups })
-    // 技师不改钱,但明细区组标题里有技师行 —— 不刷新会显示旧技师(两处说两句话)
+
     this.renderAll(); this.refresh()
   },
-  /* 规则⑧:技师点选自己做的条目编号(一个编号可两人都点=共做;单技师不出数字排)。
-     无拦截无新校验 —— 分配只随单记录进日结分成参考,钱仍店长日结核定。 */
+
+
   gToggleTechItem(e) {
     const { g, tech, no } = e.currentTarget.dataset
     const groups = this.data.groups.slice()
@@ -421,7 +425,7 @@ Page({
     this.setData({ groups })
     this.buildTechRows()
   },
-  // 数字排与编号清单都从**后端预览行的 itemNo** 来(金额红线同源,不自己编号)
+
   buildTechRows() {
     const sheets = ((this.data.preview || {}).sheets) || []
     const groups = this.data.groups.map((g, i) => {
@@ -441,16 +445,16 @@ Page({
       }
       return g
     })
-    this.setData({ groups })
+    this.setData({groups,people:MemberPricingInput.people(groups)})
   },
   gServedName(e) {
     const groups = this.data.groups.slice()
-    // 输入过程中不许改写内容:原样存,提交时才 trim(否则姓和名之间打不出空格)
+
     groups[e.currentTarget.dataset.g].servedPersonName = String(e.detail.value || '')
     this.setData({ groups })
     this.renderAll(); this.refresh()
   },
-  // 「＋添加第二个服务项目」:新组同构六件套;组①收起成摘要行(图 屏2)
+
   addGroup() {
     const groups = this.data.groups.map((g) => Object.assign({}, g, { collapsed: true }))
     const proto = this.data.groups[0]
@@ -458,7 +462,7 @@ Page({
     this.setData({ groups })
     this.renderAll(); this.refresh()
   },
-  // 组② 整组 ✕;组① 只可替换不可移除(合同规则④)
+
   removeGroup(e) {
     const gi = Number(e.currentTarget.dataset.g)
     if (gi === 0) { wx.showToast({ title: '第一组只可替换,不可移除', icon: 'none' }); return }
@@ -475,11 +479,11 @@ Page({
     this.setData({ groups })
   },
 
-  /* ===== 单级四件 ===== */
+
   setDeposit(e) { this.setData({ depositApplied: e.currentTarget.dataset.v === '1' }); this.refresh() },
   toggleFoot() { this.setData({ applyFootSurcharge: !this.data.applyFootSurcharge }); this.refresh() },
   toggleTipReuse() { this.setData({ applyTipReuse: !this.data.applyTipReuse }); this.refresh() },
-  // 支付菜单(合同规则③):勾选只选"路",金额全部后端重算回显
+
   payToggleBalance() {
     const m = this.data.payMenu
     this.setData({ payMenu: { useBalance: !m.useBalance, recharge: m.useBalance ? false : m.recharge } })
@@ -487,12 +491,12 @@ Page({
   },
   payToggleDeposit() { this.setData({ depositApplied: !this.data.depositApplied }); this.refresh() },
   payToggleOffline() {
-    // 线下收款 = 差额的去处;差额>0 时不能取消勾(钱得有地方收),提示后维持原状
+
     const v = this.data.view
     if (v && v.hasOffline) { wx.showToast({ title: '还有差额要到店收;想不走线下就先充值抵扣', icon: 'none' }); return }
   },
   payToggleRecharge() {
-    /* B3-1:勾=进面板挂充值草稿(确认后此路亮);取消勾=撤掉草稿,金额后端重算 */
+
     if (this.data.rvDraft) {
       this.setData({ rvDraft: null, payMenu: { useBalance: this.data.payMenu.useBalance, recharge: false } })
       this.refresh()
@@ -501,25 +505,25 @@ Page({
     this.openRecharge()
   },
   payIntentOf() {
-    /* 全组合审计(店主 08-22 五步总纲)抓出的前端映射残余联动:挂充时无视「储值抵扣」意愿
-       强制 recharge_then_balance=不勾也抵。修=意愿唯一由 useBalance 决定(五步④:顾客不勾=不抵;
-       挂充照样签字入账进余额,只是本组不烧)。 */
+
+
+
     const m = this.data.payMenu
     if (!m.useBalance) return 'offline_full'
     return m.recharge ? 'recharge_then_balance' : 'balance_plus_offline'
   },
 
-  /* ===== 内嵌充值面板(合同规则③-2:复用既有代充流程,技师不离开结算单) =====
-     权限口径(店主 2026-08-12 拍板):面板对技师开放 —— 充值=预收轻动作,金额只能选套餐/手输、
-     赠额按套餐自动、后端强制经手人=当前技师留痕;耗卡与财务页门禁不变。
-     D25(《财务总逻辑》3-1b):未绑定轻档案不可充值 —— 链接禁用态,点了给提示;后端同拦。 */
+
+
+
+
   async openRecharge() {
     if (!this.data.userId || !this.data.bind.bound) {
       wx.showToast({ title: '请先让顾客扫码绑定(会员码/签署码)再充值', icon: 'none', duration: 2500 })
       return
     }
-    /* A5 收敛(店主 08-21 终段令):选档源=充值套餐(membership_packages 充X赠Y,员工可读、label 后端句);
-       recharge_tiers 旧档位就此退役(CI 零读方断言防复活)。赠额由后端按套餐算,前端不再拼赠送规则。 */
+
+
     let pkgs = []
     try { pkgs = (await api.adminGet('/admin/recharge-packages')).packages || [] } catch (e) { /* 无套餐也能手输 */ }
     const cur = this.data.rvDraft
@@ -527,7 +531,7 @@ Page({
       rvPanel: {
         amount: cur && !cur.packageId ? String(cur.amountCents / 100) : '',
         packageId: cur ? (cur.packageId || '') : '',
-        pkgs
+        pkgs,rateBps:cur?cur.rateBps:this.data.memberPricing.rateBps
       }
     })
   },
@@ -535,15 +539,15 @@ Page({
   rvPickPkg(e) {
     const id = e.currentTarget.dataset.id
     const p = this.data.rvPanel
-    this.setData({ rvPanel: Object.assign({}, p, { packageId: p.packageId === id ? '' : id, amount: '' }) })
+    this.setData({ rvPanel: Object.assign({}, p, { packageId: p.packageId === id ? '' : id, amount: '',rateBps:MemberPricingInput.chosenRate(p.pkgs.find(x=>x.id===id),this.data.memberPricing) }) })
   },
   rvAmountInput(e) {
     const p = this.data.rvPanel
     this.setData({ rvPanel: Object.assign({}, p, { amount: e.detail.value, packageId: '' }) })
   },
   rvConfirm() {
-    /* B3-1 挂单随签:这里只挂草稿,不打充值接口——签字那一刻后端才写充值行(未签退出=什么都没发生)。
-       金额三行(实收/本单抵扣/充后余额)由组级预览回显,本页零运算。 */
+
+
     const p = this.data.rvPanel
     if (!p) return
     let draft = null
@@ -556,8 +560,9 @@ Page({
       if (!Number.isFinite(payCents) || payCents <= 0) { wx.showToast({ title: '金额不对', icon: 'none' }); return }
       draft = { packageId: '', amountCents: payCents, label: '手输金额(无赠送)' }
     }
-    /* D55(店主终验抓出):挂充值**不再联动勾储值**——菜单式=每条路完全自由勾/取消,
-       储值意愿保持店员自己勾的原样(0 额勾选态的病根之一就是这里强制 useBalance:true)。 */
+
+
+    if(this.data.pricingConfig?.active)draft.rateBps=p.rateBps
     this.setData({ rvDraft: draft, rvPanel: null, payMenu: { useBalance: this.data.payMenu.useBalance, recharge: true } })
     this.refresh()
   },
@@ -566,7 +571,7 @@ Page({
     this.refresh()
   },
 
-  /* ===== 券(单级,挂组①的单;一单一张口径不变;图 v2.2 未画券区,按现状保留 —— 记假设) ===== */
+
   openCouponPanel() {
     if (!this.data.couponOptions.length) { wx.showToast({ title: '顾客券包里没有券', icon: 'none' }); return }
     this.setData({ couponPanel: true })
@@ -581,337 +586,8 @@ Page({
     this.refresh()
   },
 
-  /* ===== 组级预览 ===== */
-  groupSheets() {
-    const all = this.allItems || []
-    return this.data.groups.map((g, i) => {
-      const items = []
-      if (g.mainId) {
-        const it = all.find((x) => x.id === g.mainId) || {}
-        items.push(it.unit === 'per_finger' ? { serviceId: g.mainId, fingers: 1 } : { serviceId: g.mainId, qty: 1 })
-      }
-      for (const id of Object.keys(g.addonIds)) {
-        const it = all.find((x) => x.id === id) || {}
-        items.push(it.unit === 'per_finger' ? { serviceId: id, fingers: g.addonIds[id] } : { serviceId: id, qty: g.addonIds[id] })
-      }
-      /* 拍板(店主 08-21):次卡=独立消费不叠优惠——次卡组价格档固定 list(会员价/档位与折算价无关),
-         整单规则(足部/甲片)不发给次卡组;引擎侧另有第二道闸。 */
-      const isTcGroup = Boolean(g.timecardId || g.purchasePackageId)
-      return {
-        bookingId: i === 0 ? (this.data.bookingId || undefined) : undefined,
-        tierKey: isTcGroup ? 'list' : g.tierKey,
-        tierChangedFrom: !isTcGroup && g.tierChanged ? g.tierDefault : undefined,
-        items,
-        timecardId: g.timecardId || undefined,
-        purchasePackageId: g.purchasePackageId || undefined,
-        timecardServiceId: (g.timecardId || g.purchasePackageId) ? (g.timecardServiceId || undefined) : undefined,
-        customItems: g.customItems.map((c) => ({ name: c.name, amountCents: c.amountCents })),
-        servedPersonName: String(g.servedPersonName || '').trim(),   // trim 移到提交这一刻(输入过程中不许改写)
-        // 规则⑧:分配随单记录(原样恢复=按数字位提交,不做过滤校验——别加戏)
-        technicians: g.selectedTechs.map((id, index) => ({ technicianId: id, role: index === 0 ? 'main' : 'assist', itemNos: (g.techItems && g.techItems[id]) || [] })),
-        payIntent: this.payIntentOf(),
-        /* B3-1 随单充值挂组①的单(与定金/券同策);赠额后端按套餐算,经手技师后端按会话定 */
-        rechargePackageId: i === 0 && this.data.rvDraft && this.data.rvDraft.packageId ? this.data.rvDraft.packageId : undefined,
-        rechargeAmountCents: i === 0 && this.data.rvDraft && !this.data.rvDraft.packageId ? this.data.rvDraft.amountCents : undefined,
-        depositApplied: i === 0 ? this.data.depositApplied : false,
-        couponGrantId: i === 0 ? (this.data.couponGrantId || undefined) : undefined,
-        applyFootSurcharge: i === 0 && !isTcGroup ? this.data.applyFootSurcharge : false,
-        applyTipReuse: i === 0 && !isTcGroup ? this.data.applyTipReuse : false
-      }
-    })
-  },
-  formBody() {
-    return {
-      bookingId: this.data.bookingId || undefined,
-      userId: this.data.userId || undefined,
-      payerUserId: this.data.userId || undefined,
-      cardOwnerUserId: this.data.userId || undefined,
-      payIntent: this.payIntentOf(),
-      settlements: this.groupSheets()
-    }
-  },
-  refresh() {
-    clearTimeout(this._t)
-    this._t = setTimeout(() => this.doPreview(), 250)
-  },
-  async doPreview() {
-    /* 响应次序护栏(2026-08-12 随机矩阵抓出):快速连点时,先发的预览响应可能后到,
-       会把后点的状态(比如刚选的券)静默覆盖掉 —— 过期响应一律整包丢弃,只认最新一发。 */
-    const seq = (this._pvSeq = (this._pvSeq || 0) + 1)
-    const body = this.formBody()
-    try {
-      const r = await api.adminPost('/admin/settlements/preview', body)
-      if (seq !== this._pvSeq) return
-      const sheets = r.sheets || []
-      const grp = r.group || {}
-      const d = displayOf(sheets[0] || {})
-      const m = (cents) => formatMoney(cents, d, d.trimZeroDecimals ? 0 : 2)
-      const pay = grp.payment || {}
-      const groupsState = this.data.groups
-      // 分组明细:各组标题(项目N 主项·技师[·被服务者])+ 子行逐行原价划线(合同 单级③)
-      const detailGroups = sheets.map((s, i) => {
-        const g = groupsState[i] || {}
-        const who = g.servedPersonName ? ` · 被服务者:${g.servedPersonName}` : ''
-        return {
-          title: `项目${'①②③④⑤'[i] || i + 1} ${g.mainName || '(未选主项目)'}${g.techLine ? ' · ' + g.techLine : ''}${who}`,
-          lines: (s.lines || []).map((l) => ({
-            no: l.itemNo, name: l.name, qty: l.qty,
-            serviceId: l.serviceId || '', kind: l.kind || '',
-            amount: l.amountCents === 0 ? '免收' : m(l.amountCents),
-            list: l.listAmountCents !== l.amountCents ? m(l.listAmountCents) : ''
-          }))
-        }
-      })
-      const storedUsed = pay.storedUsedCents || 0
-      const view = {
-        groups: detailGroups,
-        listTotal: m(grp.listTotalCents || 0),
-        subtotal: m(grp.subtotalCents || 0),
-        discountTotal: m(grp.discountTotalCents || 0),
-        discountLabel: (grp.couponDiscountCents || 0) > 0 ? '共优惠（含券）' : '较原价共优惠',
-        hasDeposit: (grp.depositDeductCents || 0) > 0,
-        depositDeduct: m(grp.depositDeductCents || 0),
-        hasStored: storedUsed > 0,
-        storedDeduct: m(storedUsed),
-        // B1 自证行:次卡抵扣合计(组级 preview 回传;0=无核销组不渲染)
-        hasTimecard: (pay.timecardCoverCents || 0) > 0,
-        timecardCover: m(pay.timecardCoverCents || 0),
-        // 到店应收 = 后端 offlineDue(组合计 − 储值抵扣;定金已在各单 total 内扣)
-        total: m(pay.offlineDueCents != null ? pay.offlineDueCents : (grp.totalCents || 0)),
-        balanceCents: pay.balanceAvailableCents || 0,
-        balance: m(pay.balanceAvailableCents || 0),
-        hasBalance: (pay.balanceAvailableCents || 0) > 0,
-        depositReceiptCents: grp.depositReceiptCents || 0,
-        hasDepositReceipt: (grp.depositReceiptCents || 0) > 0,
-        hasOffline: (pay.offlineDueCents || 0) > 0,
-        offlineDue: m(pay.offlineDueCents || 0),
-        /* D60 自证行:现场购卡款显式(+X 购卡款,预收)——不许隐身进应收 */
-        hasPurchase: (pay.purchaseCents || 0) > 0,
-        purchaseAmount: m(pay.purchaseCents || 0),
-        purchaseName: (sheets.find((s) => s.purchase) || {}).purchase ? (sheets.find((s) => s.purchase) || {}).purchase.name : '',
-        /* B3-1 随单充值三行分行(签字生效):数字全由组级预览回传,本页只贴 */
-        hasRecharge: (pay.rechargeCents || 0) > 0,
-        rechargeAmount: m(pay.rechargeCents || 0),
-        rechargeBonus: (() => {
-          const r = (sheets.find((s) => s.recharge) || {}).recharge
-          return r && r.bonusCents > 0 ? m(r.bonusCents) : ''
-        })(),
-        afterBalance: pay.afterRechargeBalanceCents != null ? m(pay.afterRechargeBalanceCents) : '',
-        /* L3① 行内小注(Cowork 定稿句):挂着随签充值时,储值行余额与本单抵的差由这句自证 */
-        rvNote: (pay.pendingRechargeCents || 0) > 0 ? `(含本单随签充值 +${m(pay.pendingRechargeCents)},签字生效)` : '',
-        warnings: sheets.reduce((acc, s) => acc.concat((s.softWarnings || []).map((w) => w.message)), [])
-      }
-      // 券(组①):选项与已选照单级显示
-      const s0 = sheets[0] || {}
-      const options = (s0.couponOptions || []).map((o) => Object.assign({}, o, { deductText: o.usable ? `−${m(o.discountCents)}` : '' }))
-      const prev = this.data.display
-      /* 券回显护栏(2026-08-12 随机矩阵抓出的"点了券被吞"):
-         响应说"没券"只有两种合法含义 —— ①这次请求带了券而后端没认(门槛没到等,落券);
-         ②请求本来就没带券。②的响应可能发自用户点券**之前**,不许拿它清掉刚点的券:
-         保持现选,点券时 refresh() 已排了下一发预览,马上会带着券重算。 */
-      const sentGrant = ((body.settlements || [])[0] || {}).couponGrantId || ''
-      const curGrant = this.data.couponGrantId || ''
-      const nextGrant = s0.coupon ? s0.coupon.grantId : (curGrant && curGrant !== sentGrant ? curGrant : '')
-      this.setData({
-        preview: r, view, display: d,
-        couponOptions: options,
-        couponUsableCount: s0.couponUsableCount || 0,
-        couponPicked: s0.coupon
-          ? Object.assign({}, s0.coupon, { deductText: `−${m(s0.coupon.discountCents)}` })
-          : (nextGrant ? this.data.couponPicked : null),
-        couponGrantId: nextGrant
-      })
-      /* 🔴 D22 护栏(分组版):每组预览行必须与该组勾选一一对应,多/少都当场报警。
-         D55 复盘:护栏机制没错、类定义漏了 B② 新行种——次卡核销/购卡行的「勾选面」在
-         timecardServiceId(不在 items),原 wanted 没算它 → 核销组必误报。补上=只认真的不一致。 */
-      const bodySheets = this.groupSheets()
-      for (let i = 0; i < sheets.length; i += 1) {
-        const wanted = (bodySheets[i].items || []).map((x) => x.serviceId)
-          .concat(bodySheets[i].timecardServiceId ? [bodySheets[i].timecardServiceId] : [])
-          .sort()
-        const got = (sheets[i].lines || []).filter((l) => l.serviceId && l.kind !== 'rule').map((l) => l.serviceId).sort()
-        if (JSON.stringify(wanted) !== JSON.stringify(got)) {
-          wx.showToast({ title: `组${i + 1} 金额行与勾选不一致,请截图报给店主`, icon: 'none', duration: 4000 })
-          break
-        }
-      }
-      if (!prev || prev.symbol !== d.symbol || prev.prefix !== d.prefix) this.renderAll()
-      // 规则⑧:预览行(itemNo)到位后重建各组数字排(编号=后端行号,不自己编)
-      this.buildTechRows()
-    } catch (e) {
-      wx.showToast({ title: (e && e.message) || '试算失败', icon: 'none' })
-    }
-  },
 
-  /* ===== 出码 / 签署(现有闭环全保留;多组=同组多张单,顾客按 1/N 顺序签) ===== */
-  async openQr(sheet) {
-    const key = sheet && (sheet.id || sheet.settlementId || sheet.code)
-    if (!key) { wx.showModal({title:'无法出示签署码',content:'没有取得结算单编号，请返回订单重试。',showCancel:false,fail:(e)=>console.warn('[showModal fail]',e)}); return }
-    try {
-      const r = await api.adminPost(`/admin/settlements/${encodeURIComponent(key)}/sign-token`, {})
-      const s = r.settlement || {}
-      if (!s.id) throw new Error('结算单编号缺失，请重新打开订单。')
-      const m = (c) => storeMoney(c, 2)
-      this.setData({
-        qr: {
-          settlementId: s.id,
-          code: s.code || sheet.code,
-          operatorText: s.operatorText || '历史未记录',
-          url: r.url,
-          miniCodeUrl: r.miniCodePath ? api.miniCodeUrl(r.miniCodePath) : '',
-          codeError: false,
-          pushedText: r.pushedText || '',
-          unbound: r.customerBound === false,
-          // 组内多张显示序号；头条用后端到店支付额，不用价值总额。
-          amountText: `${(s.groupTotal || 1) > 1 ? `服务确认单 ${s.groupIndex}/${s.groupTotal} · ` : ''}本单到店支付 ${s.flow ? s.flow.cashDueText : m(s.totalCents)}`,
-          breakdownText: s.depositDeductCents
-            ? `档位小计 ${m(s.subtotalCents)} − 已付定金 ${m(s.depositDeductCents)}`
-            : `档位小计 ${m(s.subtotalCents)}`,
-          stateText: r.text || '等待顾客进入签署页…',
-          state: r.state || 'waiting'
-        }
-      })
-      this.pollQr()
-    } catch (e) {
-      wx.showToast({ title: (e && e.message) || '出码失败', icon: 'none' })
-      /* qrFor 模式出码失败时等转场结束再返回，避免页面冻结。 */
-      if (this._qrOnly) setTimeout(() => wx.navigateBack(), 700)
-    }
-  },
-  pollQr() {
-    clearTimeout(this._qrTimer)
-    this._qrTimer = setTimeout(async () => {
-      const q = this.data.qr
-      if (!q || !q.settlementId) return
-      try {
-        const st = await api.adminGet(`/admin/settlements/${encodeURIComponent(q.settlementId)}/sign-state`)
-        this.setData({ 'qr.state': st.state, 'qr.stateText': st.text })
-        if (st.state === 'signed') {
-          /* D61 连签流:组内还有待签=自动接续出下一张的码,全部签完才收弹层回台面 */
-          if (st.nextPendingId) {
-            wx.showToast({ title: '这张已签,接下一张', icon: 'success' })
-            setTimeout(() => this.openQr({ id: st.nextPendingId }), 900)
-            return
-          }
-          wx.showToast({ title: '顾客已签署,全部完成', icon: 'success' })
-          // 店主 2026-10-07：签完直接回今日台面，小记从台面待办补写。
-          setTimeout(() => {
-            this.setData({ qr: null })
-            require('../../../utils/nav').relaunch('/pages/merchant/orders/index')
-          }, 900)
-          return
-        }
-      } catch (e) { /* 网络抖动下一轮再问 */ }
-      this.pollQr()
-    }, 2500)
-  },
-  closeQr() {
-    clearTimeout(this._qrTimer)
-    this.setData({ qr: null })
-    // D28:纯出码模式(qrFor)关码=离开;正常/续办模式关码留在结算页(还要绑定/充值)
-    if (this._qrOnly) wx.navigateBack()
-  },
-  copyQrLink() {
-    wx.setClipboardData({
-      data: this.data.qr.url,
-      success: () => wx.showToast({ title: '已复制 ✓', icon: 'none' }),
-      fail: () => wx.showToast({ title: '复制失败,请长按链接手动复制', icon: 'none' })
-    })
-  },
-  handSign() {
-    if (this.data.qr && this.data.qr.unbound) {
-      wx.showToast({ title: '请出示签署链接供顾客核对签字', icon: 'none' })
-      return
-    }
-    clearTimeout(this._qrTimer)
-    const code = this.data.qr.code
-    this.setData({ qr: null })
-    require('../../../utils/nav').to(`/pages/sign/index?merchant=1&code=${encodeURIComponent(code)}`)
-  },
-  onUnload() { clearTimeout(this._qrTimer); clearTimeout(this._bindTimer) },
-
-  /* ===== 出示绑定码(图 v2.3 规则⑦):指向档案的码,扫了只做绑定 =====
-     入口:充值拦截提示条按钮 + 顾客区未绑定小字。沙盒=链接占位+复制(同签署码做法)。 */
-  async openBindCode() {
-    if (!this.data.userId) { wx.showToast({ title: '先选择顾客档案', icon: 'none' }); return }
-    if (this.data.bind.bound) { wx.showToast({ title: '该档案已绑定,无需绑定码', icon: 'none' }); return }
-    try {
-      const r = await api.adminPost(`/admin/customers/${encodeURIComponent(this.data.userId)}/bind-token`, {})
-      this.setData({ bindQr: { url: r.url, pagePath: r.pagePath, miniCodeUrl: r.miniCodePath ? api.miniCodeUrl(r.miniCodePath) : '', codeError: false, displayName: r.displayName, hint: r.hint, state: 'waiting', stateText: '等待顾客扫码绑定…' } })
-      this.pollBind()
-    } catch (e) {
-      wx.showToast({ title: (e && e.message) || '绑定码生成失败', icon: 'none' })
-    }
-  },
-  pollBind() {
-    clearTimeout(this._bindTimer)
-    this._bindTimer = setTimeout(async () => {
-      if (!this.data.bindQr) return
-      try {
-        const r = await api.adminGet(`/admin/customers/lookup?userId=${encodeURIComponent(this.data.userId)}`)
-        const hit = r && r.hit
-        if (hit && hit.bound) {
-          // 绑定事件到达:关弹层、刷徽标、充值解锁(重算让储值/推送状态跟上)
-          this.setData({
-            bindQr: null,
-            bind: { bound: true, badgeText: hit.badgeText || '', hintText: hit.hintText || '', phoneMasked: hit.phoneMasked || '', memberCode: hit.memberCode || '' }
-          })
-          wx.showToast({ title: '已绑定,充值已解锁', icon: 'none', duration: 2500 })
-          this.refresh()
-          return
-        }
-      } catch (e) { /* 拉不到就下轮再试 */ }
-      this.pollBind()
-    }, 2000)
-  },
-  closeBindCode() { clearTimeout(this._bindTimer); this.setData({ bindQr: null }) },
-  qrImageError() { this.setData({ 'qr.codeError': true }) },
-  bindQrImageError() { this.setData({ 'bindQr.codeError': true }) },
-  /* 沙盒打开签署页入口；正式验收以真机扫码为准。 */
-  openQrLink() {
-    if (!this.data.qr) return
-    require('../../../utils/nav').to(`/pages/sign/index?merchant=1&code=${encodeURIComponent(this.data.qr.code)}`)
-  },
-  // D26:绑定码「打开链接」 —— 沙盒直落本人确认卡(与真码扫后同一落点)
-  openBindLink() {
-    if (!this.data.bindQr) return
-    require('../../../utils/nav').to(this.data.bindQr.pagePath)
-  },
-  copyBindLink() {
-    if (!this.data.bindQr) return
-    wx.setClipboardData({
-      data: this.data.bindQr.url,
-      success: () => wx.showToast({ title: '已复制 ✓', icon: 'none' }),
-      fail: () => wx.showToast({ title: '复制失败,请长按链接手动复制', icon: 'none' })
-    })
-  },
-
-  async submit() {
-    if (this.data.submitting) return
-    if (!this.data.userId) { wx.showToast({ title: '这单没有绑定顾客,无法结算', icon: 'none' }); return }
-    /* 每组:必须有内容 + 1–2 位技师。
-       D56(店主终验抓出):次卡组的「内容」在 timecardId/purchasePackageId+组内项目,
-       原校验只认 mainId/addon/自选 → 内容齐全的核销组被「还没选内容」拦死,推送打不出去。 */
-    for (let i = 0; i < this.data.groups.length; i += 1) {
-      const g = this.data.groups[i]
-      const hasTc = Boolean(g.timecardId || g.purchasePackageId)
-      if (!g.mainId && !Object.keys(g.addonIds).length && !g.customItems.length && !hasTc) {
-        wx.showToast({ title: `项目${i + 1} 还没选内容`, icon: 'none' }); return
-      }
-      if (hasTc && !g.timecardServiceId) {
-        wx.showToast({ title: `项目${i + 1} 请选本次核销项目(卡关联组内)`, icon: 'none' }); return
-      }
-      if (!g.selectedTechs.length) { wx.showToast({ title: `项目${i + 1} 先勾本组技师`, icon: 'none' }); return }
-    }
-    this.setData({ submitting: true })
-    try {
-      const r = await api.adminPost('/admin/settlements', this.formBody())
-      // 多组=同组多张单;QR 出第一张,顾客按 待签 1/N 顺序签(既有闭环)
-      await this.openQr((r.settlements || [])[0])
-    } catch (e) {
-      wx.showToast({ title: (e && e.message) || '开单失败', icon: 'none' })
-    } finally {
-      this.setData({ submitting: false })
-    }
-  }
-})
+}
+definition.makeGroup=newGroup
+Object.assign(definition,require('./preview-signing'),require('./member-pricing'))
+Page(definition)

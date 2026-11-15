@@ -303,3 +303,6 @@ page{background:var(--paper)}
 .draft-plus{font-size:30rpx;color:var(--brandd)}
 .draft-hint{font-size:23rpx;color:var(--sub)}
 .page button.draft-entry-pressed{background:var(--wall);opacity:.76}
+
+.mp-order-group{margin-top:24rpx;padding-top:20rpx;border-top:1rpx solid var(--line)}.mp-order-document{padding:16rpx 0;line-height:1.7}.mp-order-head{display:flex;justify-content:space-between;gap:20rpx}.mp-order-money{white-space:nowrap}.mp-order-actions{display:flex;gap:16rpx;margin:16rpx 0}.mp-order-actions button{flex:1;font-size:24rpx;padding:0 12rpx}
+.mp-order-docs{margin:24rpx;padding:24rpx}.mp-order-docs button{padding:16rpx 20rpx;border:1rpx solid var(--line);border-radius:999rpx;background:var(--card);font-size:24rpx;margin-top:12rpx}.mp-order-actions button:first-child{background:var(--hero);color:var(--heroink)}

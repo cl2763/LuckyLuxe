@@ -77,11 +77,12 @@ console.log('ok 3 - signed document snapshots survive repeated schema initializa
 // A genuinely old pending row still signs; price changes, not elapsed time, require a new quote.
 db.exec(`CREATE TABLE settlements(id TEXT,tenant_id TEXT,code TEXT,status TEXT,booking_id TEXT,deposit_deduct_cents INTEGER,recharge_json TEXT);
  CREATE TABLE settlement_groups(id TEXT,status TEXT,updated_at TEXT);CREATE TABLE bookings(id TEXT,tenant_id TEXT,status TEXT);`)
+db.exec(`ALTER TABLE users ADD COLUMN display_name TEXT;UPDATE users SET display_name='测试顾客';CREATE TABLE stores(name TEXT,tenant_id TEXT);INSERT INTO stores VALUES('测试门店','a')`)
 let ledgerCalls=0,sequence=0
 const admin={role:'owner',email:'synthetic-owner'}
-const docs=createMemberServiceDocuments({db,policy:p,apiError,currentTenantId:()=> 'a',getPricingRules:()=>({}),
+const docs=createMemberServiceDocuments({db,policy:p,apiError,currentTenantId:()=> 'a',formatMoneyCents:n=>'CNY '+(n/100).toFixed(2),getPricingRules:()=>({}),
  preview:{prepare:()=>({userId:'u',sheets:[{items:[{serviceId:'s'}]}],context:{oldRevision:p.discount('a','u').revision,eligible:true},
-   view:{components:[{amountCents:100}],documents:[{beneficiaryKey:'self',componentIndexes:[0]}],personalDiscount:p.discount('a','u')}})},
+   view:{components:[{amountCents:100,lines:[],technicians:[],payment:{offlineCents:100,storedUsedCents:0,timecardCoverCents:0}}],documents:[{beneficiaryKey:'self',componentIndexes:[0],listTotalCents:100,tierDiscountCents:0,subtotalCents:100,couponDiscountCents:0,depositDeductCents:0,totalCents:100,rechargeCents:0,purchaseCents:0}],personalDiscount:{current:p.discount('a','u'),eligible:true,effectiveRateBps:p.discount('a','u').rateBps}}})},
  createSettlementGroup:()=>{const groupId=`unit-g-${++sequence}`,id=`unit-c-${sequence}`;db.prepare('INSERT INTO settlement_groups VALUES(?,?,?)').run(groupId,'pending_sign','');db.prepare('INSERT INTO settlements VALUES(?,?,?,?,?,?,?)').run(id,'a',id,'pending_sign',null,0,null);return {groupId,settlements:[{id}]};},
  signLedger:c=>{ledgerCalls++;db.prepare("UPDATE settlements SET status='signed' WHERE id=?").run(c.id);return {}},
  balanceOf:()=>({totalCents:10000}),requireCustomer:()=>({id:'u'}),amendmentShape:()=>({})})

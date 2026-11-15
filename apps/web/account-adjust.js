@@ -29,6 +29,7 @@ window.AccountAdjust = (function () {
         request(`/admin/customers/lookup?userId=${encodeURIComponent(userId)}`).catch(() => null),
         request('/admin/recharge-packages').catch(() => ({ packages: [] }))
       ])
+      stateA.pricing=await window.MemberPricingMember.read(request,userId);stateA.rateBps=stateA.pricing.member.rateBps;stateA.retry={}
       stateA.facts = f.facts
       stateA.cards = (pack.timecards || []).filter((c) => c.remaining > 0)
       stateA.bound = lk && lk.hit ? lk.hit.bound !== false : true
@@ -46,9 +47,13 @@ window.AccountAdjust = (function () {
       document.body.appendChild(o)
       o.addEventListener('click', onClick)
     }
+    const pending=window.MemberPricingInput.pending('account:'+stateA.userId)
+    if(pending){o.innerHTML='<div class="store-switch-panel account-adjust-panel"><h2>上次提交结果待核实</h2><p>请先查询或重试原操作，避免重复充值或退款。原金额与折扣已保留。</p><p>办理顾客：'+ctx.escapeHtml(stateA.name)+'</p><p>本次金额：'+(Number.isSafeInteger(pending.body.amountCents)?ctx.money(pending.body.amountCents,2):'见原交易')+'</p>'+(pending.path==='/admin/stored-value/recharge'?'<p>赠金：'+ctx.money(pending.body.bonusCents||0,2)+'</p>':'')+'<p>绑定折扣：'+ctx.escapeHtml(window.MemberPricingInput.label(pending.body.discountConfirmation?.rateBps??null))+'</p><div class="mp-sign-actions"><button class="primary" data-aa-recover '+(stateA.busy?'disabled':'')+'>查询／重试原操作</button><button class="ghost" data-aa-close>返回</button></div></div>';o.querySelector('[data-aa-recover]').onclick=async()=>{stateA.busy=true;mount();try{await mutate('',{},true);ctx.toast('原操作已完成');close();ctx.onDone({recharged:true})}catch(e){ctx.toast(e.message);stateA.busy=false;mount()}};return}
     o.innerHTML = render()
+    if(stateA.pricing?.active&&o.querySelector('[data-aa-rv-submit]')&&['recharge','bonus'].includes(stateA.tab)){const host=document.createElement('div');o.querySelector('[data-aa-rv-submit]').closest('.aa-btns').before(host);host.innerHTML='<p>当前折扣：'+ctx.escapeHtml(stateA.pricing.member.discountText)+'</p><div data-wheel></div><p data-rate-warning role="status"></p>';const warning=()=>{host.querySelector('[data-rate-warning]').textContent=stateA.pricing.member.rateBps!=null&&stateA.rateBps!=null&&stateA.rateBps>stateA.pricing.member.rateBps?'优惠将减少：'+window.MemberPricingInput.label(stateA.pricing.member.rateBps)+' → '+window.MemberPricingInput.label(stateA.rateBps)+'，请与顾客核对。':''};warning();window.DiscountWheel.mount(host.querySelector('[data-wheel]'),{value:stateA.rateBps,onChange:v=>{stateA.rateBps=v;warning()}})}
   }
 
+  async function mutate(path,body,retry=false){if(!stateA.pricing?.active&&!retry)return ctx.request(path,{method:'POST',body:JSON.stringify(body)});return window.MemberPricingInput.mutation('account:'+stateA.userId,path,body,(url,data)=>ctx.request(url,{method:'POST',body:JSON.stringify(data)}),retry)}
   function render() {
     const { escapeHtml, money, zh } = ctx
     const f = stateA.facts
@@ -69,7 +74,7 @@ window.AccountAdjust = (function () {
         </div>
         ${/* 🔴 图 v1.1 ①:当前余额下面那一行 —— 界限画到屏上(句子后端给,前端零拼串) */''}
         <p class="aa-split">${escapeHtml(f.splitText || '')}</p>
-        <p class="aa-hint">${escapeHtml(f.hint)}</p>` : `<p class="aa-hint">${zh ? '读取中…' : 'Loading…'}</p>`}
+        ${f.depositTransferText?`<p class="aa-hint">${escapeHtml(f.depositTransferText)}</p>`:''}<p class="aa-hint">${escapeHtml(f.hint)}</p>` : `<p class="aa-hint">${zh ? '读取中…' : 'Loading…'}</p>`}
         <div class="aa-seg">${seg.map(([k, label]) => `<button class="aa-seg-btn${stateA.tab === k ? ' on' : ''}" data-aa-tab="${k}" type="button">${label}</button>`).join('')}</div>
         ${stateA.tab === 'refund' ? renderRefund() : (stateA.tab === 'reversal' ? renderReversal() : renderRecharge())}
       </div>`
@@ -85,7 +90,7 @@ window.AccountAdjust = (function () {
       ${isBonusTab ? `<p class="aa-hint">${zh ? '赠送=营销让利,跟充值一起记(充 X 赠 Y):入储值负债、明细单独列示,不算实收、不计业绩与积分。' : 'Bonus posts together with a recharge.'}</p>` : ''}
       ${stateA.bound ? '' : `<div class="aa-warn">${zh ? '该档案未绑定微信 —— 请先让顾客扫码绑定(会员码/签署码)再充值。' : 'Customer not bound yet.'}</div>`}
       ${stateA.rvPkgs.length ? `<label class="aa-field"><span>${zh ? '按套餐(可选,点选自动填金额与赠送)' : 'Package (optional)'}</span>
-        <div class="aa-sub">${stateA.rvPkgs.map((p) => `<button class="aa-sub-btn${stateA.rvPkgId === p.id ? ' on' : ''}" data-aa-pkg="${escapeHtml(p.id)}" type="button">${escapeHtml(p.label)}</button>`).join('')}</div></label>` : ''}
+        <div class="aa-sub">${stateA.rvPkgs.map((p) => `<button class="aa-sub-btn${stateA.rvPkgId === p.id ? ' on' : ''}" data-aa-pkg="${escapeHtml(p.id)}" type="button">${escapeHtml(p.label || p.name)}</button>`).join('')}</div></label>` : ''}
       ${(() => { const gifts = (stateA.rvPkgs.find((p) => p.id === stateA.rvPkgId) || {}).giftItems || []; return gifts.length ? `<div class="aa-hint" data-aa-gifts><strong>${zh ? '套餐赠送物品' : 'Package gifts'}</strong>${gifts.map((g) => `<div style="overflow-wrap:anywhere">${escapeHtml(g.name)} × ${Number(g.quantity)} · ${zh ? '单件价值' : 'Unit value'} ${escapeHtml(ctx.money(g.unitValueCents, 2))}</div>`).join('')}<div>${zh ? '价值不计入储值余额；清单不代表已领取。修改金额后将改为手动充值，不含套餐赠品。' : 'Not added to balance or marked collected. Editing amounts switches to a manual recharge without package gifts.'}</div></div>` : '' })()}
       <label class="aa-field"><span>${zh ? '充值金额' : 'Amount'}</span>${window.MoneyInput.field({ id: 'aaRvAmount', value: escapeHtml(String(stateA.rvAmount || '')), extra:'data-money-strict' })}</label>
       <label class="aa-field"><span>${zh ? '赠送(可空)' : 'Bonus (optional)'}</span>${window.MoneyInput.field({ id: 'aaRvBonus', value: escapeHtml(String(stateA.rvBonus || '')), extra:'data-money-strict' })}</label>
@@ -142,7 +147,7 @@ window.AccountAdjust = (function () {
       const SV_LABEL = { recharge: '储值充值', bonus: '充值赠送', reversal: '储值冲销单', consume: '储值消费' }
       const svRows = (sv.txns || [])
         .filter((t2) => t2.userId === stateA.userId && t2.type !== 'consume')
-        .map((t2) => ({ id: t2.id, kind: 'sv', occurredOn: t2.occurredOn, note: `${SV_LABEL[t2.type] || t2.type}${t2.note ? ' · ' + t2.note : ''}`, amountCents: t2.amountCents, negative: t2.amountCents < 0, isReversal: t2.type === 'reversal', reversed: Boolean(t2.reversed), canReverse: t2.type === 'recharge' && !t2.reversed }))
+        .map((t2) => ({ id: t2.id, kind: 'sv', reversalFacts:t2.reversalFacts, occurredOn: t2.occurredOn, note: `${t2.typeText || SV_LABEL[t2.type] || '储值调整'}${t2.note ? ' · ' + t2.note : ''}`, amountCents: t2.amountCents, negative: t2.amountCents < 0, isReversal: t2.type === 'reversal', reversed: Boolean(t2.reversed), canReverse: t2.type === 'recharge' && !t2.reversed }))
       stateA.txns = finRows.concat(svRows).sort((a, b2) => String(b2.occurredOn).localeCompare(String(a.occurredOn)))
     } catch (e) { ctx.toast(e.message); stateA.txns = [] }
     mount()
@@ -257,6 +262,7 @@ window.AccountAdjust = (function () {
           stateA.rvBonus = p.bonusCents ? (p.bonusCents / 100).toFixed(2) : ''
         }
       }
+      if(stateA.pricing?.active)stateA.rateBps=window.MemberPricingInput.chosenRate(stateA.rvPkgs.find(p=>p.id===stateA.rvPkgId),stateA.pricing.member)
       mount(); return
     }
     if (event.target.closest('[data-aa-rv-submit]')) {
@@ -268,11 +274,12 @@ window.AccountAdjust = (function () {
       const technicianId=document.querySelector('#aaRvTech')?.value || undefined
       stateA.busy = true; mount()
       try {
-        await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({
+        await mutate('/admin/stored-value/recharge', {
           userId: stateA.userId, amountCents: cents, bonusCents: bonus, packageId: stateA.rvPkgId || undefined,
-          payChannel, technicianId
-        }) })
+          payChannel, technicianId, ...(stateA.pricing?.active?{operationId:window.MemberPricingInput.retryKey(stateA.retry,{cents,bonus,packageId:stateA.rvPkgId,payChannel,technicianId,rate:stateA.rateBps}),discountConfirmation:window.MemberPricingMember.confirmation(stateA.pricing.member,stateA.rateBps)}:{})
+        })
         toast(zh ? `已到账 ${ctx.money(cents)}${bonus ? ` 赠 ${ctx.money(bonus)}` : ''}` : 'Recharged')
+        stateA.pricing=await window.MemberPricingMember.read(request,stateA.userId);stateA.rateBps=stateA.pricing.member.rateBps;stateA.retry={}
         stateA.busy = false; stateA.rvAmount = ''; stateA.rvBonus = ''; stateA.rvPkgId = ''
         /* 四个参考数=真值重拉,不前端加减 */
         const f = await request(`/admin/account-adjust/facts?userId=${encodeURIComponent(stateA.userId)}`).catch(() => null)
@@ -299,8 +306,13 @@ window.AccountAdjust = (function () {
           : `/admin/finance/transactions/${encodeURIComponent(revBtn.dataset.aaReverse)}/reverse`
         const aaWhy = await window.CorrectionReason.ask(zh, row ? row.note : '')   // D122
         if (!aaWhy) { stateA.busy = false; mount(); return }
-        await request(url2, { method: 'POST', body: JSON.stringify({ reason: aaWhy }) })
+        const facts=row?.reversalFacts,summary=revBtn.dataset.kind==='sv'?'原充值本金：'+ctx.money(facts?.principalCents??row.amountCents,2)+'；关联赠金：'+(facts?.bonusLinkKnown?ctx.money(facts.bonusCents,2):'旧记录未留明确赠金关联，请先核对原记录')+'；原流水：'+row.id:'';const discount=revBtn.dataset.kind==='sv'?await window.MemberPricingMember.confirm({request,id:stateA.userId,escapeHtml:ctx.escapeHtml,title:'重新确认冲销后的个人折扣',summary,reasonValue:aaWhy}):{};if(discount===null){stateA.busy=false;mount();return}
+        await mutate(url2, { reason: aaWhy,...discount,operationId:window.MemberPricingInput.retryKey(stateA.retry,{url2,aaWhy,discount}) })
         toast(zh ? '已冲销(红字反向记录已生成)' : 'Reversed')
+        ctx.onDone({ reversed: true })
+        stateA.pricing = await window.MemberPricingMember.read(request,stateA.userId)
+        stateA.rateBps = stateA.pricing.member.rateBps
+        stateA.retry = {}
         stateA.busy = false
         const f2 = await request(`/admin/account-adjust/facts?userId=${encodeURIComponent(stateA.userId)}`).catch(() => null)
         if (f2) stateA.facts = f2.facts   // 判据⑤:四参考数联动=真值重拉
@@ -317,7 +329,8 @@ window.AccountAdjust = (function () {
       try {
         // 幂等单号:同一次点击只认一次(连点两下不会退两笔)
         stateA.requestId = stateA.requestId || `rf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-        const r = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: stateA.userId, amountCents: amount, payChannel, reason, requestId: stateA.requestId }) })
+        const discount=await window.MemberPricingMember.confirm({request,id:stateA.userId,escapeHtml:ctx.escapeHtml});if(discount===null){stateA.busy=false;mount();return}
+        const r = await mutate('/admin/stored-value/refund', { userId: stateA.userId, amountCents: amount, payChannel, reason,...discount, operationId:window.MemberPricingInput.retryKey(stateA.retry,{amount,payChannel,reason,discount}), requestId: stateA.requestId })
         toast(zh ? `已退款 ${ctx.money(r.refundedCents)},余额 ${ctx.money(r.balanceAfterCents)}` : 'Refunded')
         close(); ctx.onDone({ refunded: true })
       } catch (e) { stateA.busy = false; mount(); toast(e.message) }

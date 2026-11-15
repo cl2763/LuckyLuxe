@@ -3,7 +3,8 @@
     <text class="s {{seg===0?'on':''}}" data-i="0" bindtap="onSeg">充值套餐</text>
     <text class="s {{seg===1?'on':''}}" data-i="1" bindtap="onSeg">会员次卡</text>
     <text class="s {{seg===2?'on':''}}" data-i="2" bindtap="onSeg">优惠券</text>
-    <text class="s {{seg===3?'on':''}}" data-i="3" bindtap="onSeg">会员体系</text>
+    <text class="s {{seg===3?'on':''}}" data-i="3" bindtap="onSeg">积分商城</text>
+    <text class="s {{seg===4?'on':''}}" data-i="4" bindtap="onSeg">会员体系</text>
   </view>
 
   <!-- 充值套餐 -->
@@ -75,7 +76,7 @@
   <!-- 批④ S9(店主 08-24 拍板改定:维持平台统一设置,不放权)——商家端补**只读展示**,
        让老板在手机上看得见自家规则;行与说明句全部读后端 /admin/membership/config 的
        summaryRows / editHint,与网页端、与顾客端实际生效的规则同一出口(不各查各的)。 -->
-  <block wx:elif="{{seg===3}}">
+  <view wx:elif="{{seg===3}}" class="card"><view class="mnote">积分奖品与兑换规则沿用现有积分商城。</view><navigator class="add" url="/pages/merchant/points-mall/index">管理积分商城 →</navigator></view><block wx:elif="{{seg===4}}">
     <view class="card">
       <view wx:if="{{msLoading}}" class="empty">正在读取会员规则…</view>
       <view wx:elif="{{msError}}" class="empty">{{msError}}<view class="add" bindtap="loadMembershipView">重新加载</view></view>
@@ -87,8 +88,8 @@
     <view wx:if="{{msHint}}" class="mnote">{{msHint}}</view>
   </block>
 
-  <view class="add" wx:if="{{seg !== 3}}" bindtap="add">＋ 新增{{segs[seg]}}</view>
+  <view class="add" wx:if="{{seg < 3}}" bindtap="add">＋ 新增{{segs[seg]}}</view>
 
   <!-- 入口总收敛(店主 08-30c 裁):本页充值表单已删,唯一 UI 入口=客户档案 → 账户调整 -->
 
-</view>
+<view wx:if="{{seg===4 && personalPricing}}" class="mnote">结算采用会员本人当前有效折扣；资格取消后暂停使用，保留身份则继续有效。未设置个人折扣时沿用默认会员价。老板可在客户档案调整，员工仅在充值时调整。</view></view>

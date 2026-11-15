@@ -159,7 +159,7 @@ Page({
       try {
         const tx = await api.adminGet('/admin/stored-value/txns')
         this._svAll = (tx.txns || []).map((t) => Object.assign({}, t, {
-          amountText: t.type === 'consume' ? `−${money(Math.abs(t.amountCents))}` : `+${money(t.amountCents)}`
+          amountText: (t.amountCents<0?'−':'+')+money(Math.abs(t.amountCents))
         }))
         this.setData({
           svRechargeTotal: money(tx.rechargeTotalCents || 0),

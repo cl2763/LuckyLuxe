@@ -1,0 +1,3348 @@
+[
+  {
+    "id": "config-display-cancel",
+    "level": "UI draft + API persistence",
+    "before": {
+      "active": true,
+      "membershipEnabled": true,
+      "displayTypes": [
+        "list"
+      ],
+      "settlementTypes": [
+        "list",
+        "member"
+      ],
+      "revision": 1
+    },
+    "after": {
+      "active": true,
+      "membershipEnabled": true,
+      "displayTypes": [
+        "list"
+      ],
+      "settlementTypes": [
+        "list",
+        "member"
+      ],
+      "revision": 1
+    },
+    "passed": true,
+    "time": "2026-11-14T21:38:20.339Z",
+    "status": "通过",
+    "screenIds": [
+      "U01"
+    ]
+  },
+  {
+    "id": "config-display-save-1",
+    "level": "UI element tap + API persistence",
+    "beforeRevision": 1,
+    "afterRevision": 2,
+    "types": [
+      "list",
+      "share"
+    ],
+    "passed": true,
+    "time": "2026-11-14T21:38:20.715Z",
+    "status": "通过",
+    "screenIds": [
+      "U01"
+    ]
+  },
+  {
+    "id": "config-display-save-2",
+    "level": "UI element tap + API persistence",
+    "beforeRevision": 2,
+    "afterRevision": 3,
+    "types": [
+      "list"
+    ],
+    "passed": true,
+    "time": "2026-11-14T21:38:21.112Z",
+    "status": "通过",
+    "screenIds": [
+      "U01"
+    ]
+  },
+  {
+    "id": "config-display-save-3",
+    "level": "UI element tap + API persistence",
+    "beforeRevision": 3,
+    "afterRevision": 4,
+    "types": [
+      "list",
+      "share"
+    ],
+    "passed": true,
+    "time": "2026-11-14T21:38:21.508Z",
+    "status": "通过",
+    "screenIds": [
+      "U01"
+    ]
+  },
+  {
+    "id": "config-display-save-4",
+    "level": "UI element tap + API persistence",
+    "beforeRevision": 4,
+    "afterRevision": 5,
+    "types": [
+      "list"
+    ],
+    "passed": true,
+    "time": "2026-11-14T21:38:21.899Z",
+    "status": "通过",
+    "screenIds": [
+      "U01"
+    ]
+  },
+  {
+    "id": "config-display-save-5",
+    "level": "UI element tap + API persistence",
+    "beforeRevision": 5,
+    "afterRevision": 6,
+    "types": [
+      "list",
+      "share"
+    ],
+    "passed": true,
+    "time": "2026-11-14T21:38:22.287Z",
+    "status": "通过",
+    "screenIds": [
+      "U01"
+    ]
+  },
+  {
+    "id": "config-display-visual",
+    "passed": true,
+    "evidence": "mini-evidence/U01-config.png",
+    "time": "2026-11-14T21:38:22.657Z",
+    "status": "通过",
+    "screenIds": [
+      "U01"
+    ]
+  },
+  {
+    "id": "config-settlement-cancel",
+    "level": "UI draft + API persistence",
+    "before": {
+      "active": true,
+      "membershipEnabled": true,
+      "displayTypes": [
+        "list",
+        "share"
+      ],
+      "settlementTypes": [
+        "list",
+        "member"
+      ],
+      "revision": 6
+    },
+    "after": {
+      "active": true,
+      "membershipEnabled": true,
+      "displayTypes": [
+        "list",
+        "share"
+      ],
+      "settlementTypes": [
+        "list",
+        "member"
+      ],
+      "revision": 6
+    },
+    "passed": true,
+    "time": "2026-11-14T21:38:27.456Z",
+    "status": "通过",
+    "screenIds": [
+      "U03"
+    ]
+  },
+  {
+    "id": "config-settlement-save-1",
+    "level": "UI element tap + API persistence",
+    "beforeRevision": 6,
+    "afterRevision": 7,
+    "types": [
+      "list",
+      "member",
+      "share"
+    ],
+    "passed": true,
+    "time": "2026-11-14T21:38:27.832Z",
+    "status": "通过",
+    "screenIds": [
+      "U03"
+    ]
+  },
+  {
+    "id": "config-settlement-save-2",
+    "level": "UI element tap + API persistence",
+    "beforeRevision": 7,
+    "afterRevision": 8,
+    "types": [
+      "list",
+      "member"
+    ],
+    "passed": true,
+    "time": "2026-11-14T21:38:28.219Z",
+    "status": "通过",
+    "screenIds": [
+      "U03"
+    ]
+  },
+  {
+    "id": "config-settlement-save-3",
+    "level": "UI element tap + API persistence",
+    "beforeRevision": 8,
+    "afterRevision": 9,
+    "types": [
+      "list",
+      "member",
+      "share"
+    ],
+    "passed": true,
+    "time": "2026-11-14T21:38:28.609Z",
+    "status": "通过",
+    "screenIds": [
+      "U03"
+    ]
+  },
+  {
+    "id": "config-settlement-save-4",
+    "level": "UI element tap + API persistence",
+    "beforeRevision": 9,
+    "afterRevision": 10,
+    "types": [
+      "list",
+      "member"
+    ],
+    "passed": true,
+    "time": "2026-11-14T21:38:29.001Z",
+    "status": "通过",
+    "screenIds": [
+      "U03"
+    ]
+  },
+  {
+    "id": "config-settlement-save-5",
+    "level": "UI element tap + API persistence",
+    "beforeRevision": 10,
+    "afterRevision": 11,
+    "types": [
+      "list",
+      "member",
+      "share"
+    ],
+    "passed": true,
+    "time": "2026-11-14T21:38:29.395Z",
+    "status": "通过",
+    "screenIds": [
+      "U03"
+    ]
+  },
+  {
+    "id": "config-settlement-visual",
+    "passed": true,
+    "evidence": "mini-evidence/U03-config.png",
+    "time": "2026-11-14T21:38:29.764Z",
+    "status": "通过",
+    "screenIds": [
+      "U03"
+    ]
+  },
+  {
+    "id": "price-display-cancel",
+    "level": "UI input/cancel + API persistence",
+    "before": {
+      "system": "display",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 20000,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        }
+      },
+      "revision": 0,
+      "legacy": true
+    },
+    "after": {
+      "system": "display",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 20000,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        }
+      },
+      "revision": 0,
+      "legacy": true
+    },
+    "passed": true,
+    "time": "2026-11-14T21:38:59.888Z",
+    "status": "通过",
+    "screenIds": [
+      "U02",
+      "S25"
+    ]
+  },
+  {
+    "id": "price-display-save-1",
+    "level": "UI input/page save + API persistence",
+    "after": {
+      "system": "display",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 30000,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        },
+        "share": {
+          "priceCents": 15000,
+          "courseTimes": null
+        }
+      },
+      "revision": 1,
+      "legacy": false
+    },
+    "passed": true,
+    "time": "2026-11-14T21:39:13.267Z",
+    "status": "通过",
+    "screenIds": [
+      "U02",
+      "S25"
+    ]
+  },
+  {
+    "id": "price-display-save-2",
+    "level": "UI input/page save + API persistence",
+    "after": {
+      "system": "display",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 30100,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        },
+        "share": {
+          "priceCents": 15000,
+          "courseTimes": null
+        }
+      },
+      "revision": 2,
+      "legacy": false
+    },
+    "passed": true,
+    "time": "2026-11-14T21:39:26.595Z",
+    "status": "通过",
+    "screenIds": [
+      "U02",
+      "S25"
+    ]
+  },
+  {
+    "id": "price-display-save-3",
+    "level": "UI input/page save + API persistence",
+    "after": {
+      "system": "display",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 30200,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        },
+        "share": {
+          "priceCents": 15000,
+          "courseTimes": null
+        }
+      },
+      "revision": 3,
+      "legacy": false
+    },
+    "passed": true,
+    "time": "2026-11-14T21:39:30.953Z",
+    "status": "通过",
+    "screenIds": [
+      "U02",
+      "S25"
+    ]
+  },
+  {
+    "id": "price-display-save-4",
+    "level": "UI input/page save + API persistence",
+    "after": {
+      "system": "display",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 30300,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        },
+        "share": {
+          "priceCents": 15000,
+          "courseTimes": null
+        }
+      },
+      "revision": 4,
+      "legacy": false
+    },
+    "passed": true,
+    "time": "2026-11-14T21:39:35.197Z",
+    "status": "通过",
+    "screenIds": [
+      "U02",
+      "S25"
+    ]
+  },
+  {
+    "id": "price-display-save-5",
+    "level": "UI input/page save + API persistence",
+    "after": {
+      "system": "display",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 30400,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        },
+        "share": {
+          "priceCents": 15000,
+          "courseTimes": null
+        }
+      },
+      "revision": 5,
+      "legacy": false
+    },
+    "passed": true,
+    "time": "2026-11-14T21:39:39.416Z",
+    "status": "通过",
+    "screenIds": [
+      "U02",
+      "S25"
+    ]
+  },
+  {
+    "id": "price-settlement-cancel",
+    "level": "UI input/cancel + API persistence",
+    "before": {
+      "system": "settlement",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 20000,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        }
+      },
+      "revision": 1,
+      "legacy": false
+    },
+    "after": {
+      "system": "settlement",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 20000,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        }
+      },
+      "revision": 1,
+      "legacy": false
+    },
+    "passed": true,
+    "time": "2026-11-14T21:39:56.801Z",
+    "status": "通过",
+    "screenIds": [
+      "U03B",
+      "S15"
+    ]
+  },
+  {
+    "id": "price-settlement-save-1",
+    "level": "UI input/page save + API persistence",
+    "after": {
+      "system": "settlement",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 20000,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        },
+        "share": {
+          "priceCents": 15000,
+          "courseTimes": null
+        }
+      },
+      "revision": 2,
+      "legacy": false
+    },
+    "passed": true,
+    "time": "2026-11-14T21:40:10.166Z",
+    "status": "通过",
+    "screenIds": [
+      "U03B",
+      "S15"
+    ]
+  },
+  {
+    "id": "price-settlement-save-2",
+    "level": "UI input/page save + API persistence",
+    "after": {
+      "system": "settlement",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 20100,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        },
+        "share": {
+          "priceCents": 15000,
+          "courseTimes": null
+        }
+      },
+      "revision": 3,
+      "legacy": false
+    },
+    "passed": true,
+    "time": "2026-11-14T21:40:23.491Z",
+    "status": "通过",
+    "screenIds": [
+      "U03B",
+      "S15"
+    ]
+  },
+  {
+    "id": "price-settlement-save-3",
+    "level": "UI input/page save + API persistence",
+    "after": {
+      "system": "settlement",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 20200,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        },
+        "share": {
+          "priceCents": 15000,
+          "courseTimes": null
+        }
+      },
+      "revision": 4,
+      "legacy": false
+    },
+    "passed": true,
+    "time": "2026-11-14T21:40:27.830Z",
+    "status": "通过",
+    "screenIds": [
+      "U03B",
+      "S15"
+    ]
+  },
+  {
+    "id": "price-settlement-save-4",
+    "level": "UI input/page save + API persistence",
+    "after": {
+      "system": "settlement",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 20300,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        },
+        "share": {
+          "priceCents": 15000,
+          "courseTimes": null
+        }
+      },
+      "revision": 5,
+      "legacy": false
+    },
+    "passed": true,
+    "time": "2026-11-14T21:40:41.162Z",
+    "status": "通过",
+    "screenIds": [
+      "U03B",
+      "S15"
+    ]
+  },
+  {
+    "id": "price-settlement-save-5",
+    "level": "UI input/page save + API persistence",
+    "after": {
+      "system": "settlement",
+      "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+      "prices": {
+        "list": {
+          "priceCents": 20400,
+          "courseTimes": null
+        },
+        "member": {
+          "priceCents": 17000,
+          "courseTimes": null
+        },
+        "share": {
+          "priceCents": 15000,
+          "courseTimes": null
+        }
+      },
+      "revision": 6,
+      "legacy": false
+    },
+    "passed": true,
+    "time": "2026-11-14T21:40:45.392Z",
+    "status": "通过",
+    "screenIds": [
+      "U03B",
+      "S15"
+    ]
+  },
+  {
+    "screenIds": [
+      "U05"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "giftItems": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ],
+      "defaultPersonalDiscount": {
+        "packageId": "pkg_mwgxoq0m_lovj5f",
+        "rateBps": 8500,
+        "revision": 1
+      },
+      "id": "pkg_mwgxoq0m_lovj5f",
+      "kind": "recharge",
+      "name": "操作验收充值套餐",
+      "priceCents": 10000,
+      "bonusCents": 1000,
+      "timesCount": 0,
+      "scope": "",
+      "benefits": "",
+      "isActive": true,
+      "sortOrder": 0,
+      "validDays": null,
+      "projectGroup": "",
+      "mallVisible": true
+    },
+    "id": "package-create",
+    "level": "UI handlers/save + API persistence",
+    "after": {
+      "giftItems": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ],
+      "defaultPersonalDiscount": {
+        "packageId": "pkg_mwgxoq0m_lovj5f",
+        "rateBps": 8500,
+        "revision": 1
+      },
+      "id": "pkg_mwgxoq0m_lovj5f",
+      "kind": "recharge",
+      "name": "操作验收充值套餐",
+      "priceCents": 10000,
+      "bonusCents": 1000,
+      "timesCount": 0,
+      "scope": "",
+      "benefits": "",
+      "isActive": true,
+      "sortOrder": 0,
+      "validDays": null,
+      "projectGroup": "",
+      "mallVisible": true
+    },
+    "passed": true,
+    "time": "2026-11-14T21:44:45.088Z"
+  },
+  {
+    "screenIds": [
+      "U05"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": "操作验收充值套餐",
+    "id": "package-cancel",
+    "level": "UI handler/cancel + API persistence",
+    "after": "操作验收充值套餐",
+    "passed": true,
+    "time": "2026-11-14T21:44:58.468Z"
+  },
+  {
+    "screenIds": [
+      "U05"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "benefits": "全收费服务个人折扣·第1轮",
+      "price": 10000,
+      "bonus": 1000,
+      "gifts": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ]
+    },
+    "id": "package-save-1",
+    "level": "UI handlers/save + API persistence",
+    "after": {
+      "benefits": "全收费服务个人折扣·第1轮",
+      "price": 10000,
+      "bonus": 1000,
+      "gifts": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ]
+    },
+    "passed": true,
+    "time": "2026-11-14T21:45:03.152Z"
+  },
+  {
+    "screenIds": [
+      "U05"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "benefits": "全收费服务个人折扣·第2轮",
+      "price": 10000,
+      "bonus": 1000,
+      "gifts": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ]
+    },
+    "id": "package-save-2",
+    "level": "UI handlers/save + API persistence",
+    "after": {
+      "benefits": "全收费服务个人折扣·第2轮",
+      "price": 10000,
+      "bonus": 1000,
+      "gifts": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ]
+    },
+    "passed": true,
+    "time": "2026-11-14T21:45:16.934Z"
+  },
+  {
+    "screenIds": [
+      "U05"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "benefits": "全收费服务个人折扣·第3轮",
+      "price": 10000,
+      "bonus": 1000,
+      "gifts": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ]
+    },
+    "id": "package-save-3",
+    "level": "UI handlers/save + API persistence",
+    "after": {
+      "benefits": "全收费服务个人折扣·第3轮",
+      "price": 10000,
+      "bonus": 1000,
+      "gifts": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ]
+    },
+    "passed": true,
+    "time": "2026-11-14T21:45:30.718Z"
+  },
+  {
+    "screenIds": [
+      "U05"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "benefits": "全收费服务个人折扣·第4轮",
+      "price": 10000,
+      "bonus": 1000,
+      "gifts": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ]
+    },
+    "id": "package-save-4",
+    "level": "UI handlers/save + API persistence",
+    "after": {
+      "benefits": "全收费服务个人折扣·第4轮",
+      "price": 10000,
+      "bonus": 1000,
+      "gifts": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ]
+    },
+    "passed": true,
+    "time": "2026-11-14T21:45:44.507Z"
+  },
+  {
+    "screenIds": [
+      "U05"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "benefits": "全收费服务个人折扣·第5轮",
+      "price": 10000,
+      "bonus": 1000,
+      "gifts": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ]
+    },
+    "id": "package-save-5",
+    "level": "UI handlers/save + API persistence",
+    "after": {
+      "benefits": "全收费服务个人折扣·第5轮",
+      "price": 10000,
+      "bonus": 1000,
+      "gifts": [
+        {
+          "name": "护理赠项",
+          "quantity": 1,
+          "unitValueCents": 2000
+        }
+      ]
+    },
+    "passed": true,
+    "time": "2026-11-14T21:45:58.300Z"
+  },
+  {
+    "screenIds": [
+      "U10",
+      "U26"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "revision": 1,
+      "rate": 8500
+    },
+    "id": "owner-discount-save-1",
+    "level": "UI component save + API persistence",
+    "before": {
+      "revision": 0,
+      "rate": null
+    },
+    "after": {
+      "revision": 1,
+      "rate": 8500
+    },
+    "passed": true,
+    "time": "2026-11-14T21:46:46.645Z"
+  },
+  {
+    "screenIds": [
+      "U10",
+      "U26"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "revision": 2,
+      "rate": 9000
+    },
+    "id": "owner-discount-save-2",
+    "level": "UI component save + API persistence",
+    "before": {
+      "revision": 1,
+      "rate": 8500
+    },
+    "after": {
+      "revision": 2,
+      "rate": 9000
+    },
+    "passed": true,
+    "time": "2026-11-14T21:46:46.688Z"
+  },
+  {
+    "screenIds": [
+      "U10",
+      "U26"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "revision": 3,
+      "rate": 8500
+    },
+    "id": "owner-discount-save-3",
+    "level": "UI component save + API persistence",
+    "before": {
+      "revision": 2,
+      "rate": 9000
+    },
+    "after": {
+      "revision": 3,
+      "rate": 8500
+    },
+    "passed": true,
+    "time": "2026-11-14T21:46:46.733Z"
+  },
+  {
+    "screenIds": [
+      "U10",
+      "U26"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "revision": 4,
+      "rate": 9000
+    },
+    "id": "owner-discount-save-4",
+    "level": "UI component save + API persistence",
+    "before": {
+      "revision": 3,
+      "rate": 8500
+    },
+    "after": {
+      "revision": 4,
+      "rate": 9000
+    },
+    "passed": true,
+    "time": "2026-11-14T21:46:46.779Z"
+  },
+  {
+    "screenIds": [
+      "U10",
+      "U26"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "revision": 5,
+      "rate": 8500
+    },
+    "id": "owner-discount-save-5",
+    "level": "UI component save + API persistence",
+    "before": {
+      "revision": 4,
+      "rate": 9000
+    },
+    "after": {
+      "revision": 5,
+      "rate": 8500
+    },
+    "passed": true,
+    "time": "2026-11-14T21:46:46.822Z"
+  },
+  {
+    "screenIds": [
+      "U10",
+      "U26"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "owner-discount-cancel",
+    "passed": true,
+    "level": "UI cancel + API persistence",
+    "time": "2026-11-14T21:46:46.832Z"
+  },
+  {
+    "screenIds": [
+      "U11"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 11000,
+    "id": "recharge-submit-1",
+    "before": 0,
+    "after": 11000,
+    "level": "UI page submit + API balance/discount",
+    "passed": true,
+    "time": "2026-11-14T21:46:51.349Z"
+  },
+  {
+    "screenIds": [
+      "U11"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 22000,
+    "id": "recharge-submit-2",
+    "before": 11000,
+    "after": 22000,
+    "level": "UI page submit + API balance/discount",
+    "passed": true,
+    "time": "2026-11-14T21:46:55.844Z"
+  },
+  {
+    "screenIds": [
+      "U11"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 33000,
+    "id": "recharge-submit-3",
+    "before": 22000,
+    "after": 33000,
+    "level": "UI page submit + API balance/discount",
+    "passed": true,
+    "time": "2026-11-14T21:47:00.326Z"
+  },
+  {
+    "screenIds": [
+      "U11"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 44000,
+    "id": "recharge-submit-4",
+    "before": 33000,
+    "after": 44000,
+    "level": "UI page submit + API balance/discount",
+    "passed": true,
+    "time": "2026-11-14T21:47:04.859Z"
+  },
+  {
+    "screenIds": [
+      "U11"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 55000,
+    "id": "recharge-submit-5",
+    "before": 44000,
+    "after": 55000,
+    "level": "UI page submit + API balance/discount",
+    "passed": true,
+    "time": "2026-11-14T21:47:09.343Z"
+  },
+  {
+    "screenIds": [
+      "U23"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "refund-reconfirm-block-1",
+    "level": "UI submit without confirmation + API unchanged",
+    "passed": true,
+    "time": "2026-11-14T21:47:13.522Z"
+  },
+  {
+    "screenIds": [
+      "U23"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 54000,
+    "id": "refund-submit-1",
+    "before": 55000,
+    "after": 54000,
+    "level": "UI confirm/submit + API balance",
+    "passed": true,
+    "time": "2026-11-14T21:47:14.649Z"
+  },
+  {
+    "screenIds": [
+      "U23"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "refund-reconfirm-block-2",
+    "level": "UI submit without confirmation + API unchanged",
+    "passed": true,
+    "time": "2026-11-14T21:47:18.815Z"
+  },
+  {
+    "screenIds": [
+      "U23"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 53000,
+    "id": "refund-submit-2",
+    "before": 54000,
+    "after": 53000,
+    "level": "UI confirm/submit + API balance",
+    "passed": true,
+    "time": "2026-11-14T21:47:19.941Z"
+  },
+  {
+    "screenIds": [
+      "U23"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "refund-reconfirm-block-3",
+    "level": "UI submit without confirmation + API unchanged",
+    "passed": true,
+    "time": "2026-11-14T21:47:24.125Z"
+  },
+  {
+    "screenIds": [
+      "U23"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 52000,
+    "id": "refund-submit-3",
+    "before": 53000,
+    "after": 52000,
+    "level": "UI confirm/submit + API balance",
+    "passed": true,
+    "time": "2026-11-14T21:47:25.254Z"
+  },
+  {
+    "screenIds": [
+      "U23"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "refund-reconfirm-block-4",
+    "level": "UI submit without confirmation + API unchanged",
+    "passed": true,
+    "time": "2026-11-14T21:47:29.439Z"
+  },
+  {
+    "screenIds": [
+      "U23"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 51000,
+    "id": "refund-submit-4",
+    "before": 52000,
+    "after": 51000,
+    "level": "UI confirm/submit + API balance",
+    "passed": true,
+    "time": "2026-11-14T21:47:30.566Z"
+  },
+  {
+    "screenIds": [
+      "U23"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "refund-reconfirm-block-5",
+    "level": "UI submit without confirmation + API unchanged",
+    "passed": true,
+    "time": "2026-11-14T21:47:34.744Z"
+  },
+  {
+    "screenIds": [
+      "U23"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 50000,
+    "id": "refund-submit-5",
+    "before": 51000,
+    "after": 50000,
+    "level": "UI confirm/submit + API balance",
+    "passed": true,
+    "time": "2026-11-14T21:47:35.870Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "reverse-reconfirm-block-1",
+    "passed": true,
+    "level": "UI no-confirm guard + API balance",
+    "time": "2026-11-14T21:47:40.703Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "reverse-cancel-1",
+    "passed": true,
+    "level": "native modal cancel + API balance",
+    "time": "2026-11-14T21:47:41.201Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 50000,
+    "id": "reverse-submit-1",
+    "before": 51100,
+    "after": 50000,
+    "passed": true,
+    "level": "UI/native modal confirm + API exact principal+bonus reversal",
+    "time": "2026-11-14T21:47:41.930Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "reverse-reconfirm-block-2",
+    "passed": true,
+    "level": "UI no-confirm guard + API balance",
+    "time": "2026-11-14T21:47:46.738Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "reverse-cancel-2",
+    "passed": true,
+    "level": "native modal cancel + API balance",
+    "time": "2026-11-14T21:47:47.163Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 50000,
+    "id": "reverse-submit-2",
+    "before": 51100,
+    "after": 50000,
+    "passed": true,
+    "level": "UI/native modal confirm + API exact principal+bonus reversal",
+    "time": "2026-11-14T21:47:47.887Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "reverse-reconfirm-block-3",
+    "passed": true,
+    "level": "UI no-confirm guard + API balance",
+    "time": "2026-11-14T21:47:52.703Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "reverse-cancel-3",
+    "passed": true,
+    "level": "native modal cancel + API balance",
+    "time": "2026-11-14T21:47:53.131Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 50000,
+    "id": "reverse-submit-3",
+    "before": 51100,
+    "after": 50000,
+    "passed": true,
+    "level": "UI/native modal confirm + API exact principal+bonus reversal",
+    "time": "2026-11-14T21:47:53.862Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "reverse-reconfirm-block-4",
+    "passed": true,
+    "level": "UI no-confirm guard + API balance",
+    "time": "2026-11-14T21:47:58.675Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "reverse-cancel-4",
+    "passed": true,
+    "level": "native modal cancel + API balance",
+    "time": "2026-11-14T21:47:59.099Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 50000,
+    "id": "reverse-submit-4",
+    "before": 51100,
+    "after": 50000,
+    "passed": true,
+    "level": "UI/native modal confirm + API exact principal+bonus reversal",
+    "time": "2026-11-14T21:47:59.829Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "reverse-reconfirm-block-5",
+    "passed": true,
+    "level": "UI no-confirm guard + API balance",
+    "time": "2026-11-14T21:48:04.639Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "reverse-cancel-5",
+    "passed": true,
+    "level": "native modal cancel + API balance",
+    "time": "2026-11-14T21:48:05.062Z"
+  },
+  {
+    "screenIds": [
+      "S21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 50000,
+    "id": "reverse-submit-5",
+    "before": 51100,
+    "after": 50000,
+    "passed": true,
+    "level": "UI/native modal confirm + API exact principal+bonus reversal",
+    "time": "2026-11-14T21:48:05.789Z"
+  },
+  {
+    "screenIds": [],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "copyEn": {
+        "eligibilityText": "Active",
+        "discountText": "15% off · Pay 85%",
+        "statusText": "Your personal discount applies to all chargeable services."
+      },
+      "active": true,
+      "eligibilityText": "有效",
+      "discountText": "8.5折",
+      "statusText": "所有收费服务按本人折扣结算。",
+      "userId": "user_mwgxft68_zmjp5l",
+      "rateBps": 8500,
+      "revision": 25,
+      "eligible": true,
+      "effectiveRateBps": 8500,
+      "status": "active",
+      "balanceCents": 50000
+    },
+    "id": "account-final",
+    "passed": true,
+    "after": {
+      "copyEn": {
+        "eligibilityText": "Active",
+        "discountText": "15% off · Pay 85%",
+        "statusText": "Your personal discount applies to all chargeable services."
+      },
+      "active": true,
+      "eligibilityText": "有效",
+      "discountText": "8.5折",
+      "statusText": "所有收费服务按本人折扣结算。",
+      "userId": "user_mwgxft68_zmjp5l",
+      "rateBps": 8500,
+      "revision": 25,
+      "eligible": true,
+      "effectiveRateBps": 8500,
+      "status": "active",
+      "balanceCents": 50000
+    },
+    "evidence": "mini-evidence/account-after-5rounds.png",
+    "time": "2026-11-14T21:48:06.171Z"
+  },
+  {
+    "screenIds": [
+      "U12"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 50000,
+      "pending": 9
+    },
+    "id": "receipt-ack-1",
+    "level": "UI receipt confirmation + API readback",
+    "before": {
+      "balance": 50000,
+      "pending": 10
+    },
+    "after": {
+      "balance": 50000,
+      "pending": 9
+    },
+    "passed": true,
+    "time": "2026-11-14T21:49:36.949Z"
+  },
+  {
+    "screenIds": [
+      "U12"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 50000,
+      "pending": 8
+    },
+    "id": "receipt-ack-2",
+    "level": "UI receipt confirmation + API readback",
+    "before": {
+      "balance": 50000,
+      "pending": 9
+    },
+    "after": {
+      "balance": 50000,
+      "pending": 8
+    },
+    "passed": true,
+    "time": "2026-11-14T21:49:36.990Z"
+  },
+  {
+    "screenIds": [
+      "U12"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 50000,
+      "pending": 7
+    },
+    "id": "receipt-ack-3",
+    "level": "UI receipt confirmation + API readback",
+    "before": {
+      "balance": 50000,
+      "pending": 8
+    },
+    "after": {
+      "balance": 50000,
+      "pending": 7
+    },
+    "passed": true,
+    "time": "2026-11-14T21:49:37.027Z"
+  },
+  {
+    "screenIds": [
+      "U12"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 50000,
+      "pending": 6
+    },
+    "id": "receipt-ack-4",
+    "level": "UI receipt confirmation + API readback",
+    "before": {
+      "balance": 50000,
+      "pending": 7
+    },
+    "after": {
+      "balance": 50000,
+      "pending": 6
+    },
+    "passed": true,
+    "time": "2026-11-14T21:49:37.064Z"
+  },
+  {
+    "screenIds": [
+      "U12"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 50000,
+      "pending": 5
+    },
+    "id": "receipt-ack-5",
+    "level": "UI receipt confirmation + API readback",
+    "before": {
+      "balance": 50000,
+      "pending": 6
+    },
+    "after": {
+      "balance": 50000,
+      "pending": 5
+    },
+    "passed": true,
+    "time": "2026-11-14T21:49:37.113Z"
+  },
+  {
+    "screenIds": [
+      "U12",
+      "S05"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "receipt-final-state",
+    "passed": true,
+    "level": "rendered UI",
+    "evidence": "mini-evidence/U12-after-five-ack.png",
+    "time": "2026-11-14T21:49:37.482Z"
+  },
+  {
+    "screenIds": [
+      "U06",
+      "S05"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": "pages/mall/index",
+    "id": "receipt-mall-entry",
+    "level": "UI navigation",
+    "passed": true,
+    "evidence": "mini-evidence/U06-mall.png",
+    "time": "2026-11-14T21:49:38.670Z"
+  },
+  {
+    "screenIds": [
+      "U07"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "path": "pages/services/index"
+    },
+    "id": "U07-actual-page",
+    "level": "rendered live UI",
+    "passed": true,
+    "evidence": "mini-evidence/U07-actual-page.png",
+    "time": "2026-11-14T21:49:43.372Z"
+  },
+  {
+    "screenIds": [
+      "U21"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "path": "pages/member-benefits/index"
+    },
+    "id": "U21-actual-page",
+    "level": "rendered live UI",
+    "passed": true,
+    "evidence": "mini-evidence/U21-actual-page.png",
+    "time": "2026-11-14T21:49:48.035Z"
+  },
+  {
+    "screenIds": [
+      "S01"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "path": "pages/home/index"
+    },
+    "id": "S01-actual-page",
+    "level": "rendered live UI",
+    "passed": true,
+    "evidence": "mini-evidence/S01-actual-page.png",
+    "time": "2026-11-14T21:49:52.756Z"
+  },
+  {
+    "screenIds": [
+      "S02"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "path": "pages/service-detail/index"
+    },
+    "id": "S02-actual-page",
+    "level": "rendered live UI",
+    "passed": true,
+    "evidence": "mini-evidence/S02-actual-page.png",
+    "time": "2026-11-14T21:49:57.424Z"
+  },
+  {
+    "screenIds": [
+      "S14"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "S14-english",
+    "level": "rendered live UI",
+    "passed": true,
+    "evidence": "mini-evidence/S14-english.png",
+    "time": "2026-11-14T21:50:02.089Z"
+  },
+  {
+    "screenIds": [
+      "S06"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "readOnly": true,
+      "denied": true
+    },
+    "id": "staff-discount-readonly",
+    "level": "UI readonly + API forbidden write",
+    "passed": true,
+    "evidence": "mini-evidence/S06-staff-readonly.png",
+    "time": "2026-11-14T21:50:45.069Z"
+  },
+  {
+    "screenIds": [
+      "U13",
+      "U14",
+      "U14B",
+      "U15",
+      "U16",
+      "U17",
+      "U18",
+      "S26"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 50000,
+      "rate": 8500,
+      "documents": [
+        {
+          "id": "6aaf5dee-7f31-454c-95c7-447c18bb0eb5",
+          "status": "pending_sign",
+          "beneficiaryKey": "self",
+          "components": 3,
+          "coupon": 1000,
+          "recharge": 10000,
+          "rate": 8000
+        },
+        {
+          "id": "47806ba6-ddd6-490f-b5c6-d7b90e6e95d7",
+          "status": "pending_sign",
+          "beneficiaryKey": "mp-mwgxwjro-gmqse0g9to",
+          "components": 2,
+          "coupon": 0,
+          "recharge": 0,
+          "rate": 8000
+        }
+      ]
+    },
+    "id": "staff-combined-generate-1",
+    "level": "UI handlers generate real documents + API snapshots",
+    "before": {
+      "balance": 50000,
+      "rate": 8500
+    },
+    "after": {
+      "balance": 50000,
+      "rate": 8500,
+      "documents": [
+        {
+          "id": "6aaf5dee-7f31-454c-95c7-447c18bb0eb5",
+          "status": "pending_sign",
+          "beneficiaryKey": "self",
+          "components": 3,
+          "coupon": 1000,
+          "recharge": 10000,
+          "rate": 8000
+        },
+        {
+          "id": "47806ba6-ddd6-490f-b5c6-d7b90e6e95d7",
+          "status": "pending_sign",
+          "beneficiaryKey": "mp-mwgxwjro-gmqse0g9to",
+          "components": 2,
+          "coupon": 0,
+          "recharge": 0,
+          "rate": 8000
+        }
+      ]
+    },
+    "passed": true,
+    "time": "2026-11-14T21:50:50.190Z"
+  },
+  {
+    "screenIds": [
+      "U13",
+      "U14",
+      "U14B",
+      "U15",
+      "U16",
+      "U17",
+      "U18",
+      "S26"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 50000,
+      "rate": 8500,
+      "documents": [
+        {
+          "id": "3e057989-feb5-4e17-ad80-4157e8849a18",
+          "status": "pending_sign",
+          "beneficiaryKey": "self",
+          "components": 3,
+          "coupon": 1000,
+          "recharge": 10000,
+          "rate": 8000
+        },
+        {
+          "id": "d10dab30-ba47-4407-a0b6-370f6c79c914",
+          "status": "pending_sign",
+          "beneficiaryKey": "mp-mwgxwnpi-lricx8lxise",
+          "components": 2,
+          "coupon": 0,
+          "recharge": 0,
+          "rate": 8000
+        }
+      ]
+    },
+    "id": "staff-combined-generate-2",
+    "level": "UI handlers generate real documents + API snapshots",
+    "before": {
+      "balance": 50000,
+      "rate": 8500
+    },
+    "after": {
+      "balance": 50000,
+      "rate": 8500,
+      "documents": [
+        {
+          "id": "3e057989-feb5-4e17-ad80-4157e8849a18",
+          "status": "pending_sign",
+          "beneficiaryKey": "self",
+          "components": 3,
+          "coupon": 1000,
+          "recharge": 10000,
+          "rate": 8000
+        },
+        {
+          "id": "d10dab30-ba47-4407-a0b6-370f6c79c914",
+          "status": "pending_sign",
+          "beneficiaryKey": "mp-mwgxwnpi-lricx8lxise",
+          "components": 2,
+          "coupon": 0,
+          "recharge": 0,
+          "rate": 8000
+        }
+      ]
+    },
+    "passed": true,
+    "time": "2026-11-14T21:50:55.270Z"
+  },
+  {
+    "screenIds": [
+      "U13",
+      "U14",
+      "U14B",
+      "U15",
+      "U16",
+      "U17",
+      "U18",
+      "S26"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 50000,
+      "rate": 8500,
+      "documents": [
+        {
+          "id": "32b90672-668d-40fb-8943-e577180c7e6d",
+          "status": "pending_sign",
+          "beneficiaryKey": "self",
+          "components": 3,
+          "coupon": 1000,
+          "recharge": 10000,
+          "rate": 8000
+        },
+        {
+          "id": "ff16ee39-840b-46f7-8c74-38e8387af648",
+          "status": "pending_sign",
+          "beneficiaryKey": "mp-mwgxwrmt-cc6gewcoazb",
+          "components": 2,
+          "coupon": 0,
+          "recharge": 0,
+          "rate": 8000
+        }
+      ]
+    },
+    "id": "staff-combined-generate-3",
+    "level": "UI handlers generate real documents + API snapshots",
+    "before": {
+      "balance": 50000,
+      "rate": 8500
+    },
+    "after": {
+      "balance": 50000,
+      "rate": 8500,
+      "documents": [
+        {
+          "id": "32b90672-668d-40fb-8943-e577180c7e6d",
+          "status": "pending_sign",
+          "beneficiaryKey": "self",
+          "components": 3,
+          "coupon": 1000,
+          "recharge": 10000,
+          "rate": 8000
+        },
+        {
+          "id": "ff16ee39-840b-46f7-8c74-38e8387af648",
+          "status": "pending_sign",
+          "beneficiaryKey": "mp-mwgxwrmt-cc6gewcoazb",
+          "components": 2,
+          "coupon": 0,
+          "recharge": 0,
+          "rate": 8000
+        }
+      ]
+    },
+    "passed": true,
+    "time": "2026-11-14T21:51:00.354Z"
+  },
+  {
+    "screenIds": [
+      "U13",
+      "U14",
+      "U14B",
+      "U15",
+      "U16",
+      "U17",
+      "U18",
+      "S26"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 50000,
+      "rate": 8500,
+      "documents": [
+        {
+          "id": "17c277c5-cdf3-4af1-810b-0500dac13270",
+          "status": "pending_sign",
+          "beneficiaryKey": "self",
+          "components": 3,
+          "coupon": 1000,
+          "recharge": 10000,
+          "rate": 8000
+        },
+        {
+          "id": "4eaa4c8c-4b09-4877-aeff-c75d56b025ee",
+          "status": "pending_sign",
+          "beneficiaryKey": "mp-mwgxwvks-8on4z35oeaw",
+          "components": 2,
+          "coupon": 0,
+          "recharge": 0,
+          "rate": 8000
+        }
+      ]
+    },
+    "id": "staff-combined-generate-4",
+    "level": "UI handlers generate real documents + API snapshots",
+    "before": {
+      "balance": 50000,
+      "rate": 8500
+    },
+    "after": {
+      "balance": 50000,
+      "rate": 8500,
+      "documents": [
+        {
+          "id": "17c277c5-cdf3-4af1-810b-0500dac13270",
+          "status": "pending_sign",
+          "beneficiaryKey": "self",
+          "components": 3,
+          "coupon": 1000,
+          "recharge": 10000,
+          "rate": 8000
+        },
+        {
+          "id": "4eaa4c8c-4b09-4877-aeff-c75d56b025ee",
+          "status": "pending_sign",
+          "beneficiaryKey": "mp-mwgxwvks-8on4z35oeaw",
+          "components": 2,
+          "coupon": 0,
+          "recharge": 0,
+          "rate": 8000
+        }
+      ]
+    },
+    "passed": true,
+    "time": "2026-11-14T21:51:05.465Z"
+  },
+  {
+    "screenIds": [
+      "U13",
+      "U14",
+      "U14B",
+      "U15",
+      "U16",
+      "U17",
+      "U18",
+      "S26"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 50000,
+      "rate": 8500,
+      "documents": [
+        {
+          "id": "87a0cf1f-6ac1-4efd-9361-24a85bc5b8fc",
+          "status": "pending_sign",
+          "beneficiaryKey": "self",
+          "components": 3,
+          "coupon": 1000,
+          "recharge": 10000,
+          "rate": 8000
+        },
+        {
+          "id": "5ae307b1-2781-46fe-83ec-2a43804383d8",
+          "status": "pending_sign",
+          "beneficiaryKey": "mp-mwgxwzht-9k0md9ofdxn",
+          "components": 2,
+          "coupon": 0,
+          "recharge": 0,
+          "rate": 8000
+        }
+      ]
+    },
+    "id": "staff-combined-generate-5",
+    "level": "UI handlers generate real documents + API snapshots",
+    "before": {
+      "balance": 50000,
+      "rate": 8500
+    },
+    "after": {
+      "balance": 50000,
+      "rate": 8500,
+      "documents": [
+        {
+          "id": "87a0cf1f-6ac1-4efd-9361-24a85bc5b8fc",
+          "status": "pending_sign",
+          "beneficiaryKey": "self",
+          "components": 3,
+          "coupon": 1000,
+          "recharge": 10000,
+          "rate": 8000
+        },
+        {
+          "id": "5ae307b1-2781-46fe-83ec-2a43804383d8",
+          "status": "pending_sign",
+          "beneficiaryKey": "mp-mwgxwzht-9k0md9ofdxn",
+          "components": 2,
+          "coupon": 0,
+          "recharge": 0,
+          "rate": 8000
+        }
+      ]
+    },
+    "passed": true,
+    "evidence": "mini-evidence/U18-combined-created.png",
+    "time": "2026-11-14T21:51:10.924Z"
+  },
+  {
+    "screenIds": [
+      "U18",
+      "U19"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "path": "pages/sign/index",
+      "hasScopedLink": true
+    },
+    "id": "local-sign-entry",
+    "level": "UI navigation to real web-view signing link (not signature)",
+    "passed": true,
+    "evidence": "mini-evidence/U19-local-sign-entry.png",
+    "time": "2026-11-14T21:51:12.093Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "cart-empty-selection-guard-1",
+    "level": "UI cart selection/checkout guard",
+    "passed": true,
+    "time": "2026-11-14T21:52:02.041Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": "修改后第1轮",
+    "id": "cart-edit-1",
+    "level": "UI edit/save + cart persistence",
+    "passed": true,
+    "time": "2026-11-14T21:52:07.338Z"
+  },
+  {
+    "screenIds": [
+      "U08"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "items": [
+        {
+          "clientItemId": "cart_1794693118001",
+          "requiredCents": 5000,
+          "waivedCents": 0,
+          "retainedCents": 0,
+          "storedDeductionCents": 5000,
+          "offlineDueCents": 0,
+          "retainUses": []
+        }
+      ],
+      "totals": {
+        "requiredCents": 5000,
+        "waivedCents": 0,
+        "retainedCents": 0,
+        "storedDeductionCents": 5000,
+        "offlineDueCents": 0
+      },
+      "balanceBeforeCents": 50000,
+      "balanceAfterCents": 45000,
+      "reviewHash": "334f4b7436baa55e60cd316b91e6dcd7c5896fe1e9b035de986c015308a12eeb",
+      "display": {
+        "requiredText": "CAD $50.00",
+        "waivedText": "CAD $0.00",
+        "retainedText": "CAD $0.00",
+        "storedText": "CAD $50.00",
+        "offlineText": "CAD $0.00",
+        "balanceBeforeText": "CAD $500.00",
+        "balanceAfterText": "CAD $450.00",
+        "note": "储值仅抵扣预约定金；未抵扣部分由门店线下收取。取消按本店规则返还原账户。"
+      }
+    },
+    "id": "booking-preview",
+    "level": "UI server quote",
+    "passed": true,
+    "evidence": "mini-evidence/U08-actual-checkout.png",
+    "time": "2026-11-14T21:52:08.294Z"
+  },
+  {
+    "screenIds": [
+      "U08",
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "bookingId": "booking_mwgxy8hf_efe8fj",
+      "deduction": 5000
+    },
+    "id": "booking-submit-1",
+    "level": "UI submit + persisted booking/balance",
+    "before": 50000,
+    "after": 45000,
+    "passed": true,
+    "time": "2026-11-14T21:52:08.913Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "booking-cancel-abort-1",
+    "level": "native modal cancel + API unchanged",
+    "passed": true,
+    "time": "2026-11-14T21:53:04.514Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 50000,
+    "id": "booking-cancel-refund-1",
+    "level": "native modal confirm + real refund",
+    "before": 45000,
+    "after": 50000,
+    "passed": true,
+    "evidence": "mini-evidence/S24-first-cancel-refund.png",
+    "time": "2026-11-14T21:53:06.145Z"
+  },
+  {
+    "screenIds": [
+      "U11",
+      "S09B"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 2000,
+      "rate": null
+    },
+    "id": "low-customer-recharge",
+    "level": "UI submit + persisted balance",
+    "passed": true,
+    "time": "2026-11-14T21:53:50.700Z"
+  },
+  {
+    "screenIds": [
+      "S09B"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "discount-unset-state",
+    "level": "live UI fallback",
+    "passed": true,
+    "evidence": "mini-evidence/S09B-unset.png",
+    "time": "2026-11-14T21:53:56.170Z"
+  },
+  {
+    "screenIds": [
+      "S09"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": 10000,
+    "id": "discount-none-save",
+    "level": "UI owner save + persisted 10000 bps",
+    "passed": true,
+    "evidence": "mini-evidence/S09-no-discount.png",
+    "time": "2026-11-14T21:53:56.662Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-cart-empty-selection-guard-1",
+    "level": "UI cart selection/checkout guard",
+    "passed": true,
+    "time": "2026-11-14T21:54:14.678Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-cart-empty-selection-guard-1",
+    "level": "UI cart selection/checkout guard",
+    "passed": true,
+    "time": "2026-11-14T21:54:55.488Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-cart-empty-selection-guard-1",
+    "level": "UI cart selection/checkout guard",
+    "passed": true,
+    "time": "2026-11-14T21:55:29.349Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": "修改后第1轮",
+    "id": "mixed-cart-edit-1",
+    "level": "UI edit/save + cart persistence",
+    "passed": true,
+    "time": "2026-11-14T21:55:38.925Z"
+  },
+  {
+    "screenIds": [
+      "U08"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "items": [
+        {
+          "clientItemId": "cart_1794693323812",
+          "requiredCents": 5000,
+          "waivedCents": 0,
+          "retainedCents": 0,
+          "storedDeductionCents": 2000,
+          "offlineDueCents": 3000,
+          "retainUses": []
+        }
+      ],
+      "totals": {
+        "requiredCents": 5000,
+        "waivedCents": 0,
+        "retainedCents": 0,
+        "storedDeductionCents": 2000,
+        "offlineDueCents": 3000
+      },
+      "balanceBeforeCents": 2000,
+      "balanceAfterCents": 0,
+      "reviewHash": "ff3833a8d638ab1581b32611319c38893dde31a509f1cbbdd47f48bb867e8ee6",
+      "display": {
+        "requiredText": "CAD $50.00",
+        "waivedText": "CAD $0.00",
+        "retainedText": "CAD $0.00",
+        "storedText": "CAD $20.00",
+        "offlineText": "CAD $30.00",
+        "balanceBeforeText": "CAD $20.00",
+        "balanceAfterText": "CAD $0.00",
+        "note": "储值仅抵扣预约定金；未抵扣部分由门店线下收取。取消按本店规则返还原账户。"
+      }
+    },
+    "id": "mixed-booking-preview",
+    "level": "UI server quote",
+    "passed": true,
+    "evidence": "mini-evidence/U08-mixed-checkout.png",
+    "time": "2026-11-14T21:55:41.441Z"
+  },
+  {
+    "screenIds": [
+      "U08",
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "bookingId": "booking_mwgy2sz8_cqr7h7",
+      "deduction": 2000
+    },
+    "id": "mixed-booking-submit-1",
+    "level": "UI submit + persisted booking/balance",
+    "before": 2000,
+    "after": 0,
+    "passed": true,
+    "time": "2026-11-14T21:55:43.384Z"
+  },
+  {
+    "screenIds": [
+      "U08"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-booking-double-submit-1",
+    "level": "two UI submit handlers during busy + persisted count",
+    "passed": true,
+    "time": "2026-11-14T21:55:51.961Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-booking-cancel-abort-1",
+    "level": "native cancellation modal abort + API balance",
+    "passed": true,
+    "time": "2026-11-14T21:55:53.525Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "status": "cancelled",
+      "bookingId": "booking_mwgy2sz8_cqr7h7"
+    },
+    "id": "mixed-booking-cancel-refund-1",
+    "level": "UI native confirm + actual stored refund + order status",
+    "before": 0,
+    "after": 2000,
+    "passed": true,
+    "time": "2026-11-14T21:55:55.770Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-cart-empty-selection-guard-2",
+    "level": "UI cart selection/checkout guard",
+    "passed": true,
+    "time": "2026-11-14T21:56:11.932Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": "修改后第2轮",
+    "id": "mixed-cart-edit-2",
+    "level": "UI edit/save + cart persistence",
+    "passed": true,
+    "time": "2026-11-14T21:56:29.673Z"
+  },
+  {
+    "screenIds": [
+      "U08",
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "bookingId": "booking_mwgy3w01_c4nfz6",
+      "deduction": 2000
+    },
+    "id": "mixed-booking-submit-2",
+    "level": "UI submit + persisted booking/balance",
+    "before": 2000,
+    "after": 0,
+    "passed": true,
+    "time": "2026-11-14T21:56:34.010Z"
+  },
+  {
+    "screenIds": [
+      "U08"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-booking-double-submit-2",
+    "level": "two UI submit handlers during busy + persisted count",
+    "passed": true,
+    "time": "2026-11-14T21:56:41.807Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-booking-cancel-abort-2",
+    "level": "native cancellation modal abort + API balance",
+    "passed": true,
+    "time": "2026-11-14T21:56:43.069Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "status": "cancelled",
+      "bookingId": "booking_mwgy3w01_c4nfz6"
+    },
+    "id": "mixed-booking-cancel-refund-2",
+    "level": "UI native confirm + actual stored refund + order status",
+    "before": 0,
+    "after": 2000,
+    "passed": true,
+    "time": "2026-11-14T21:56:45.073Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-cart-empty-selection-guard-3",
+    "level": "UI cart selection/checkout guard",
+    "passed": true,
+    "time": "2026-11-14T21:56:57.558Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": "修改后第3轮",
+    "id": "mixed-cart-edit-3",
+    "level": "UI edit/save + cart persistence",
+    "passed": true,
+    "time": "2026-11-14T21:57:05.304Z"
+  },
+  {
+    "screenIds": [
+      "U08",
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "bookingId": "booking_mwgy4mv9_mlq9nb",
+      "deduction": 2000
+    },
+    "id": "mixed-booking-submit-3",
+    "level": "UI submit + persisted booking/balance",
+    "before": 2000,
+    "after": 0,
+    "passed": true,
+    "time": "2026-11-14T21:57:08.437Z"
+  },
+  {
+    "screenIds": [
+      "U08"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-booking-double-submit-3",
+    "level": "two UI submit handlers during busy + persisted count",
+    "passed": true,
+    "time": "2026-11-14T21:57:15.176Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-booking-cancel-abort-3",
+    "level": "native cancellation modal abort + API balance",
+    "passed": true,
+    "time": "2026-11-14T21:57:16.387Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "status": "cancelled",
+      "bookingId": "booking_mwgy4mv9_mlq9nb"
+    },
+    "id": "mixed-booking-cancel-refund-3",
+    "level": "UI native confirm + actual stored refund + order status",
+    "before": 0,
+    "after": 2000,
+    "passed": true,
+    "time": "2026-11-14T21:57:17.811Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-cart-empty-selection-guard-4",
+    "level": "UI cart selection/checkout guard",
+    "passed": true,
+    "time": "2026-11-14T21:57:27.273Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": "修改后第4轮",
+    "id": "mixed-cart-edit-4",
+    "level": "UI edit/save + cart persistence",
+    "passed": true,
+    "time": "2026-11-14T21:57:35.029Z"
+  },
+  {
+    "screenIds": [
+      "U08",
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "bookingId": "booking_mwgy59su_yaar3y",
+      "deduction": 2000
+    },
+    "id": "mixed-booking-submit-4",
+    "level": "UI submit + persisted booking/balance",
+    "before": 2000,
+    "after": 0,
+    "passed": true,
+    "time": "2026-11-14T21:57:38.160Z"
+  },
+  {
+    "screenIds": [
+      "U08"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-booking-double-submit-4",
+    "level": "two UI submit handlers during busy + persisted count",
+    "passed": true,
+    "time": "2026-11-14T21:57:44.929Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-booking-cancel-abort-4",
+    "level": "native cancellation modal abort + API balance",
+    "passed": true,
+    "time": "2026-11-14T21:57:46.142Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "status": "cancelled",
+      "bookingId": "booking_mwgy59su_yaar3y"
+    },
+    "id": "mixed-booking-cancel-refund-4",
+    "level": "UI native confirm + actual stored refund + order status",
+    "before": 0,
+    "after": 2000,
+    "passed": true,
+    "time": "2026-11-14T21:57:47.585Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-cart-empty-selection-guard-5",
+    "level": "UI cart selection/checkout guard",
+    "passed": true,
+    "time": "2026-11-14T21:57:57.062Z"
+  },
+  {
+    "screenIds": [
+      "S04"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": "修改后第5轮",
+    "id": "mixed-cart-edit-5",
+    "level": "UI edit/save + cart persistence",
+    "passed": true,
+    "time": "2026-11-14T21:58:04.819Z"
+  },
+  {
+    "screenIds": [
+      "U08",
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "bookingId": "booking_mwgy5wsw_9jurci",
+      "deduction": 2000
+    },
+    "id": "mixed-booking-submit-5",
+    "level": "UI submit + persisted booking/balance",
+    "before": 2000,
+    "after": 0,
+    "passed": true,
+    "time": "2026-11-14T21:58:07.970Z"
+  },
+  {
+    "screenIds": [
+      "U08"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-booking-double-submit-5",
+    "level": "two UI submit handlers during busy + persisted count",
+    "passed": true,
+    "time": "2026-11-14T21:58:14.721Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "mixed-booking-cancel-abort-5",
+    "level": "native cancellation modal abort + API balance",
+    "passed": true,
+    "time": "2026-11-14T21:58:15.948Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "status": "cancelled",
+      "bookingId": "booking_mwgy5wsw_9jurci"
+    },
+    "id": "mixed-booking-cancel-refund-5",
+    "level": "UI native confirm + actual stored refund + order status",
+    "before": 0,
+    "after": 2000,
+    "passed": true,
+    "evidence": "mini-evidence/S24-mixed-cancelled-refund.png",
+    "time": "2026-11-14T21:58:17.781Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "date": "2026-11-26",
+      "balance": 0
+    },
+    "id": "reschedule-cancel",
+    "level": "UI dialog cancel + persisted original schedule",
+    "passed": true,
+    "time": "2026-11-14T21:58:44.364Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "失败",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "date": "2026-11-26",
+      "balance": 0
+    },
+    "id": "reschedule-submit",
+    "level": "UI reschedule save + existing deposit balance preserved",
+    "before": {
+      "date": "2026-11-26",
+      "balance": 0
+    },
+    "after": {
+      "date": "2026-11-26",
+      "balance": 0
+    },
+    "passed": false,
+    "time": "2026-11-14T21:58:44.966Z",
+    "resolution": "当时门店改期次数规则为0，系统正确阻止；保留初次失败结果。后续在允许3次的隔离门店完成 reschedule-success-allowed-policy，并取消后退款验证。"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "noshow-cancel",
+    "level": "native modal cancel + original booking status",
+    "passed": true,
+    "time": "2026-11-14T21:58:45.434Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "noshow-disposal-preview",
+    "level": "UI actual received deposit disposal",
+    "passed": true,
+    "evidence": "mini-evidence/noshow-retain-preview.png",
+    "time": "2026-11-14T21:58:46.845Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "disposal": {
+        "state": "retain",
+        "outstandingCents": 0,
+        "outstandingText": "",
+        "amountText": "CAD $20",
+        "note": "隔离小程序留存操作",
+        "actor": "boss-p1s-op-mini-mwgxft4y",
+        "at": "2026-11-14T21:58:46.851Z",
+        "receiptText": ""
+      },
+      "balance": 0
+    },
+    "id": "noshow-retain-submit",
+    "level": "UI disposal save + persisted retained stored source",
+    "passed": true,
+    "time": "2026-11-14T21:58:47.217Z"
+  },
+  {
+    "screenIds": [
+      "U08",
+      "S24"
+    ],
+    "status": "仅API",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "ok": true,
+      "liabilityCents": 2000,
+      "broken": [],
+      "note": "定金守恒:每一笔已兑现的收取记录都有等额收入账目行。"
+    },
+    "id": "deposit-conservation",
+    "level": "API conservation audit after real UI funds operations",
+    "passed": true,
+    "time": "2026-11-14T21:58:47.222Z"
+  },
+  {
+    "screenIds": [
+      "U27"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "tiers": [
+        {
+          "key": "list",
+          "label": "原价"
+        },
+        {
+          "key": "share",
+          "label": "分享价"
+        }
+      ],
+      "items": [
+        {
+          "id": "nail-service-1794692268635-mwgxft5nd36820d9",
+          "name": "纯色美甲",
+          "priceText": "CAD $304.00",
+          "on": true
+        }
+      ],
+      "view": {
+        "subtotal": "CAD $304.00",
+        "tierLabel": "原价",
+        "breakdown": "纯色美甲",
+        "lines": [
+          {
+            "name": "纯色美甲",
+            "amount": "CAD $304.00"
+          }
+        ]
+      }
+    },
+    "id": "reference-quote-display-price",
+    "level": "UI quote selection + real backend reference preview",
+    "passed": true,
+    "evidence": "mini-evidence/U27-reference-quote-final.png",
+    "time": "2026-11-14T22:03:32.793Z"
+  },
+  {
+    "screenIds": [
+      "U27"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": "您选的款式预估 CAD $304.00（含纯色美甲），展示价格仅供参考，实际价格以本人服务确认单为准。",
+    "id": "reference-quote-copy",
+    "level": "UI copy handler + native clipboard readback",
+    "passed": true,
+    "time": "2026-11-14T22:03:33.522Z"
+  },
+  {
+    "screenIds": [
+      "U27"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "draft": "您选的款式预估 CAD $304.00（含纯色美甲），展示价格仅供参考，实际价格以本人服务确认单为准。",
+      "path": "pages/merchant/member/index"
+    },
+    "id": "reference-quote-fill",
+    "level": "UI fill handler + draft persistence + return",
+    "passed": true,
+    "time": "2026-11-14T22:03:35.123Z"
+  },
+  {
+    "screenIds": [
+      "U22",
+      "S17"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": [
+      {
+        "id": "sgrp_mwgxwzlx_z4xn20",
+        "pending": 2,
+        "signed": 0,
+        "count": 2
+      },
+      {
+        "id": "sgrp_mwgxwvoq_f96vms",
+        "pending": 2,
+        "signed": 0,
+        "count": 2
+      },
+      {
+        "id": "sgrp_mwgxwrqn_tiz0bl",
+        "pending": 2,
+        "signed": 0,
+        "count": 2
+      },
+      {
+        "id": "sgrp_mwgxwnt9_4849jc",
+        "pending": 2,
+        "signed": 0,
+        "count": 2
+      },
+      {
+        "id": "sgrp_mwgxwjw1_dt3clo",
+        "pending": 0,
+        "signed": 2,
+        "count": 2
+      },
+      {
+        "id": "sgrp_mwgxvk5x_z6m7pm",
+        "pending": 0,
+        "signed": 1,
+        "count": 1
+      }
+    ],
+    "id": "orders-person-documents-list",
+    "level": "UI orders tab + real per-person document list",
+    "passed": true,
+    "evidence": "mini-evidence/U22-orders-documents-final.png",
+    "time": "2026-11-14T22:03:41.899Z"
+  },
+  {
+    "screenIds": [
+      "U22",
+      "U18"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": "已推送至本人站内消息和订单，等待签署。微信服务通知尚未发送。",
+    "id": "orders-person-documents-deliver",
+    "level": "UI deliver handler + backend in-app only receipt",
+    "passed": true,
+    "evidence": "mini-evidence/U22-delivery-inapp.png",
+    "time": "2026-11-14T22:03:42.582Z"
+  },
+  {
+    "screenIds": [
+      "U22",
+      "U18"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "orders-person-documents-local-entry",
+    "level": "UI local sign handler to real scoped web-view",
+    "passed": true,
+    "time": "2026-11-14T22:03:43.955Z"
+  },
+  {
+    "screenIds": [
+      "U08",
+      "S24"
+    ],
+    "status": "仅API",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "requiredCents": 5000,
+      "waivedCents": 0,
+      "retainedCents": 2000,
+      "storedDeductionCents": 0,
+      "offlineDueCents": 3000
+    },
+    "id": "retained-deposit-reuse-fixture",
+    "level": "API setup reuses real UI retained deposit",
+    "passed": true,
+    "time": "2026-11-14T22:05:22.670Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": "2026-11-30",
+    "id": "reschedule-success-allowed-policy",
+    "level": "UI change date + save with policy allowing retained deposit",
+    "before": "2026-11-29",
+    "after": "2026-11-30",
+    "passed": true,
+    "evidence": "mini-evidence/reschedule-success.png",
+    "time": "2026-11-14T22:05:28.018Z"
+  },
+  {
+    "screenIds": [
+      "S24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "balance": 2000
+    },
+    "id": "retained-rescheduled-cancel-refund",
+    "level": "UI cancellation + preserved stored source refunds once",
+    "passed": true,
+    "evidence": "mini-evidence/retained-refund-after-reschedule.png",
+    "time": "2026-11-14T22:05:38.025Z"
+  },
+  {
+    "screenIds": [
+      "U08",
+      "S24"
+    ],
+    "status": "仅API",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "ok": true,
+      "liabilityCents": 0,
+      "broken": [],
+      "note": "定金守恒:每一笔已兑现的收取记录都有等额收入账目行。"
+    },
+    "id": "deposit-final-conservation",
+    "level": "API ledger conservation after UI operations",
+    "passed": true,
+    "time": "2026-11-14T22:05:38.039Z"
+  },
+  {
+    "screenIds": [
+      "U22"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "orders-final-layout",
+    "level": "rendered live UI final module",
+    "passed": true,
+    "evidence": "mini-evidence/U22-orders-documents-final.png",
+    "time": "2026-11-14T22:07:03.854Z"
+  },
+  {
+    "screenIds": [
+      "U24"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "U24-live-state",
+    "level": "live UI read-only state",
+    "passed": true,
+    "evidence": "mini-evidence/U24-live-state.png",
+    "time": "2026-11-14T22:07:09.030Z"
+  },
+  {
+    "screenIds": [
+      "U25"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "U25-live-state",
+    "level": "live UI read-only state",
+    "passed": true,
+    "evidence": "mini-evidence/U25-live-state.png",
+    "time": "2026-11-14T22:07:14.212Z"
+  },
+  {
+    "screenIds": [
+      "S03"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "S03-live-state",
+    "level": "live UI read-only state",
+    "passed": true,
+    "evidence": "mini-evidence/S03-live-state.png",
+    "time": "2026-11-14T22:07:19.544Z"
+  },
+  {
+    "screenIds": [
+      "S19"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "S19-live-state",
+    "level": "live UI read-only state",
+    "passed": true,
+    "evidence": "mini-evidence/S19-live-state.png",
+    "time": "2026-11-14T22:07:24.702Z"
+  },
+  {
+    "screenIds": [
+      "S11"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "before": "顾客不属于本店。",
+      "after": "顾客不属于本店。"
+    },
+    "id": "settlement-error-retry-visible",
+    "level": "real invalid record error + retry handler",
+    "passed": true,
+    "evidence": "mini-evidence/S11-error-retry.png",
+    "time": "2026-11-14T22:07:29.676Z"
+  },
+  {
+    "screenIds": [
+      "S15"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "blank-original-price-block",
+    "level": "UI blank input + save guard + API unchanged",
+    "passed": true,
+    "evidence": "mini-evidence/S15-blank-price-block.png",
+    "time": "2026-11-14T22:07:38.371Z"
+  },
+  {
+    "screenIds": [
+      "S09"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "rate": 10000,
+      "view": {
+        "groups": [
+          {
+            "title": "项目① 纯色美甲",
+            "lines": [
+              {
+                "no": 1,
+                "name": "纯色美甲",
+                "qty": 1,
+                "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+                "kind": "main",
+                "amount": "CAD $204.00",
+                "list": ""
+              }
+            ]
+          }
+        ],
+        "listTotal": "CAD $204.00",
+        "subtotal": "CAD $204.00",
+        "discountTotal": "CAD $0.00",
+        "discountLabel": "较原价共优惠",
+        "hasDeposit": false,
+        "depositDeduct": "CAD $0.00",
+        "hasStored": true,
+        "storedDeduct": "CAD $20.00",
+        "hasTimecard": false,
+        "timecardCover": "CAD $0.00",
+        "total": "CAD $184.00",
+        "balanceCents": 2000,
+        "balance": "CAD $20.00",
+        "hasBalance": true,
+        "depositReceiptCents": 0,
+        "hasDepositReceipt": false,
+        "hasOffline": true,
+        "offlineDue": "CAD $184.00",
+        "hasPurchase": false,
+        "purchaseAmount": "CAD $0.00",
+        "purchaseName": "",
+        "hasRecharge": false,
+        "rechargeAmount": "CAD $0.00",
+        "rechargeBonus": "",
+        "afterBalance": "",
+        "rvNote": "",
+        "warnings": []
+      }
+    },
+    "id": "no-discount-composer",
+    "level": "live composer/server quote explicit no discount",
+    "passed": true,
+    "evidence": "mini-evidence/S09-composer-no-discount.png",
+    "time": "2026-11-14T22:07:42.886Z"
+  },
+  {
+    "screenIds": [
+      "S09B"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "rate": null,
+      "view": {
+        "groups": [
+          {
+            "title": "项目① 纯色美甲",
+            "lines": [
+              {
+                "no": 1,
+                "name": "纯色美甲",
+                "qty": 1,
+                "serviceId": "nail-service-1794692268635-mwgxft5nd36820d9",
+                "kind": "main",
+                "amount": "CAD $170.00",
+                "list": "CAD $204.00"
+              }
+            ]
+          }
+        ],
+        "listTotal": "CAD $204.00",
+        "subtotal": "CAD $170.00",
+        "discountTotal": "CAD $34.00",
+        "discountLabel": "较原价共优惠",
+        "hasDeposit": false,
+        "depositDeduct": "CAD $0.00",
+        "hasStored": true,
+        "storedDeduct": "CAD $20.00",
+        "hasTimecard": false,
+        "timecardCover": "CAD $0.00",
+        "total": "CAD $150.00",
+        "balanceCents": 2000,
+        "balance": "CAD $20.00",
+        "hasBalance": true,
+        "depositReceiptCents": 0,
+        "hasDepositReceipt": false,
+        "hasOffline": true,
+        "offlineDue": "CAD $150.00",
+        "hasPurchase": false,
+        "purchaseAmount": "CAD $0.00",
+        "purchaseName": "",
+        "hasRecharge": false,
+        "rechargeAmount": "CAD $0.00",
+        "rechargeBonus": "",
+        "afterBalance": "",
+        "rvNote": "",
+        "warnings": []
+      }
+    },
+    "id": "unset-discount-composer",
+    "level": "live composer/server fallback member price",
+    "passed": true,
+    "evidence": "mini-evidence/S09B-composer-unset.png",
+    "time": "2026-11-14T22:07:51.526Z"
+  },
+  {
+    "screenIds": [
+      "S22"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "performance-live",
+    "level": "live staff performance UI",
+    "passed": true,
+    "evidence": "mini-evidence/S22-staff-performance.png",
+    "time": "2026-11-14T22:07:56.695Z"
+  },
+  {
+    "screenIds": [
+      "S02"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "S02-text-final",
+    "level": "live UI recheck after copy fix",
+    "passed": true,
+    "evidence": "mini-evidence/S02-text-final.png",
+    "time": "2026-11-14T22:08:01.466Z"
+  },
+  {
+    "screenIds": [
+      "S14"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "S14-text-final",
+    "level": "live UI recheck after copy fix",
+    "passed": true,
+    "evidence": "mini-evidence/S14-text-final.png",
+    "time": "2026-11-14T22:08:06.225Z"
+  },
+  {
+    "screenIds": [
+      "S17",
+      "U22"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "signed": 1,
+      "pending": 1
+    },
+    "id": "partial-group-live-root",
+    "level": "live mini orders expand + backend partial signing state",
+    "passed": true,
+    "evidence": "mini-evidence/S17-partial-group-final.png",
+    "time": "2026-11-15T07:48:05.488Z"
+  },
+  {
+    "screenIds": [
+      "S10",
+      "S17"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "recheck-price-change-cancel",
+    "level": "live review dialog cancel after isolated price change + API unchanged documents",
+    "passed": true,
+    "time": "2026-11-15T07:48:06.234Z"
+  },
+  {
+    "screenIds": [
+      "S10",
+      "S17",
+      "U22"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": {
+      "oldTotal": 20400,
+      "newTotal": 20500,
+      "signedTotal": 20400
+    },
+    "id": "recheck-price-change-submit",
+    "level": "live review dialog confirm + replaced pending doc only, original signature unchanged",
+    "passed": true,
+    "evidence": "mini-evidence/S17-rechecked-price-final.png",
+    "time": "2026-11-15T07:48:08.000Z"
+  },
+  {
+    "screenIds": [
+      "S17",
+      "U22"
+    ],
+    "status": "UI完成",
+    "expected": "操作按规则持久化；取消/拦截不写入",
+    "observed": true,
+    "id": "final-source-orders-layout",
+    "level": "compiled final source, live mini service-document list + partial state",
+    "passed": true,
+    "evidence": "mini-evidence/S17-final-source-pill-buttons.png",
+    "time": "2026-11-15T08:08:53.838Z"
+  }
+]

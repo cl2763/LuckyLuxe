@@ -47,7 +47,8 @@ export function createStoredValueReversal({ db, apiError, insertStoredValueTrans
         COALESCE(SUM(CASE WHEN t.type = 'refund' THEN t.bonus_part_cents ELSE 0 END), 0) AS bonus_refunded
       FROM stored_value_transactions t LEFT JOIN stored_value_transactions o ON o.id = t.reversal_of
       WHERE t.tenant_id = ? AND t.user_id = ?`).get(tenantId, txn.user_id)
-    const bonusRemaining = Math.max(0, Math.min(w.bonus - (w.bonus_refunded || 0), w.balance))
+    const depositBonusUsed=db.prepare("SELECT COALESCE(SUM(CASE WHEN type='deposit_hold' THEN bonus_part_cents WHEN type='deposit_return' THEN -bonus_part_cents ELSE 0 END),0) n FROM stored_value_transactions WHERE tenant_id=? AND user_id=?").get(tenantId,txn.user_id).n
+    const bonusRemaining = Math.max(0, Math.min(w.bonus - (w.bonus_refunded || 0) - depositBonusUsed, w.balance))
     const paidRefundable = Math.max(0, w.balance - bonusRemaining)
     if (paidRefundable < txn.amount_cents || bonusRemaining < (bonus ? bonus.amount_cents : 0)) {
       throw apiError(400, 'CONSUMED_NO_REVERSAL', '余额已不足以证明这笔未消费,请走退卡。')

@@ -1,0 +1,10 @@
+/** Read-only signed facts alongside (never included in) confirmed daily-close performance. */
+export function memberPricingPerformanceDetails(db,{tenantId,technicianId,month,view,localDate,money}) {
+ if(!view.hero||view.visibility==='salary_only'||view.displayMode!=='with_split')return null
+ const closed=new Set(db.prepare("SELECT date FROM daily_closes WHERE tenant_id=? AND status='confirmed' AND date LIKE ?").all(tenantId,month+'%').map(r=>r.date))
+ const services=[]
+ const docs=db.prepare("SELECT DISTINCT d.* FROM member_service_documents d JOIN member_document_components c ON c.document_id=d.id JOIN settlement_technicians t ON t.settlement_id=c.settlement_id AND t.tenant_id=d.tenant_id WHERE d.tenant_id=? AND d.status='signed' AND t.technician_id=? ORDER BY d.signed_at DESC").all(tenantId,technicianId)
+ for(const d of docs){const date=localDate(d.signed_at);if(!closed.has(date))continue;const q=JSON.parse(d.signed_json),parts=q.components.filter(c=>c.technicians.some(t=>t.technicianId===technicianId));if(!parts.length)continue;services.push({id:d.id,date,person:q.display?.beneficiaryName||q.name,payer:q.display?.customerName||'',discount:q.display?.discountText||'旧单未记录',items:parts.flatMap(c=>c.lines.map(l=>l.name)).join('、'),amountText:money(parts.reduce((sum,c)=>sum+c.totalCents-(c.recharge?.amountCents||0)-(c.purchase?.priceCents||0),0))})}
+ const recharges=db.prepare("SELECT t.id,t.type,t.amount_cents,t.created_at,EXISTS(SELECT 1 FROM stored_value_transactions r WHERE r.tenant_id=t.tenant_id AND r.reversal_of=t.id) AS reversed FROM stored_value_transactions t WHERE t.tenant_id=? AND t.technician_id=? AND t.type IN ('recharge','bonus') ORDER BY t.created_at DESC").all(tenantId,technicianId).filter(r=>closed.has(localDate(r.created_at))).map(r=>({id:r.id,date:localDate(r.created_at),label:(r.type==='bonus'?'赠金（不计实收与服务业绩）':'充值本金（不计服务业绩）')+(r.reversed?' · 已冲销':''),amountText:money(r.amount_cents)}))
+ return {services,recharges,note:'仅列已确认日结日期。服务金额为本人参与项目的签署原成交金额，折扣与单号按原凭证；业绩与后续更正以上方日结统计为准。充值和赠金单列，不加入服务业绩。'}
+}

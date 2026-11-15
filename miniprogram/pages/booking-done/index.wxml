@@ -23,11 +23,12 @@
       <text>{{order.store.address}}</text>
     </view>
     <view class="summary-row">
-      <text>{{t.paidDeposit}}</text>
-      <text class="price">{{cur.p}}{{cur.s}}{{order.payableAmount}}</text>
+      <text>到店还需支付定金</text>
+      <text class="price">{{order.checkoutReceipt.display.offlineText || '—'}}</text>
     </view>
   </view>
 
+  <view wx:if="{{order.checkoutReceipt}}" class="summary-card card"><view>已扣储值：{{order.checkoutReceipt.display.storedText}}</view><view>扣款后余额：{{order.checkoutReceipt.display.balanceAfterText}}</view><view>{{order.checkoutReceipt.display.note}}</view></view>
   <view class="success-actions">
     <button class="btn btn-primary" bindtap="goOrders">{{t.viewOrders}}</button>
     <button class="btn btn-ghost" bindtap="goHome">{{t.home}}</button>

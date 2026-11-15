@@ -13,6 +13,6 @@ export function customerMessages(req, res, {db, requireCustomer, resolveTenant, 
   }
   const receipts=new Map(db.prepare('SELECT message_id,read_at FROM customer_message_reads WHERE tenant_id=? AND user_id=?').all(tid,user.id).map(r=>[r.message_id,r.read_at]))
   const rows=db.prepare("SELECT id,payload_json,delivered_at FROM notification_logs WHERE tenant_id=? AND target_user_id=? AND channel='inapp' AND status='sent' ORDER BY delivered_at DESC,id DESC LIMIT 100").all(tid,user.id)
-  const messages=rows.flatMap(r=>{let p;try{p=JSON.parse(r.payload_json)}catch{return []}return typeof p?.text==='string'&&p.text.trim()?[{id:r.id,readAt:receipts.get(r.id)||null,text:p.text,sentAt:r.delivered_at,timeText:r.delivered_at ? (()=>{const d=localParts(r.delivered_at,tenantTimezone(tid));return d.date+' '+d.time})() : ''}]:[]})
+  const messages=rows.flatMap(r=>{let p;try{p=JSON.parse(r.payload_json)}catch{return []}return typeof p?.text==='string'&&p.text.trim()?[{id:r.id,...(typeof p.memberDocumentGroupId==='string'?{memberDocumentGroupId:p.memberDocumentGroupId}:{}),readAt:receipts.get(r.id)||null,text:p.text,sentAt:r.delivered_at,timeText:r.delivered_at ? (()=>{const d=localParts(r.delivered_at,tenantTimezone(tid));return d.date+' '+d.time})() : ''}]:[]})
   return json(res,200,{messages,unreadCount:messages.filter(m=>!m.readAt).length})
 }

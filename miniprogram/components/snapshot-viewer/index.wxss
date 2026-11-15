@@ -12,3 +12,5 @@
 .sv-arrow.left{left:12rpx}
 .sv-arrow.right{right:12rpx}
 .sv-tip{text-align:center;color:rgba(255,255,255,.65);font-size:22rpx;padding-top:14rpx}
+
+.sv-history-note{padding:12rpx 0 20rpx;color:#fff;font-size:24rpx;line-height:1.6}

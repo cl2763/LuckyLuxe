@@ -5,214 +5,195 @@ const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 
 Page({
-  behaviors: [require('../../utils/media-privacy')],
-  onShow() {
-    ensureCurrencyCached()
-    this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
-    // 返回本页时重新读取状态机动作：签署后旧列表缓存仍是「待签」，会吞掉售后入口。
-    if (this._shownOnce && this._orderId) this.load(this._orderId)
-    this._shownOnce = true
-  },
-  data: {
-    mediaPrivacyCopy: '复制门店地址或地图链接前，请阅读并同意隐私保护指引。仅复制你选择的内容。',
-    viewer: { open: false, items: [], index: 0 },
-    order: null,
-    bottomInset: 0,
-    lang: 'zh',
-    t: i18n.pageCopy('orderDetail', 'zh')
-  },
+behaviors: [require('../../utils/media-privacy')],
+onShow() {
+ensureCurrencyCached()
+this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
 
-  onLoad(options) {
-    this._orderId = options.id
-    this.load(options.id)
-  },
+if (this._shownOnce && this._orderId) this.load(this._orderId)
+this._shownOnce = true
+},
+data: {
+mediaPrivacyCopy: '复制门店地址或地图链接前，请阅读并同意隐私保护指引。仅复制你选择的内容。',
+viewer: { open: false, items: [], index: 0 },
+order: null,
+bottomInset: 0,
+lang: 'zh',
+t: i18n.pageCopy('orderDetail', 'zh')
+},
 
-  async load(id) {
-    const lang = i18n.getLang()
-    const t = i18n.pageCopy('orderDetail', lang)
-    i18n.applyTabBar(lang)
-    i18n.setTitle(t.title)
-    if (!api.isLoggedIn()) {
-      this.setData({ order: null, lang, t })
-      return
-    }
-    let order = null
-    try {
-      const bookings = await api.getBookings(lang)
-      storage.setOrders(bookings)
-      order = bookings.find((item) => item._id === id || item.orderNo === id)
-    } catch (error) {
-      // 网络错误不能把过期缓存当作最新可操作状态显示。
-      wx.showToast({ title: '订单更新失败，请稍后重试', icon: 'none' })
-    }
-    if (order) {
-      const service = order.service || (order.serviceInfo && { name: order.serviceInfo.serviceName, type: order.serviceInfo.serviceType, duration: order.serviceInfo.duration }) || {} // mock 清除
-      const localizedService = i18n.localizeService(service, lang)
-      /* A2(店主 08-25):中文状态句读**后端唯一出口**(order.statusText,与网页顾客端同一份);
-         en 仍走本地词典(后端句是中文)。两端从此不再各维护一套中文映射。 */
-      order.statusText = lang === 'en' ? i18n.statusText(order.status, lang) : (order.statusText || i18n.statusText(order.status, lang))
-      order.serviceImage = service.image || order.serviceImage || ''   // 裁定二同族:空值交渲染层占位,不回落环境照
-      order.serviceInfo.serviceName = localizedService.name || order.serviceInfo.serviceName
-      // D21:不再用写死的假技师名(Mia Chen/Ava Lin)填空 —— 没有就不显示
-      order.visibleWorkImages = order.status === 'completed' || order.status === 'after_sales' ? (order.workImages || []).slice(0, 6) : []
-      /* 批③首件 A2/A6(§二重做):签署单卡=后端 flow 一条五步账直贴(与签署页/快照同源,零拼装);
-         旧「实付」行随 flow 消亡(480 表达错误销案)。y() 仅格式化,无运算。 */
-      if (order.payment) {
-        /* 🔴 05t 段 6(店主 05t §六 1.):这里原来有个 `y()` 自己把分转成元、自己 `toFixed(2)` ——
-           **金额不许自己格式化**(币种红线:钱怎么写由后端下发的 currencyDisplay 决定,
-           两端只有一个出口)。现查它算出来的 `listTotal` **wxml 里一处都没用**,
-           是一段死码 —— 连同 `y()` 一起删掉,而不是给它补一个币符(补了才是真的两处真相)。 */
-        order.pay = {
-          code: order.payment.code,
-          signedAt: String(order.payment.signedAt || '').slice(0, 16).replace('T', ' '),
-          flowLines: (order.payment.flow && order.payment.flow.lines) || [],
-          heroLabel: (order.payment.flow && order.payment.flow.heroLabel) || '本单到店支付',
-          heroText: (order.payment.flow && order.payment.flow.cashDueText) || '',
-          // D67③:组内逐张原件行(映射层零裁剪——toMiniBooking 裁字段教训同族,挑字段处必须点名带上)
-          sheetLinks: order.payment.sheetLinks || [],
-          /* L3 裁(店主 08-22):多张单详情=逐张签署单卡+顶部组汇总行(=Σ各张头条,与组卡同构) */
-          sheets: (order.payment.sheets || []).map((sh, i) => ({
-            ...sh,
-            idx: i,
-            flowLines: (sh.flow && sh.flow.lines) || [],
-            heroLabel: (sh.flow && sh.flow.heroLabel) || '本单到店支付',
-            heroText: (sh.flow && sh.flow.cashDueText) || '',
-            signedAtText: sh.signedAt ? String(sh.signedAt).slice(0, 16).replace('T', ' ') : '',
-            // D68②:原件=悬浮图片查看器(快照 SVG 绝对地址;未签署单没有快照,点了走签署页)
-            snapUrl: sh.snapshotUrl ? `${api.API_BASE}${sh.snapshotUrl}` : ''
-          })),
-          groupCashLabel: order.payment.groupCashLabel || '',
-          groupCashText: order.payment.groupCashDueText || ''
-        }
-      }
-      /* 🔴 永久律(店主 08-23):顾客可见数字拿不到真值就显示「—」,不许前端自算、不许回落到别的字段。
-         原来这里 `servicePrice || Σitems || service.price` 三重回落 + 到店应付前端做减法,
-         同一张单在详情页可能算出与后端不同的数(D69 同族)。现在只认后端字段,缺就空着让 wxml 出「—」。 */
-      /* 🔴 D70(店主 08-24 合同):**按钮显隐只能从后端状态机推导**(customerActions),
-         页面里不许写 if 补按钮。原来底部条挂在 `order.status === 'pending_service'` 上 ——
-         那是页面自己写的第二套规则:与商家端分叉、且售后中的单照样能点取消。
-         en 没有后端句,才用本地词典兜底(zh 一律用后端句,同一事实一句话)。 */
-      const ACTION_EN = { cancel: 'Cancel booking', openAfterSales: 'Request after-sales' }
-      order.actions = (order.customerActions || []).map((a) => ({
-        key: a.key,
-        label: lang === 'en' ? (ACTION_EN[a.key] || a.label) : a.label
-      }))
-      order.servicePrice = order.servicePrice != null && order.servicePrice !== '' ? order.servicePrice : null
-      order.payableAmount = order.payableAmount != null && order.payableAmount !== '' ? order.payableAmount : null
-      order.finalDue = order.finalDue != null && order.finalDue !== '' ? order.finalDue : null
-    }
-    this.setData({ order, lang, t, bottomInset: 0 }, () => this.measureBottomBar())
-  },
-  onResize() { this.measureBottomBar() },
-  measureBottomBar() {
-    if (!this.data.order?.actions?.length) { this.setData({ bottomInset: 0 }); return }
-    if (typeof wx.createSelectorQuery !== 'function') return
-    // 取实际底栏高度（含安全区、换行和字体缩放），避免固定留白再次遮住最后一行。
-    wx.createSelectorQuery().in(this).select('.bottom-bar').boundingClientRect((rect) => {
-      if (rect && this.data.order?.actions?.length) this.setData({ bottomInset: Math.ceil(rect.height) + 24 })
-    }).exec()
-  },
+onLoad(options) {
+this._orderId = options.id
+this.load(options.id)
+},
 
-  /* ===== 批③首件 屏B:售后发起(同屏展开,拍板①②③)+签署单原件入口 ===== */
-  /* D68②(店主 08-23):原件=**悬浮图片查看器**(浮层 + 多张左右滑动切换),
-     不再跳整页——跳页会压栈(D68① 同族),看三张原件要按三次返回。
-     未签署的单没有快照,点了才走签署页(那是去签字,不是看原件)。 */
-  openViewer(e) {
-    const o = this.data.order
-    if (!o || !o.pay) return
-    const sheets = (o.pay.sheets && o.pay.sheets.length ? o.pay.sheets : [{ idx: 0, code: o.pay.code, label: '服务确认单', snapUrl: o.pay.code ? `${api.API_BASE}/settlements/${encodeURIComponent(o.pay.code)}/snapshot` : '', status: 'signed' }])
-    const items = sheets.filter((sh) => sh.snapUrl).map((sh) => ({ code: sh.code, label: sh.label || '服务确认单', url: sh.snapUrl }))
-    const wantCode = e && e.currentTarget && e.currentTarget.dataset.code
-    const target = sheets.find((sh) => sh.code === wantCode) || sheets[0]
-    if (!items.length || (wantCode && target && !target.snapUrl)) {
-      // 待签署单:没有原件可看,直接去签(这一步是签字动线,不是看图)
-      if (target && target.code) nav.to(`/pages/sign/index?code=${encodeURIComponent(target.code)}`)
-      return
-    }
-    const index = Math.max(0, items.findIndex((it) => it.code === (target ? target.code : items[0].code)))
-    this.setData({ viewer: { open: true, index, items } })
-  },
-  // D68③:切页/滑动/箭头全在共用组件里(components/snapshot-viewer),页面只负责开关与喂数据
-  closeViewer() { this.setData({ viewer: { open: false, items: [], index: 0 } }) },
-  asAction() {
-    const o = this.data.order
-    if (!o) return
-    if (o.afterSalesAction === 'progress') {
-      // 进行中=滚到进度卡(卡就在本页);同屏,无跳转
-      this.setData({ asPanelOpen: false })
-      wx.pageScrollTo({ selector: '.as-progress-card', duration: 200, fail: () => {} })
-      return
-    }
-    if (o.afterSalesAction === 'start') this.setData({ asPanelOpen: !this.data.asPanelOpen })
-  },
-  onAsDesc(e) { this.setData({ asDesc: e.detail.value }) },
-  async submitAfterSales() {
-    const desc = String(this.data.asDesc || '').trim()
-    if (!desc) { wx.showToast({ title: '问题描述必填', icon: 'none' }); return }
-    if (this.data.asSubmitting) return
-    this.setData({ asSubmitting: true })
-    try {
-      await api.startAfterSales(this.data.order._id, desc)
-      wx.showToast({ title: '已发起售后,门店会尽快跟进', icon: 'none', duration: 2200 })
-      this.setData({ asPanelOpen: false, asDesc: '' })
-      storage.setOrders([])   // 缓存失效,强制回源刷新徽标/进度
-      this.load(this.data.order._id)
-    } catch (e) {
-      wx.showToast({ title: (e && e.message) || '发起失败,请稍后再试', icon: 'none' })
-    } finally { this.setData({ asSubmitting: false }) }
-  },
-  async withdrawAfterSales() {
-    if (this.data.asSubmitting) return
-    this.setData({ asSubmitting: true })
-    try {
-      await api.withdrawAfterSales(this.data.order._id)
-      wx.showToast({ title: '已撤回(记录保留)', icon: 'none' })
-      storage.setOrders([])
-      this.load(this.data.order._id)
-    } catch (e) {
-      wx.showToast({ title: (e && e.message) || '撤回失败', icon: 'none' })
-    } finally { this.setData({ asSubmitting: false }) }
-  },
+async load(id) {
+const lang = i18n.getLang()
+const t = i18n.pageCopy('orderDetail', lang)
+i18n.applyTabBar(lang)
+i18n.setTitle(t.title)
+if (!api.isLoggedIn()) {
+this.setData({ order: null, lang, t })
+return
+}
+let order = null
+try {
+const bookings = await api.getBookings(lang)
+storage.setOrders(bookings)
+order = bookings.find((item) => item._id === id || item.orderNo === id)
+} catch (error) {
 
-  /* D70:底部条按 key 分发(分发≠状态判断 —— 能不能点已经由状态机在 actions 里决定过了) */
-  onAction(e) {
-    const key = e.currentTarget.dataset.key
-    if (key === 'cancel') return this.cancelOrder()
-    if (key === 'openAfterSales') return this.setData({ asPanelOpen: !this.data.asPanelOpen })
-  },
+wx.showToast({ title: '订单更新失败，请稍后重试', icon: 'none' })
+}
+if (order) {
+const service = order.service || (order.serviceInfo && { name: order.serviceInfo.serviceName, type: order.serviceInfo.serviceType, duration: order.serviceInfo.duration }) || {} // mock 清除
+const localizedService = i18n.localizeService(service, lang)
 
-  cancelOrder() {
-    wx.showModal({
-      title: this.data.t.cancelTitle,
-      content: this.data.t.cancelContent,
-      confirmColor: '#C6A27E',
-      success: async (res) => {
-        if (!res.confirm) return
-        try {
-          /* 真取消:改服务器状态 + 放开占位。原来只改本地缓存 —— 顾客以为取消了,
-             商家台面上这张单还在,时段也还锁着(D70 顺手销案)。 */
-          await api.cancelBooking(this.data.order._id)
-          storage.setOrders([])            // 缓存失效,强制回源:状态/徽标/动作按钮全部重新由后端给
-          wx.showToast({ title: this.data.t.cancelled, icon: 'success' })
-          this.load(this.data.order._id)
-        } catch (err) {
-          wx.showToast({ title: (err && err.message) || '取消失败,请稍后再试', icon: 'none' })
-        }
-      },
-      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-    })
-  },
 
-  callStore() {
-    require('../../utils/store-navigation').call(this.data.order.store, this.data.lang === 'en')
-  },
+order.statusText = lang === 'en' ? i18n.statusText(order.status, lang) : (order.statusText || i18n.statusText(order.status, lang))
+order.serviceImage = service.image || order.serviceImage || ''   // 裁定二同族:空值交渲染层占位,不回落环境照
+order.serviceInfo.serviceName = localizedService.name || order.serviceInfo.serviceName
 
-  openLocation() {
-    require('../../utils/store-navigation').navigate(this.data.order.store, this.data.lang === 'en')
-  },
+order.visibleWorkImages = order.status === 'completed' || order.status === 'after_sales' ? (order.workImages || []).slice(0, 6) : []
 
-  previewWork(event) {
-    const url = event.currentTarget.dataset.url
-    wx.previewImage({ current: url, urls: this.data.order.visibleWorkImages })
-  }
+
+if (order.payment) {
+
+
+
+
+order.pay = {
+code: order.payment.code,
+signedAt: String(order.payment.signedAt || '').slice(0, 16).replace('T', ' '),
+flowLines: (order.payment.flow && order.payment.flow.lines) || [],
+heroLabel: (order.payment.flow && order.payment.flow.heroLabel) || '本单到店支付',
+heroText: (order.payment.flow && order.payment.flow.cashDueText) || '',
+
+sheetLinks: order.payment.sheetLinks || [],
+
+sheets: (order.payment.sheets || []).map((sh, i) => ({
+...sh,
+idx: i,
+flowLines: (sh.flow && sh.flow.lines) || [],
+heroLabel: (sh.flow && sh.flow.heroLabel) || '本单到店支付',
+heroText: (sh.flow && sh.flow.cashDueText) || '',
+signedAtText: sh.signedAt ? String(sh.signedAt).slice(0, 16).replace('T', ' ') : '',
+
+snapUrl: sh.snapshotUrl ? `${api.API_BASE}${sh.snapshotUrl}` : ''
+})),
+groupCashLabel: order.payment.groupCashLabel || '',
+groupCashText: order.payment.groupCashDueText || ''
+}
+}
+
+
+
+
+
+
+
+const ACTION_EN = { cancel: 'Cancel booking', openAfterSales: 'Request after-sales' }
+order.actions = (order.customerActions || []).map((a) => ({
+key: a.key,
+label: lang === 'en' ? (ACTION_EN[a.key] || a.label) : a.label
+}))
+order.servicePrice = order.servicePrice != null && order.servicePrice !== '' ? order.servicePrice : null
+order.payableAmount = order.payableAmount != null && order.payableAmount !== '' ? order.payableAmount : null
+order.finalDue = order.finalDue != null && order.finalDue !== '' ? order.finalDue : null
+}
+this.setData({ order, lang, t, bottomInset: 0 }, () => this.measureBottomBar())
+},
+onResize() { this.measureBottomBar() },
+measureBottomBar() {
+if (!this.data.order?.actions?.length) { this.setData({ bottomInset: 0 }); return }
+if (typeof wx.createSelectorQuery !== 'function') return
+
+wx.createSelectorQuery().in(this).select('.bottom-bar').boundingClientRect((rect) => {
+if (rect && this.data.order?.actions?.length) this.setData({ bottomInset: Math.ceil(rect.height) + 24 })
+}).exec()
+},
+
+
+
+
+
+openMemberDocuments(){const id=this.data.order?.memberDocuments?.groupId;if(id)nav.to('/pages/sign/index?memberGroup='+encodeURIComponent(id))},
+openViewer(e) {
+const o = this.data.order
+if (!o || !o.pay) return
+const sheets = (o.pay.sheets && o.pay.sheets.length ? o.pay.sheets : [{ idx: 0, code: o.pay.code, label: '服务确认单', snapUrl: o.pay.code ? `${api.API_BASE}/settlements/${encodeURIComponent(o.pay.code)}/snapshot` : '', status: 'signed' }])
+const items = sheets.filter((sh) => sh.snapUrl).map((sh) => ({ code: sh.code, label: sh.label || '服务确认单', url: sh.snapUrl }))
+const wantCode = e && e.currentTarget && e.currentTarget.dataset.code
+const target = sheets.find((sh) => sh.code === wantCode) || sheets[0]
+if (!items.length || (wantCode && target && !target.snapUrl)) {
+
+if (target && target.code) nav.to(`/pages/sign/index?code=${encodeURIComponent(target.code)}`)
+return
+}
+const index = Math.max(0, items.findIndex((it) => it.code === (target ? target.code : items[0].code)))
+this.setData({ viewer: { open: true, index, items } })
+},
+
+closeViewer() { this.setData({ viewer: { open: false, items: [], index: 0 } }) },
+asAction() {
+const o = this.data.order
+if (!o) return
+if (o.afterSalesAction === 'progress') {
+
+this.setData({ asPanelOpen: false })
+wx.pageScrollTo({ selector: '.as-progress-card', duration: 200, fail: () => {} })
+return
+}
+if (o.afterSalesAction === 'start') this.setData({ asPanelOpen: !this.data.asPanelOpen })
+},
+onAsDesc(e) { this.setData({ asDesc: e.detail.value }) },
+async submitAfterSales() {
+const desc = String(this.data.asDesc || '').trim()
+if (!desc) { wx.showToast({ title: '问题描述必填', icon: 'none' }); return }
+if (this.data.asSubmitting) return
+this.setData({ asSubmitting: true })
+try {
+await api.startAfterSales(this.data.order._id, desc)
+wx.showToast({ title: '已发起售后,门店会尽快跟进', icon: 'none', duration: 2200 })
+this.setData({ asPanelOpen: false, asDesc: '' })
+storage.setOrders([])   // 缓存失效,强制回源刷新徽标/进度
+this.load(this.data.order._id)
+} catch (e) {
+wx.showToast({ title: (e && e.message) || '发起失败,请稍后再试', icon: 'none' })
+} finally { this.setData({ asSubmitting: false }) }
+},
+async withdrawAfterSales() {
+if (this.data.asSubmitting) return
+this.setData({ asSubmitting: true })
+try {
+await api.withdrawAfterSales(this.data.order._id)
+wx.showToast({ title: '已撤回(记录保留)', icon: 'none' })
+storage.setOrders([])
+this.load(this.data.order._id)
+} catch (e) {
+wx.showToast({ title: (e && e.message) || '撤回失败', icon: 'none' })
+} finally { this.setData({ asSubmitting: false }) }
+},
+
+
+onAction(e) {
+const key = e.currentTarget.dataset.key
+if (key === 'cancel') return this.cancelOrder()
+if (key === 'openAfterSales') return this.setData({ asPanelOpen: !this.data.asPanelOpen })
+},
+
+async cancelOrder(){if(this._cancelling)return;this._cancelling=true;const P=require('../../utils/member-pricing'),id=this.data.order._id,k='booking-cancel:'+api.currentTenantId()+':'+id;try{const old=P.pending(k);let q;if(!old){q=await api.previewBookingCancel(id);const ok=await new Promise(resolve=>wx.showModal({title:'确认取消预约',content:['已收定金 '+q.display.paidText,'退回储值 '+q.display.storedRefundText,'不退部分 '+q.display.forfeitText,'线下退款 '+q.display.cashRefundText,q.display.note].filter(Boolean).join(' · '),success:r=>resolve(r.confirm),fail:()=>resolve(false)}));if(!ok)return}const r=await P.bookingMutation(k,'/bookings/'+id+'/cancel',{reviewHash:q?.reviewHash,reason:''},async(_,b)=>{try{return await api.cancelBooking(id,b.reason,b.reviewHash)}catch(e){if(old){const rows=await api.getBookings(this.data.lang);const saved=rows.find(x=>x._id===id);if(saved?.status==='cancelled')return {booking:saved,refundReceipt:saved.depositPayment?.refundReceipt}}throw e}},!!old);storage.setOrders([]);Promise.resolve().then(()=>api.refreshMember()).catch(()=>{});await this.load(id);wx.showModal({title:'预约已取消',content:r.refundReceipt?.display?.note||'已更新预约记录，请查看退款明细。',showCancel:false,fail:()=>wx.showToast({title:'预约已取消，请查看退款明细',icon:'none'})})}catch(e){wx.showToast({title:e.message||'取消结果待核实，请重试原操作',icon:'none'})}finally{this._cancelling=false}},
+
+callStore() {
+require('../../utils/store-navigation').call(this.data.order.store, this.data.lang === 'en')
+},
+
+openLocation() {
+require('../../utils/store-navigation').navigate(this.data.order.store, this.data.lang === 'en')
+},
+
+previewWork(event) {
+const url = event.currentTarget.dataset.url
+wx.previewImage({ current: url, urls: this.data.order.visibleWorkImages })
+}
 })

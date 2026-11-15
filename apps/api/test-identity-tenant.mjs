@@ -14,11 +14,11 @@
    ══ 只打沙箱、且连沙箱本身都不碰 ══
    在库的一份**临时副本**上跑,跑完删。 */
 
-import { readFileSync, copyFileSync, existsSync, unlinkSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, existsSync, unlinkSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync, backup } from 'node:sqlite'
 import { backfillIdentities, createIdentityUpsert, scanIdentityMismatch, repairIdentityTenant, identityRulers } from './user-identity.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
@@ -61,7 +61,9 @@ if (!existsSync(SRC)) {
 } else {
   const dir = mkdtempSync(join(tmpdir(), 'll-d130-'))
   const COPY = join(dir, 'probe.sqlite')
-  copyFileSync(SRC, COPY)
+  // Include the live WAL: a plain file copy can retain the pre-migration schema.
+  const sourceDb=new DatabaseSync(SRC,{readOnly:true})
+  try {await backup(sourceDb,COPY)} finally {sourceDb.close()}
   const db = new DatabaseSync(COPY)
   const iso = (d) => d.toISOString()
   let seq = 0

@@ -1,0 +1,3 @@
+const pricing=require('../../utils/member-pricing')
+const options=pricing.options.filter(o=>o.rateBps!==null)
+Component({properties:{value:{type:null,value:null,observer:'sync'},disabled:Boolean},data:{options,index:[0],selectedText:pricing.label(null)},methods:{sync(value){this.setData({selectedText:pricing.label(value),index:[Math.max(0,options.findIndex(o=>o.rateBps===value))]})},change(e){if(this.data.disabled)return;const index=Number(e.detail.value);if(!options[index])return;this.setData({index:[index],selectedText:options[index].label});this.triggerEvent('change',{rateBps:options[index].rateBps})}}})

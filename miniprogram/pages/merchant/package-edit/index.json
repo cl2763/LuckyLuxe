@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "套餐",
-  "usingComponents": {}
+  "usingComponents": {
+    "discount-wheel": "/components/discount-wheel/index"
+  }
 }

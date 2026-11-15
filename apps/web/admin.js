@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261022-booking-detail'
+const ADMIN_BUILD = '20261115-member-pricing-v3-ops2'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -383,6 +383,7 @@ async function request(path, options = {}) {
     }
     const err = new Error(data.error?.message || `请求失败（HTTP ${response.status}）`)
     err.code = data.error?.code
+    err.statusCode = response.status
     err.details = data.error?.details
     throw err
   }
@@ -1640,8 +1641,8 @@ function renderDailyClose() {
             </div>`).join('')}
           <div class="dc-links">
             ${(v.settlements.find((s) => s.settlementId === p.settlementId) || {}).hasSnapshot
-              ? `<a data-dc-snapshot="${escapeHtml(p.code)}">${zh ? '查看签署单' : 'View signed sheet'}</a>` : ''}
-            <a data-dc-correct="${escapeHtml(p.settlementId)}">${zh ? '金额有误?发起更正' : 'Amount wrong? Amend'}</a>
+              ? `<button class="dc-link-action" type="button" data-dc-snapshot="${escapeHtml(p.code)}">${zh ? '查看签署单' : 'View signed sheet'}</button>` : ''}
+            <button class="dc-link-action" type="button" data-dc-correct="${escapeHtml(p.settlementId)}">${zh ? '金额有误?发起更正' : 'Amount wrong? Amend'}</button>
             <button class="primary slim" data-dc-allocate="${escapeHtml(p.settlementId)}" type="button">${zh ? '保存分配' : 'Save split'}</button>
           </div>
         </div>
@@ -1660,8 +1661,8 @@ function renderDailyClose() {
                而上面「待分配」那组是有「金额有误?发起更正」的 —— 同一件事两端/两处不一致(闭环③违例)。
                小程序两组都有,网页这里补齐;入口逻辑与上面那组完全相同(同一个 data-dc-correct 处理器)。 -->
           <div class="dc-links">
-            ${a.hasSnapshot ? `<a data-dc-snapshot="${escapeHtml(a.code)}">${zh ? '查看签署单' : 'View signed sheet'}</a>` : ''}
-            <a data-dc-correct="${escapeHtml(a.settlementId)}">${zh ? '金额有误?发起更正' : 'Amount wrong? Amend'}</a>
+            ${a.hasSnapshot ? `<button class="dc-link-action" type="button" data-dc-snapshot="${escapeHtml(a.code)}">${zh ? '查看签署单' : 'View signed sheet'}</button>` : ''}
+            <button class="dc-link-action" type="button" data-dc-correct="${escapeHtml(a.settlementId)}">${zh ? '金额有误?发起更正' : 'Amount wrong? Amend'}</button>
           </div>
         </div>`).join('')}` : ''}
 
@@ -3808,6 +3809,7 @@ function editorFromService(service) {
     id: service.id,
     type: String(service.type || 'nail').toUpperCase(),
     category: service.category || '',
+    categoryId: service.categoryId ?? pricingState.items.find(item => item.id === service.id)?.categoryId ?? '',
     nameZh: service.nameZh || '',
     nameEn: service.nameEn || '',
     descriptionZh: service.descriptionZh || '',
@@ -3820,54 +3822,6 @@ function editorFromService(service) {
     sortOrder: String(service.sortOrder || 0),
     isActive: Boolean(service.isActive)
   }
-}
-
-function renderServiceEditor() {
-  if (!owner.serviceEditor) {
-    els.serviceEditor.innerHTML = ''
-    return
-  }
-  const service = owner.serviceEditor
-  els.serviceEditor.innerHTML = `
-    <form class="service-editor-card card" id="serviceEditorForm">
-      <div class="section-row compact-row">
-        <h3>${t('serviceEditor')}</h3>
-        <button class="ghost slim" data-cancel-service-editor type="button">${t('cancel')}</button>
-      </div>
-      <div class="form-grid">
-        <label><span>${owner.lang === 'zh' ? '平台大类(必挂)' : 'Category'}</span><select name="type">
-          <option value="NAIL" ${service.type === 'NAIL' ? 'selected' : ''}>${owner.lang === 'zh' ? '美甲' : 'Nail'}</option>
-          <option value="LASH" ${service.type === 'LASH' ? 'selected' : ''}>${owner.lang === 'zh' ? '美睫' : 'Lash'}</option>
-          <option value="CARE" ${service.type === 'CARE' ? 'selected' : ''}>${owner.lang === 'zh' ? '护理' : 'Care'}</option>
-          <option value="OTHER" ${service.type === 'OTHER' ? 'selected' : ''}>${owner.lang === 'zh' ? '其他(归护理·其他类)' : 'Other'}</option>
-        </select></label>
-        ${/* 🔴 分类唯一真相律②(店主 2026-08-25):**编辑项目时只选大类,不许有第二个分类输入框**。
-              这里原来是一个自由文本「分类」框(法式系列/日式款…),与大类各说各的 ——
-              顾客端就是被它搞成「8 个分组各 1 项」的。现在只剩大类下拉;
-              自由文本列已退役为派生字段(读时 join 大类字典,写时不接受)。 */''}
-        <label><span>${owner.lang === 'zh' ? '大类(唯一分类口)' : 'Category'}</span><select name="categoryId">
-          <option value="">${owner.lang === 'zh' ? '— 请选一个大类 —' : '— pick one —'}</option>
-          ${pricingState.categories.map((c) => `<option value="${c.id}" ${c.id === service.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
-        </select></label>
-        <label><span>${t('nameZh')}</span><input name="nameZh" value="${escapeHtml(service.nameZh)}"></label>
-        <label><span>${t('nameEn')}</span><input name="nameEn" value="${escapeHtml(service.nameEn)}"></label>
-      </div>
-      <label><span>${t('descriptionZh')}</span><textarea name="descriptionZh" rows="2">${escapeHtml(service.descriptionZh)}</textarea></label>
-      <label><span>${t('descriptionEn')}</span><textarea name="descriptionEn" rows="2">${escapeHtml(service.descriptionEn)}</textarea></label>
-      ${window.ServiceImageEditor.field(service, owner.lang === 'zh')}
-      <div class="form-grid">
-        <label><span>${escapeHtml((owner.lang === 'zh' ? '价格 ' : 'Price ') + (storeCurrency() || '—'))}</span><input name="price" inputmode="decimal" value="${escapeHtml(service.price)}"></label>
-        <label><span>${t('depositCad')}</span><input name="deposit" inputmode="decimal" value="${escapeHtml(service.deposit)}"></label>
-        <label><span>${t('durationMin')}</span><input name="duration" inputmode="numeric" value="${escapeHtml(service.duration)}"></label>
-        <label><span>${t('sortOrder')}</span><input name="sortOrder" inputmode="numeric" value="${escapeHtml(service.sortOrder)}"></label>
-      </div>
-      <label class="check-row">
-        <input name="isActive" type="checkbox" ${service.isActive ? 'checked' : ''}>
-        <span>${t('active')}</span>
-      </label>
-      <button class="primary full" data-save-service-editor type="submit">${t('save')}</button>
-    </form>
-  `
 }
 
 // ===== 周排班网格 =====
@@ -4217,7 +4171,7 @@ function renderCustomers() {
       <div>
         <h3>${escapeHtml(customerName(customer))} ${memberTierBadge(customer)}${(() => { const tr = rfmTierOf(customer); return tr ? ` <span style="font-size:11px;font-weight:800;color:${tr.ink || 'var(--heroink)'};background:${tr.color};border-radius:5px;padding:2px 8px;vertical-align:middle">${tr.label}</span>` : '' })()}</h3>
         <p class="subtle">${escapeHtml(customer.memberCode || '')}${customer.birthday ? ` · 🎂 ${escapeHtml(customer.birthday)}` : ''}</p>
-        <p class="customer-contact">${escapeHtml([customer.phone, customer.email].filter(Boolean).join(' · ') || '-')}</p>
+        ${customer.personalDiscount?.active?`<p class="subtle">个人折扣：${escapeHtml(customer.personalDiscount.discountText)} · ${escapeHtml(customer.personalDiscount.eligibilityText)}</p>`:''}<p class="customer-contact">${escapeHtml([customer.phone, customer.email].filter(Boolean).join(' · ') || '-')}</p>
         ${(customer.tags || []).length ? `<div class="customer-tags">${customer.tags.slice(0, 3).map((tag) => `<span class="customer-tag">${escapeHtml(tag)}</span>`).join('')}${customer.tags.length > 3 ? `<span class="customer-tag">+${customer.tags.length - 3}</span>` : ''}</div>` : ''}
         <div class="inline-actions compact-actions customer-card-actions">
           <button class="ghost slim" data-customer-detail="${customer.id}" type="button">${t('viewCustomerFile')}</button>
@@ -4266,6 +4220,7 @@ function renderCustomerDetail() {
           <span>${owner.lang === 'zh' ? '储值余额' : 'Stored value'} <strong>${money(customer.storedValueBalanceCents || 0)}</strong></span>
         </div>
       </article>
+      <div id="mpCustomerDiscount"></div>
       <section class="customer-profile-edit card">
         <div class="section-row compact-row">
           <div>
@@ -4332,6 +4287,7 @@ function renderCustomerDetail() {
       </section>
     </section>
   `
+  window.MemberPricingMember.mount(document.querySelector('#mpCustomerDiscount'),customer.id,{request,escapeHtml,money,toast,isOwner:isOwnerRole()})
   loadMigrationArchive(customer.id)
   loadCustomerNotes(customer.id); renderSignedDocsBlock(customer.id, customerName(customer))   // 签署文件留档(10b);实现在 customer-docs.js
 }
@@ -4721,36 +4677,6 @@ async function saveService(id) {
   toast(t('serviceSaved'))
   await loadAll()
 }
-
-async function saveServiceEditor(event) {
-  event.preventDefault()
-  const form = new FormData(event.target)
-  if (event.target.dataset.imageReading) throw Error('图片正在读取，请稍候'); const imageUrl = form.get('imageUrl')
-  const body = {
-    type: form.get('type'),
-    // 分类唯一真相律:只送 categoryId,自由文本 category 不再送(后端也不再接受)
-    categoryId: form.get('categoryId') || null,
-    nameZh: form.get('nameZh'),
-    nameEn: form.get('nameEn'),
-    descriptionZh: form.get('descriptionZh'),
-    descriptionEn: form.get('descriptionEn'),
-    imageUrl, imageView: JSON.parse(form.get('imageView') || '{}'),
-    priceCents: dollarsToCents(form.get('price')),
-    depositCents: dollarsToCents(form.get('deposit')),
-    baseDurationMin: Number(form.get('duration')),
-    sortOrder: Number(form.get('sortOrder')),
-    isActive: form.get('isActive') === 'on'
-  }
-  const isCreate = owner.serviceEditor.mode === 'create'
-  await request(isCreate ? '/admin/services' : `/admin/services/${owner.serviceEditor.id}`, {
-    method: isCreate ? 'POST' : 'PATCH',
-    body: JSON.stringify(body)
-  })
-  owner.serviceEditor = null
-  toast(isCreate ? t('serviceCreated') : t('serviceSaved'))
-  await loadAll()
-}
-
 
 async function generateDailyBrief() {
   owner.aiLoading = 'brief'
@@ -5530,7 +5456,7 @@ els.schedulePage.addEventListener('click', async (event) => {
       .catch((error) => toast(error.message))
   }
 })
-els.financePage.addEventListener('click', (event) => {
+els.financePage.addEventListener('click', async (event) => {
   if (event.target.closest('[data-goal-setup]')) {
     openGoalSetupModal().catch((error) => toast(error.message))
     return
@@ -5667,8 +5593,8 @@ els.financePage.addEventListener('click', (event) => {
   }
   // 签署单点击由全页统一委托处理：订单详情和日结共用同一出口。
   // 屏 1b 金额更正 + 日结确认/重开:整族搬去 ./daily-close-rows.js(公约①②)
-  if (window.DailyCloseRows.handleClick(event, {
-    state: dailyCloseState, request, toast, renderDailyClose, loadDailyClose, yuanToCents, zh: owner.lang === 'zh'
+  if (await window.DailyCloseRows.handleClick(event, {
+    state: dailyCloseState, request, toast, renderDailyClose, loadDailyClose, yuanToCents, zh: owner.lang === 'zh', onAmended: async()=>{const d=await request('/admin/customers');owner.customers=d.customers;renderCustomers()}
   })) return
   // ===== 财务密码卡(屏 V4,商家自助)=====
   if (event.target.closest('#finLockSw')) {
@@ -5856,6 +5782,7 @@ document.addEventListener('click', (event) => {
   if (!code) { toast('签署单编号缺失'); return }
   request(`/admin/settlements/${encodeURIComponent(code)}/snapshots`)
     .then((r) => {
+      if(r.memberDocumentGroupId){openSnapViewer([{code,type:'html',label:'本次全部服务单',url:(window.WebScope?.prefix||'')+r.url}],0);return}
       const items = (r.sheets || []).filter((sh) => sh.snapshotUrl).map((sh) => ({ code: sh.code, label: sh.label, url: sh.snapshotUrl }))
       if (!items.length) { toast(owner.lang === 'zh' ? '这单还没有签署快照' : 'No snapshot yet'); return }
       openSnapViewer(items, Math.max(0, items.findIndex((it) => it.code === code)))
@@ -6452,59 +6379,6 @@ function renderTimecardSettings() {
    fields: [{ key, label, type: 'text'|'number'|'select'|'checkbox', value, placeholder, options: [[v,label]], hint }] */
 function openFormModal(options) { return window.FormModal.open(options,{escapeHtml,toast}) }
 
-async function savePackage(kind, existing) {
-  // D50:prompt 链 → 页内表单弹层(单弹层多字段)
-  kind = kind || (existing && existing.kind) || 'recharge'
-  const isTimes = kind === 'times'
-  let giftEditor
-  /* 裁决(店主 08-20):关联项目组禁自由文本——下拉单选(现有二级分类+不限)。
-     存量自由文本匹配不上=选项标 ⚠ 红提示商家改选,不静默改数据。 */
-  let groupOptions = [['', '不限(不限制项目组)']]
-  let legacyGroupBad = false
-  if (isTimes) {
-    const cats = (await request('/admin/pricing/categories').catch(() => ({ categories: [] }))).categories || []
-    groupOptions = groupOptions.concat(cats.map((c) => [c.name, c.name]))
-    const cur = existing ? String(existing.projectGroup || '') : ''
-    if (cur && !cats.some((c) => c.name === cur)) {
-      legacyGroupBad = true
-      groupOptions.unshift([cur, `⚠ ${cur}(分类已不存在,请改选)`])
-    }
-  }
-  openFormModal({
-    mountContent:overlay=>{if(!isTimes){const host=document.createElement("div");overlay.querySelector(".action-row").before(host);giftEditor=window.GiftEditor.mount(host,existing?.giftItems||[],mMoney(0).replace(/[0-9.,\s]/g,""))}},
-    title: existing ? `编辑${isTimes ? '次卡' : '充值套餐'}` : `新建${isTimes ? '次卡' : '充值套餐'}`,
-    hint: isTimes ? '售卡=预收负债不计积分;核销按折算单价确认收入(批②)。' : '赠送=营销让利:入储值负债、单独列示,不算实收/业绩/积分。',
-    fields: [
-      { key: 'name', label: '名称', type: 'text', value: existing ? existing.name : '', placeholder: isTimes ? '如 美甲单色 5 次卡' : '如 充500赠50' },
-      { key: 'price', label: isTimes ? '售价' : '充值金额', type: 'number', value: existing ? existing.priceCents / 100 : '' },
-      ...(isTimes ? [
-        { key: 'times', label: '总次数', type: 'number', value: existing ? existing.timesCount : 5 },
-        { key: 'projectGroup', label: '关联项目组', type: 'select', value: existing ? existing.projectGroup || '' : '', options: groupOptions, hint: legacyGroupBad ? '⚠ 原项目组的分类已不存在,请改选后保存(不会自动改动已售卡)' : '核销时从组内选具体项目;选「不限」=全部项目可核销', danger: legacyGroupBad },
-        { key: 'validDays', label: '有效期天数(留空=长期)', type: 'number', value: existing && existing.validDays ? existing.validDays : '' }
-      ] : [
-        { key: 'bonus', label: '赠送金额(可为 0)', type: 'number', value: existing && existing.bonusCents ? existing.bonusCents / 100 : '' }
-      ]),
-      { key: 'benefits', label: '权益说明(可留空)', type: 'text', value: existing ? existing.benefits || '' : '' },
-      { key: 'mallVisible', label: '上架商城(顾客商城可见)', type: 'checkbox', value: existing ? existing.mallVisible !== false : true }
-    ],
-    onSave: async (v) => {
-      if (!String(v.name || '').trim()) { toast('名称必填'); return false }
-      const body = { kind, name: String(v.name).trim(), priceCents: mCents(v.price), benefits: String(v.benefits || '').trim(), mallVisible: Boolean(v.mallVisible) }
-      if (isTimes) {
-        body.timesCount = Math.round(Number(v.times) || 0)
-        body.projectGroup = String(v.projectGroup || '').trim()
-        body.validDays = v.validDays ? Math.round(Number(v.validDays) || 0) : null
-      } else {
-        body.bonusCents = mCents(v.bonus || 0)
-        body.giftItems = giftEditor.read()
-      }
-      if (existing) await request(`/admin/packages/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
-      else await request('/admin/packages', { method: 'POST', body: JSON.stringify(body) })
-      toast('已保存')
-      await loadMembershipPage()
-    }
-  })
-}
 async function saveCoupon(existing) {
   // D50:prompt 链 → 页内表单弹层
   openFormModal({
@@ -7001,6 +6875,7 @@ function renderPricing() {
   if (mod === 'storefront') renderServices()
   renderPricingCategories()
   renderPricingItems()
+  mountMemberPricingConfig()
   renderPricingRules()
 }
 
@@ -7029,6 +6904,7 @@ function renderPricingItems() {
   const group = (kind) => pricingState.items.filter((i) => i.itemKind === kind)
   /* S3(图=合同):价档 chips —— 挂了的实心展示;疗程价没挂=划线 na 态「未挂 · 开单时不出现」(不是置灰,开单时根本不存在)。 */
   const tierChips = (item) => {
+    if(item.settlementPriceSummary)return item.settlementPriceSummary.map(p=>`<span class="tier-chip on">${escapeHtml(p.label)}${p.key==='member'?'':' '+escapeHtml(p.amountText)}</span>`).join('')
     const chips = []
     if (item.listPriceCents) chips.push(`<span class="tier-chip on">${pzh() ? '普通价' : 'List'} ${money(item.listPriceCents)}</span>`)
     if (item.sharePriceCents) chips.push(`<span class="tier-chip on">${pzh() ? '分享价' : 'Share'} ${money(item.sharePriceCents)}</span>`)
@@ -7076,76 +6952,6 @@ function renderPricingTimecards() {
       </div>
       <button class="ghost slim" data-admin-page="membership" type="button">${pzh() ? '去会员与营销' : 'Membership & Marketing'}</button>
     </div>`
-}
-
-function renderPricingItemEditor() {
-  if (!els.pricingItemEditor) return
-  const draft = pricingState.editing
-  if (!draft) { els.pricingItemEditor.innerHTML = ''; return }
-  const isAddon = draft.itemKind === 'addon'
-  els.pricingItemEditor.innerHTML = `
-    <div class="pricing-editor">
-      <div class="kb-facts-grid">
-        <label><span>${pzh() ? '项目名称' : 'Name'}</span><input id="piName" value="${escapeHtml(draft.nameZh || '')}"></label>
-        <label><span>${pzh() ? '英文名(选填)' : 'English name'}</span><input id="piNameEn" value="${escapeHtml(draft.nameEn || '')}"></label>
-        <label><span>${pzh() ? '大类' : 'Category'}</span><select id="piCategory">
-          ${pricingState.categories.map((c) => `<option value="${c.id}" ${c.id === draft.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
-        </select></label>
-        <label><span>${pzh() ? '计费单位' : 'Unit'}</span><select id="piUnit">
-          ${PRICING_UNITS.map(([v, label]) => `<option value="${v}" ${v === (draft.unit || 'once') ? 'selected' : ''}>${label}</option>`).join('')}
-        </select></label>
-        <label><span>${pzh() ? '原价' : 'List price'}</span><input id="piList" inputmode="decimal" value="${draft.listPriceCents ? draft.listPriceCents / 100 : ''}"></label>
-        <label><span>${pzh() ? '分享价' : 'Share price'}</span><input id="piShare" inputmode="decimal" value="${draft.sharePriceCents ? draft.sharePriceCents / 100 : ''}"></label>
-        <label><span>${pzh() ? '会员价' : 'Member price'}</span><input id="piMember" inputmode="decimal" value="${draft.memberPriceCents ? draft.memberPriceCents / 100 : ''}"></label>
-        <label><span>${pzh() ? '疗程价(选填)' : 'Course price'}</span><input id="piCourse" inputmode="decimal" value="${draft.coursePriceCents ? draft.coursePriceCents / 100 : ''}"></label>
-        <label><span>${pzh() ? '疗程次数' : 'Course times'}</span><input id="piCourseTimes" inputmode="numeric" value="${draft.courseTimes || ''}"></label><label><span>${pzh() ? '时长(分钟)' : 'Duration (min)'}</span><input id="piDuration" inputmode="numeric" value="${draft.baseDurationMin ?? (isAddon ? 0 : 60)}"></label>
-      </div>${isAddon ? '' : `<label class="subtle"><input type="checkbox" id="piQuoteMode" ${draft.priceMode === 'quote' ? 'checked' : ''}> ${pzh() ? '这项<b>需技师看过才报价</b>(勾上后 AI 不自己报数,也不进「最便宜的是哪种」)' : 'Quote on request (AI will not price it)'}</label>`}
-      ${isAddon ? `
-      <div class="pricing-addon-block">
-        <label><span>${pzh() ? '加项组名(结算表单里按它分组,如 延长类 / 补甲类 / 卸甲类;留空归「其他加项」)' : 'Addon group'}</span>
-          <input id="piAddonGroup" list="piAddonGroupList" value="${escapeHtml(draft.addonGroup || '')}" placeholder="${pzh() ? '例:延长类' : 'e.g. Extensions'}">
-        </label>
-        <datalist id="piAddonGroupList">${[...new Set((pricingState.items || []).map((i) => i.addonGroup).filter(Boolean))].map((g) => `<option value="${escapeHtml(g)}">`).join('')}</datalist>
-        <label class="subtle"><input type="checkbox" id="piPctRule" ${draft.priceRule === 'pct_of_tier_price' ? 'checked' : ''}>
-          ${pzh() ? '单指价按主项目该档价的百分比算(留空用规则默认 10%)' : 'Derive per-finger price from main item price'}</label>
-        <input id="piPct" class="pricing-sort" inputmode="decimal" placeholder="%" value="${draft.priceRuleValue || ''}">
-        <div class="subtle" style="margin-top:8px">${pzh() ? '适用大类(这个加项能配在哪些大类的项目上)' : 'Applies to categories'}</div>
-        <div class="pricing-scope">
-          ${pricingState.categories.map((c) => `<label class="subtle"><input type="checkbox" data-scope="${c.id}" ${(draft.addonScope || []).includes(c.id) ? 'checked' : ''}> ${escapeHtml(c.name)}</label>`).join('')}
-        </div>
-      </div>` : ''}
-      <div class="action-row wrap">
-        <button class="primary slim" id="piSave" type="button">${pzh() ? '保存' : 'Save'}</button>
-        <button class="ghost slim" id="piCancel" type="button">${pzh() ? '取消' : 'Cancel'}</button>
-        <span class="subtle">${pzh() ? '留空的价档=未挂:开单时不会出现这个价档。改动即时生效于新开单;已开未签的单不受影响(金额红线:合计只能由后端重算)。' : 'Blank tiers are detached: they never appear at checkout. Changes apply to new settlements only.'}</span>
-      </div>
-    </div>`
-}
-
-function collectPricingItemForm() {
-  const body = {
-    nameZh: document.querySelector('#piName')?.value.trim(),
-    nameEn: document.querySelector('#piNameEn')?.value.trim(),
-    categoryId: document.querySelector('#piCategory')?.value || null,
-    unit: document.querySelector('#piUnit')?.value || 'once',
-    itemKind: pricingState.editing.itemKind,
-    type: pricingState.editing.type || 'OTHER',
-    listPriceCents: pCents(document.querySelector('#piList')?.value) ?? 0,
-    sharePriceCents: pCents(document.querySelector('#piShare')?.value),
-    memberPriceCents: pCents(document.querySelector('#piMember')?.value),
-    coursePriceCents: pCents(document.querySelector('#piCourse')?.value),
-    courseTimes: Number(document.querySelector('#piCourseTimes')?.value || 0) || null,
-    baseDurationMin: Number(document.querySelector('#piDuration')?.value || 0),
-    ...(pricingState.editing.itemKind === 'addon' ? {} : { priceMode: document.querySelector('#piQuoteMode')?.checked ? 'quote' : 'fixed' })   // D146:加项没有这一格,不发
-  }
-  if (pricingState.editing.itemKind === 'addon') {
-    body.priceRule = document.querySelector('#piPctRule')?.checked ? 'pct_of_tier_price' : 'fixed'
-    body.priceRuleValue = Number(document.querySelector('#piPct')?.value || 0) || 0
-    body.addonScope = Array.from(document.querySelectorAll('[data-scope]')).filter((el) => el.checked).map((el) => el.dataset.scope)
-    // 裁决④:加项组名由商家自填,结算表单按它给加项目录分组
-    body.addonGroup = (document.querySelector('#piAddonGroup')?.value || '').trim()
-  }
-  return body
 }
 
 function renderPricingRules() {
@@ -7306,7 +7112,7 @@ if (els.pricingPage) {
       }
       if (event.target.closest('#piCancel')) { pricingState.editing = null; renderPricingItemEditor(); return }
       if (event.target.closest('#piSave')) {
-        const body = collectPricingItemForm()
+        const body = collectPricingItemForm();body.priceSystemUpdate=window.MemberPricingSettings.read(document.querySelector('#mpSettlementPrices'))
         if (!body.nameZh) { toast(pzh() ? '项目名称必填' : 'Name required'); return }
         const editingId = pricingState.editing.id
         if (editingId) await request(`/admin/pricing/items/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) })
@@ -7317,7 +7123,7 @@ if (els.pricingPage) {
         }
         pricingState.editing = null
         await loadPricingPage()
-        toast(pzh() ? '已保存,AI 报价立即生效' : 'Saved')
+        toast(pzh() ? '已保存结算价格，新开单使用更新价格' : 'Settlement prices saved for new service documents')
         return
       }
       const togItem = event.target.closest('[data-item-toggle]')
@@ -7410,7 +7216,7 @@ function renderMembershipSettings() {
         <p class="subtle">${pzh() ? '等级表用 JSON 描述(key / name / minSpendCents),暂由平台侧协助配置。' : 'Tier table as JSON.'}</p>
       </div>` : ''}
     ${msReadOnly ? '' : `<button class="primary slim" id="msSave" type="button">${pzh() ? '保存会员设置' : 'Save membership settings'}</button>`}
-    <p class="subtle">${pzh() ? '会员价在「价目表」里逐项设置;这里决定「谁算会员」。' : 'Member prices are set per item in the price list; this decides who counts as a member.'}</p>
+    <p class="subtle">${pzh() ? '会员资格有效时，结算采用本人绑定折扣；未设置个人折扣时用门店默认会员价。会员资格取消后暂停折扣，保留身份则继续可用。' : 'Eligible members use their personal discount, or store default member prices if unset. Losing membership pauses the discount.'}</p>
     <p class="subtle">${pzh() ? '充值套餐(充X赠Y)在「会员与营销 → 套餐」里维护,开单随单充值与代充都从那里选档。' : 'Recharge packages are managed under Membership & Marketing → Packages.'}</p>`
 }
 

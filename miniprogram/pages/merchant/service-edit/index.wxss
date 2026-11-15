@@ -10,3 +10,5 @@ page{background:var(--paper)}
 .pkv{font-size:25rpx;color:var(--brandd)}.btn {margin-top:26rpx;text-align:center;font-size:28rpx;color:var(--heroink);background:var(--hero);border-radius:999rpx;padding:26rpx 0;letter-spacing:2rpx}
 .btn.off{opacity:.5}
 .note{font-size:21rpx;color:var(--sub);line-height:1.6;margin-top:18rpx;text-align:center}
+.error{padding:24rpx;margin:20rpx 0;border:1rpx solid var(--bad);color:var(--bad);border-radius:12rpx;line-height:1.6}.in{min-width:0;min-height:80rpx}.btn{line-height:1.4;border:0}.form price-system{display:block;margin:24rpx}.lb{flex-basis:220rpx}
+.ghost{width:100%;min-height:88rpx;line-height:1.4;padding:18rpx 24rpx;margin-top:16rpx;font-size:26rpx;border:1rpx solid var(--line);border-radius:999rpx;color:var(--ink);background:var(--card)}

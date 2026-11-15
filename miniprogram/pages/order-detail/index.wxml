@@ -1,5 +1,6 @@
 <include src="../../templates/media-privacy.wxml" />
 <view wx:if="{{order}}" class="page order-detail-page {{order.actions.length ? 'has-bottom-actions' : ''}} {{themeClass}}" style="{{bottomInset ? 'padding-bottom:' + bottomInset + 'px' : ''}}">
+<view wx:if="{{order.depositPayment}}" class="card" style="padding:24rpx;margin:24rpx"><view>预约定金储值抵扣：{{order.depositPayment.storedDeductionText}}</view><view wx:if="{{order.depositPayment.retainedStoredCents > 0}}">沿用储值定金：{{order.depositPayment.retainedStoredText}}</view><view wx:if="{{order.depositPayment.offlineDueCents > 0}}">仍需线下支付：{{order.depositPayment.offlineDueText}}</view><view>{{order.depositPayment.note}}</view><block wx:if="{{order.depositPayment.refundReceipt}}"><view>退回储值：{{order.depositPayment.refundReceipt.display.storedRefundText}}</view><view>不退部分：{{order.depositPayment.refundReceipt.display.forfeitText}}</view><view>退款后余额：{{order.depositPayment.refundReceipt.balanceAfterText}}</view><view>{{order.depositPayment.refundReceipt.display.note}}</view></block></view>
   <!-- 批③首件 A1(§二):头卡=服务名+状态徽标(后端三态同源)+单号 -->
   <view class="detail-card card">
     <view class="status-line">
@@ -53,7 +54,8 @@
       <view wx:if="{{order.pay}}" class="section-note">已签署 {{order.pay.signedAt}}</view>
     </view>
     <!-- L3 裁(店主 08-22):多张单=顶部组汇总行(Σ各张头条,与组卡同构)+逐张签署单卡(各自五步账+头条+原件) -->
-    <block wx:if="{{order.pay && order.pay.sheets.length > 1}}">
+    <view wx:if="{{order.memberDocuments}}" class="info-card card"><view class="info-row"><text>本次服务单</text><text>{{order.memberDocuments.statusText}}</text></view><view wx:for="{{order.memberDocuments.documents}}" wx:key="id"><view class="info-row"><text>{{item.name}}</text><text>{{item.amountText}} · {{item.statusText}}</text></view><view class="muted">{{item.items}}</view></view><button class="btn btn-primary" bindtap="openMemberDocuments">{{order.memberDocuments.actionText}}</button></view>
+    <block wx:elif="{{order.pay && order.pay.sheets.length > 1}}">
       <view class="info-card card">
         <view class="info-row hero"><text>{{order.pay.groupCashLabel}}</text><text class="price">{{order.pay.groupCashText}}</text></view>
       </view>
@@ -78,7 +80,7 @@
     <view class="info-card card" wx:elif="{{order.status === 'completed' || order.status === 'after_sales'}}">
       <view class="archive-empty">本单未产生结算单</view>
     </view>
-    <view class="info-card card" wx:else>
+    <view class="info-card card" wx:elif="{{!order.depositPayment}}">
       <view class="info-row"><text>服务总价</text><text wx:if="{{order.servicePrice !== null}}">{{cur.p}}{{cur.s}}{{order.servicePrice}}</text><text wx:else>—</text></view>
       <view wx:if="{{order.depositState === 'received'}}" class="info-row"><text>定金(已收)</text><text class="price" wx:if="{{order.payableAmount !== null}}">{{cur.p}}{{cur.s}}{{order.payableAmount}}</text><text wx:else>—</text></view>
       <view wx:elif="{{order.depositState === 'unpaid'}}" class="info-row"><text>定金(待到店支付)</text><text>—</text></view>

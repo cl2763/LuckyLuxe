@@ -1,3 +1,4 @@
+import { storefrontWithoutInlineRecharge, cashAmendmentDelta } from './member-pricing-daily-facts.mjs'
 /* 退卡口(N-5,店主 2026-08-25 拍板;图=合同「退卡口设计图」)。
 
    🔴 动手前必须分清的一件事:**退卡不是手动耗卡。**
@@ -43,9 +44,12 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
        **把本店送出去的钱用现金退给顾客** —— 不加硬拦(每家店规则不一样),但界限要画到屏上。
        bonusRemaining = 还没被退掉的赠送;paidRefundable = 余额里属于顾客自己付过的那部分。 */
     const bonusRefunded = db.prepare("SELECT COALESCE(SUM(bonus_part_cents),0) n FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type = 'refund'").get(tenantId, userId).n
-    const bonusRemaining = Math.max(0, Math.min(row.bonus - bonusRefunded, row.balance))
+    const depositBonusUsed=db.prepare("SELECT COALESCE(SUM(CASE WHEN type='deposit_hold' THEN bonus_part_cents WHEN type='deposit_return' THEN -bonus_part_cents ELSE 0 END),0) n FROM stored_value_transactions WHERE tenant_id=? AND user_id=?").get(tenantId,userId).n
+    const bonusRemaining = Math.max(0, Math.min(row.bonus - bonusRefunded - depositBonusUsed, row.balance))
     const paidRefundable = Math.max(0, row.balance - bonusRemaining)
+    const depositTransferred=db.prepare("SELECT COALESCE(SUM(-amount_cents),0) n FROM stored_value_transactions WHERE tenant_id=? AND user_id=? AND type IN ('deposit_hold','deposit_return')").get(tenantId,userId).n
     return {
+      depositTransferredCents:depositTransferred,depositTransferText:depositTransferred>0?`已转预约定金 ${money(depositTransferred)}（不在当前卡内余额中；退款按对应预约或服务单处理）`:'',
       bonusRemainingCents: bonusRemaining, bonusRemainingText: money(bonusRemaining),
       paidRefundableCents: paidRefundable, paidRefundableText: money(paidRefundable),
       // 图 v1.1:当前余额下面那一行(后端出句,前端零拼串)
@@ -255,10 +259,7 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
        但屏幕不解释就等于自相矛盾(闭环纪律:不许出现找不到上下文的界面状态)。
        所以**算式不动**(不许替她假设钱退了),底下加一句把两个数连起来。 */
     // 到店支付(线下腿 Σ):在这儿算,免得日结那边再拼一段 SQL
-    const storefrontCents = settlementIds.length
-      ? db.prepare(`SELECT COALESCE(SUM(amount_cents),0) n FROM settlement_payments
-          WHERE leg = 'offline' AND settlement_id IN (${settlementIds.map(() => '?').join(',')})`).get(...settlementIds).n
-      : 0
+    const storefrontCents = storefrontWithoutInlineRecharge(db,tenantId,settlementIds)
     const refunds = refundsOfDay(date, tenantId)
     const isDrawer = (ch) => ['cash', 'offline', 'unknown', ''].includes(String(ch || ''))
     /* 裁定2(08-30d):冲销红字行带原渠道负数,当日抽屉自动 −(充值本就不写账本行,
@@ -335,11 +336,7 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
       footnote: outOther ? `另有 ${money(outOther)} 退款走转账 / 原路退回 —— 没经过抽屉,不在这个数里` : '',
       // 更正差额:算式不动,只说清"这个数为什么和营业额不一样"
       amendNote: (() => {
-        const rows = db.prepare(`SELECT a.amount_delta_cents d FROM settlement_amendments a
-          JOIN settlements s ON s.id = a.settlement_id
-          WHERE a.tenant_id = ? AND a.amount_delta_cents <> 0 AND s.id IN (${settlementIds.length ? settlementIds.map(() => '?').join(',') : "''"})`)
-          .all(tenantId, ...settlementIds)
-        const sum = rows.reduce((n, r) => n + r.d, 0)
+        const sum = cashAmendmentDelta(db,tenantId,settlementIds)
         if (!sum) return ''
         /* D79 之后这句要分两种情况说,否则会自相矛盾(闭环纪律:屏幕上不许有解释不了的数):
            · 差额**已经**记进现金手记(net 正好等于更正额)→ 抽屉数已经把它算进去了,别再说"实际应是";

@@ -31,7 +31,7 @@ const TIER_LABEL = { a: '高价值A', b: '回头客B', n: '新客N', s: '沉睡S
 function vm(u, TH) {
   const tier = tierOf(u, TH)
   return {
-    id: u.id,
+    personalDiscount:u.personalDiscount,id: u.id,
     name: u.displayName || '顾客',
     av: (u.displayName || '?').slice(0, 1),
     phone: u.phone || '',

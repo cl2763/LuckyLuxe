@@ -48,7 +48,7 @@ const apiFiles = readdirSync(join(ROOT, 'apps/api')).filter((b) => b.endsWith('.
 const backend = new Set()
 for (const f of apiFiles) {
   const src = readFileSync(join(ROOT, f), 'utf8')
-  for (const m of src.matchAll(/path === '([^']+)'/g)) backend.add(m[1])
+  for (const m of src.matchAll(/path\s*===\s*'([^']+)'/g)) backend.add(m[1])
   for (const m of src.matchAll(/path\.startsWith\('([^']+)'\)/g)) backend.add(`${m[1]}*`)
   /* 路由表/注册器那种写法也收:`'/admin/x': handler` 与 `route('/x'` */
   for (const m of src.matchAll(/route\(\s*'([^']+)'/g)) backend.add(m[1])
@@ -60,6 +60,10 @@ for (const f of apiFiles) {
   for (const m of src.matchAll(/\/\^(\\\/[^\s]*?)\$?\/\s*\.test\(path\)/g)) {
     const lit = m[1].replace(/\\\//g, '/').split(/[[(+*?{]/)[0].replace(/\$$/, '')
     if (lit.startsWith('/') && lit.length > 1) backend.add(`${lit}*`)
+  }
+  for (const m of src.matchAll(/path\.match\(\/\^(\\\/[^\s]*?)\$?\/\)/g)) {
+    const lit=m[1].replace(/\\\//g,'/').split(/[[(+*?{]/)[0].replace(/\$$/,'')
+    if(lit.startsWith('/')&&lit.length>1)backend.add(`${lit}*`)
   }
 }
 const prefixes = [...backend].filter((p) => p.endsWith('*')).map((p) => p.slice(0, -1))

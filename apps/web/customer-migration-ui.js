@@ -22,7 +22,7 @@ async function loadMigrationArchive(customerId, page=0) {
     if(owner.selectedCustomerId!==customerId || !box.isConnected)return
     const detail=(title,value)=>`<details><summary>${escapeHtml(title)}</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(JSON.stringify(value,null,2))}</pre></details>`
     box.innerHTML=`${data.pendingBalances.map(b=>`<p>${b.status==='pending'?'待核对旧余额':'原余额快照'} <strong>${money(b.amountCents,2)}</strong> · 数据截止 ${escapeHtml(b.cutoff)}<br><span class="subtle">${b.status==='pending'?'尚未启用，不计入当前可用余额。':b.status==='active'?'已确认启用；当前余额以账户流水为准。':b.status==='allocated'?'已分配为次数卡，未增加储值余额。':'已核对为耗尽。'}</span><br><button type="button" data-migration-balance="${escapeHtml(b.id)}">${b.status==='pending'?'核对旧余额':'查看启用回执'}</button><button type="button" data-migration-reconcile="${escapeHtml(b.id)}">分卡对平预览</button></p>`).join('')}
-      ${data.records.map(a=>detail('原系统资料 · '+a.sourceRecordId,a.source)).join('')}
+      <p class="subtle">个人折扣：历史充值金额不直接转换为个人折扣。由老板在会员档案中确认，或办理充值时确认。</p>${data.records.map(a=>detail('原系统资料 · '+a.sourceRecordId,a.source)).join('')}
       ${data.transactions.map(a=>detail((a.date||'日期未知')+' · '+(a.summary||'历史消费'),a.details)).join('')}
       ${data.assets.map(a=>detail((a.kind==='gift'?'旧赠品':'旧资产')+' · '+(a.title||'未命名')+'（原始资料）',a.details)+(a.kind==='gift'?`<button type="button" data-migration-gift="${escapeHtml(a.id)}">核对／领取实物赠品</button><button type="button" data-migration-service="${escapeHtml(a.id)}">核对服务赠卡</button>`:'')).join('')}
       ${!data.records.length&&!data.transactions.length&&!data.assets.length&&!data.pendingBalances.length?'<p class="subtle">暂无导入的历史资料。</p>':''}

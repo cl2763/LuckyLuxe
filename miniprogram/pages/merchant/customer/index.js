@@ -38,7 +38,7 @@ Page({
       const u = (r.customers || r.data || r || []).find((x) => x.id === this.id)
       if (!u) { wx.showToast({ title: '客户不存在', icon: 'none' }); return }
       this.setData({
-        c: {
+        c: {id:this.id,
           name: u.displayName || '顾客',
           av: (u.displayName || '?').slice(0, 1),
           tier: tierCn(u.memberTier) || '会员',

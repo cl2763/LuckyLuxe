@@ -74,14 +74,14 @@
       <block wx:if="{{svTxns.length}}">
         <view class="svtxn" wx:for="{{svTxns}}" wx:key="id">
           <!-- B3-3 代充回执:未确认只标注不阻塞(随单充值=签字即确认,天然不出现) -->
-          <view class="svtxn-l"><text class="svtxn-t">{{item.at}} · {{item.type === 'consume' ? '消耗' : '充值'}}<text wx:if="{{item.customerConfirmed === false}}" class="svtxn-unconfirmed">顾客未确认</text></text><text class="svtxn-u">{{item.userName}}</text></view>
+          <view class="svtxn-l"><text class="svtxn-t">{{item.at}} · {{item.typeText || '储值调整'}}<text wx:if="{{item.customerConfirmed === false}}" class="svtxn-unconfirmed">顾客未确认</text></text><text class="svtxn-u">{{item.userName}}</text></view>
           <view class="svtxn-m">
             <text wx:if="{{item.type === 'recharge'}}" class="svtxn-h2">{{item.handler}}</text>
             <text wx:elif="{{item.settlementCode}}" class="svtxn-code" data-code="{{item.settlementCode}}" catchtap="svOpenSettlement">{{item.settlementCode}} →</text>
             <text wx:else class="svtxn-h2">—</text>
             <text class="svtxn-s">{{item.source}}</text>
           </view>
-          <text class="svtxn-a {{item.type === 'consume' ? 'neg' : ''}}">{{item.amountText}}</text>
+          <text class="svtxn-a {{item.amountCents < 0 ? 'neg' : ''}}">{{item.amountText}}</text>
         </view>
       </block>
       <view wx:if="{{!svTxns.length}}" class="svtxn-empty">本月暂无流水</view>

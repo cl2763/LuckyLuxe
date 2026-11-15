@@ -5,27 +5,28 @@
     <view class="tab {{tab === 'catalog' ? 'on' : ''}}" bindtap="switchTab" data-tab="catalog">② 结算单目录</view>
   </view>
 
+  <price-system system="{{tab==='storefront'?'display':'settlement'}}" read-only="{{!isOwner}}" bind:saved="load"/>
   <view wx:if="{{loading}}" class="empty">加载中…</view>
 
   <!-- 页签①:与网页模块①同源同序;开关可拨(老板),员工只读 -->
   <block wx:elif="{{tab === 'storefront'}}">
     <view wx:if="{{!shelf.length}}" class="empty">还没有上架服务</view>
-    <view class="row" wx:for="{{shelf}}" wx:key="id" wx:for-item="s">
+    <block wx:for="{{shelf}}" wx:key="id" wx:for-item="s"><view wx:if="{{s.categoryStart}}" class="category-head"><text>{{s.category}}</text><text>{{s.categoryCount}}</text></view><view class="row">
       <view class="main">
         <view class="nm {{s.on ? '' : 'off'}}">{{s.name}}</view>
         <view class="meta">{{s.sub}}</view>
       </view>
       <switch wx:if="{{isOwner}}" class="sw" checked="{{s.on}}" color="#c8a47e" data-id="{{s.id}}" data-on="{{s.on}}" catchchange="toggle" />
-      <text wx:else class="ro">{{s.on ? '已上架' : '已下架'}}</text>
-    </view>
-    <view class="note">✅ 上架/下架开关手机可直接拨（轻量级配置，不涉钱、可逆，即时同步网页端）。🔒 新增/编辑/价格改动仍去网页端 · 服务与价目。</view>
+      <button wx:if="{{isOwner}}" class="ghost" data-id="{{s.id}}" data-system="display" bindtap="editPrice">修改</button><text wx:if="{{!isOwner}}" class="ro">{{s.on ? '已上架' : '已下架'}}</text>
+    </view></block>
+    <button wx:if="{{isOwner}}" class="ghost" data-system="display" bindtap="editPrice">＋ 新建上架服务</button><view class="note">展示价格与服务结算价格分别设置，互不覆盖。</view>
   </block>
 
   <!-- 页签②:项目/价档/加项全量可见,只读镜像;开单前随手核对价档 -->
   <block wx:else>
     <view wx:if="{{!mains.length && !addons.length}}" class="empty">结算单目录还是空的</view>
     <view class="row col" wx:for="{{mains}}" wx:key="id" wx:for-item="m">
-      <view class="nm">{{m.name}}</view>
+      <view class="nm">{{m.name}}</view><button wx:if="{{isOwner}}" class="ghost" data-id="{{m.id}}" data-system="settlement" bindtap="editPrice">编辑价档</button>
       <view class="chips">
         <text class="chip" wx:for="{{m.chips}}" wx:key="*this" wx:for-item="c">{{c}}</text>
       </view>
@@ -33,10 +34,10 @@
     <view class="row col" wx:if="{{addons.length}}">
       <view class="nm">加项</view>
       <view class="chips">
-        <text class="chip" wx:for="{{addons}}" wx:key="id" wx:for-item="a">{{a.label}}</text>
+        <view wx:for="{{addons}}" wx:key="id" wx:for-item="a"><text class="chip">{{a.label}}</text><button wx:if="{{isOwner}}" class="ghost" data-id="{{a.id}}" data-system="settlement" bindtap="editPrice">编辑价档</button></view>
       </view>
     </view>
-    <view class="note">🔒 仅查看 · 编辑去网页端。次卡见「会员与营销」。</view>
+    <button wx:if="{{isOwner}}" class="ghost" data-system="settlement" bindtap="editPrice">＋ 新建目录项目</button><view class="note">结算价格仅用于开单。次卡见「会员与营销」。</view>
     <view class="link" bindtap="goMembership">去会员与营销 →</view>
   </block>
 </view>

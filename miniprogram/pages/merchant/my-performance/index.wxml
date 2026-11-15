@@ -54,6 +54,7 @@
     </view>
   </block>
 
+  <view wx:if="{{v.details}}" class="card member-details"><view class="h">成交折扣与服务单</view><view class="row" wx:for="{{v.details.services}}" wx:key="id"><view><view>{{item.date}} · {{item.person}}</view><view>{{item.items}}</view><view>{{item.payer}} · {{item.discount}}</view><view>{{item.id}}</view></view><text>{{item.amountText}}</text></view><view wx:if="{{!v.details.services.length}}" class="empty">暂无已确认日结的新版服务单</view><view class="h">促成充值（单列）</view><view class="row" wx:for="{{v.details.recharges}}" wx:key="id"><view>{{item.date}} · {{item.label}}</view><text>{{item.amountText}}</text></view><view class="subtle">{{v.details.note}}</view></view>
   <view class="card sal-card" wx:if="{{sal}}">
     <view class="sal-monthbar">
       <view class="marrow" bindtap="salPrevMonth">‹</view>

@@ -5,7 +5,7 @@
       <text wx:if="{{items.length > 1}}" class="sv-page">{{cur + 1}}/{{items.length}}</text>
       <text class="sv-close" catchtap="close">✕</text>
     </view>
-    <view class="sv-stage">
+    <view class="sv-history-note">旧单未记录个人折扣。以下保留原签署文件与当时成交金额，不使用当前折扣重算。</view><view class="sv-stage">
       <swiper class="sv-swiper" current="{{cur}}" bindchange="onSwipe" indicator-dots="{{items.length > 1}}" indicator-color="rgba(255,255,255,.35)" indicator-active-color="#fff">
         <swiper-item wx:for="{{items}}" wx:for-item="it" wx:key="code">
           <scroll-view scroll-y class="sv-scroll">

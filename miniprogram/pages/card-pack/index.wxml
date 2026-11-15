@@ -1,7 +1,7 @@
 <view class="page card-pack-page {{themeClass}}">
   <view wx:if="{{loading}}" class="empty">加载中…</view>
   <view wx:elif="{{error}}" class="empty">{{error}}</view>
-  <block wx:elif="{{pack}}">
+  <block wx:elif="{{pack}}"><view class="empty-btn" bindtap="goMall">充值套餐与次卡商城</view>
     <view wx:if="{{pack.migration.hasPending}}" class="cp-card card"><view class="cp-name">{{pack.migration.title}}</view><view class="cp-sub">{{pack.migration.message}}</view></view>
     <!-- A2-6 空态:三类都空=一句话+去看充值套餐(不放例句、不放假数据) -->
     <view wx:if="{{pack.emptyText}}" class="empty-state">

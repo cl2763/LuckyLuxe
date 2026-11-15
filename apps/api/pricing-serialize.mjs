@@ -7,7 +7,7 @@ import { normalizePriceMode } from './price-mode.mjs'   // D146:需报价一列,
    这里住着分类唯一真相律的两条实现细节:
      · 写入只认 categoryId,自由文本 category 一律不接受;
      · 主项目要上架就必须挂大类,不挂即拒(CATEGORY_REQUIRED)。 */
-export function createPricingSerialize({ db, apiError, currentTenantId, cents, formatMoneyCents, categoryNameOf, timecardUnitCents, servicePriceMap, startingPriceCentsOf }) {
+export function createPricingSerialize({ db, apiError, currentTenantId, cents, formatMoneyCents, categoryNameOf, timecardUnitCents, servicePriceMap, startingPriceCentsOf, memberPrices }) {
   function pricingCategories(tenantId = currentTenantId()) {
     return db.prepare('SELECT * FROM service_categories WHERE tenant_id = ? ORDER BY sort_order ASC, rowid ASC').all(tenantId)
   }
@@ -71,7 +71,7 @@ export function createPricingSerialize({ db, apiError, currentTenantId, cents, f
     let addonScope = []
     try { addonScope = JSON.parse(row.addon_scope_json || '[]') } catch { addonScope = [] }
     return {
-      id: row.id,
+      ...(memberPrices?.(row)||{}),id: row.id,
       nameZh: row.name_zh,
       nameEn: row.name_en || '',
       type: row.type,

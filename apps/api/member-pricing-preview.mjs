@@ -1,3 +1,4 @@
+import {composerPreview} from './member-pricing-view.mjs'
 import {scopedCouponAmounts} from './member-pricing-coupons.mjs'
 import {PRICING_CONTEXT} from './member-pricing-policy.mjs'
 /** One server calculation for the two clients and for persisted person documents. */
@@ -55,7 +56,7 @@ export function createMemberPricingPreview({db,policy,calculation,computeSettlem
       })
       const coupons=couponOptionsFor({tenantId,userId,readOnly:true,scopedLines,subtotalCents:eligible,maxDeductCents:Math.max(0,eligible-deposit),categoryIds,selectedGrantId:person.selectedGrantId,noEligibleReason:'没有可优惠的收费服务'})
       if(person.selectedGrantId&&!coupons.selectedGrantId) throw apiError(400,'COUPON_UNUSABLE',coupons.options.find(c=>c.grantId===person.selectedGrantId)?.reason||'这张券不可用于本单。')
-      person.couponOptions=coupons.options;person.coupon=coupons.selected?{grantId:coupons.selected.grantId,couponId:coupons.selected.couponId,name:coupons.selected.name,discountCents:coupons.discountCents,grantKind:coupons.selected.grantKind}:null
+      person.couponOptions=coupons.options.map(o=>({...o,deductText:o.discountText}));person.coupon=coupons.selected?{grantId:coupons.selected.grantId,couponId:coupons.selected.couponId,name:coupons.selected.name,discountCents:coupons.discountCents,grantKind:coupons.selected.grantKind}:null
       const scopedAmounts=scopedCouponAmounts(coupons.selected?.scopeCategoryIds||[],scopedLines)
       let remaining=coupons.discountCents,linked=false
       for(const c of components) {
@@ -75,7 +76,7 @@ export function createMemberPricingPreview({db,policy,calculation,computeSettlem
         storedExcludeCents:c.purchaseCashOnlyCents+c.rechargeCents,pendingRechargeCents,plannedStoredCents,pendingAvailableInCents,
         excludeNote:'到店支付（含充值或购卡款）'})
       if(tcLine)pay.legs.unshift({leg:'times_card',amountCents:cover,payerUserId:userId,note:'次卡核销',label:'次卡抵扣'})
-      c.payment={...c.payment,legs:pay.legs,storedUsedCents:pay.storedUsedCents,sharedStoredUsedCents:pay.sharedStoredUsedCents,pendingRechargeUnusedCents:pay.pendingRechargeUnusedCents,
+      c.payment={...c.payment,timecardCoverCents:cover,legs:pay.legs,storedUsedCents:pay.storedUsedCents,sharedStoredUsedCents:pay.sharedStoredUsedCents,pendingRechargeUnusedCents:pay.pendingRechargeUnusedCents,
         offlineCents:pay.remaining,afterRechargeBalanceCents:c.recharge?pay.balance.totalCents+pendingRechargeCents-pay.storedUsedCents:null}
       plannedStoredCents+=pay.sharedStoredUsedCents;pendingAvailableInCents=pay.pendingRechargeUnusedCents
     }
@@ -85,5 +86,5 @@ export function createMemberPricingPreview({db,policy,calculation,computeSettlem
         effectiveRateBps:context.rateBps,suggestedRateBps:context.suggestedRateBps,suggestionSource:context.suggestionSource,manuallySelected:context.manuallySelected,eligible:context.eligible,pendingRecharge:Boolean(context.recharge),configRevision:context.configRevision},readOnly:true}
     return {view,sheets,context,userId}
   }
-  return {prepare,preview:(...args)=>prepare(...args).view}
+  return {prepare,preview:(...args)=>composerPreview(prepare(...args).view)}
 }

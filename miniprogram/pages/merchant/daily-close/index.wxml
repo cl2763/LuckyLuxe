@@ -15,7 +15,7 @@
       已确认日结 · {{v.confirmedAt}}{{v.reopenCount ? ' · 重开过 ' + v.reopenCount + ' 次' : ''}}
       <text class="lnk" bindtap="reopen">重开</text>
     </view>
-    <view class="pills">
+    <view wx:if="{{v.personDocuments.length}}" class="card"><view class="ch">按被服务者归档的服务单</view><view wx:for="{{v.personDocuments}}" wx:for-item="doc" wx:key="id" class="rol"><text>{{doc.name}} · {{doc.amountText}}</text><view>{{doc.items}}</view><view class="note">{{doc.discountText}} · {{doc.projectCount}}个项目</view><view data-code="{{doc.code}}" bindtap="viewSnapshot">查看原件 →</view></view><view class="note">项目分配保留各项目技师归属，充值款与服务业绩分列。</view></view><view class="pills">
       <text class="pill">今日 <text class="b">{{v.orderCount}}</text> 单</text>
       <text class="pill">营业额 <text class="b">{{v.revenue}}</text></text>
       <text class="pill" wx:if="{{v.tcSummary}}">{{v.tcSummary}}</text>
@@ -153,10 +153,10 @@
     </view>
     <view class="card">
       <view class="fh">更正内容</view>
-      <view class="fd"><text class="lab">更正后合计</text><input class="in" type="digit" value="{{newTotal}}" bindinput="onNewTotal" /></view>
+      <view class="fd"><text class="lab">{{correcting.memberDocument?'更正后的服务金额':'更正后合计'}}</text><input class="in" type="digit" value="{{newTotal}}" bindinput="onNewTotal" /></view>
       <textarea class="ta" placeholder="原因(必填):例「实际只补了 1 指,技师勾多了」" value="{{reason}}" bindinput="onReason"></textarea>
       <view class="note">提交后:① 原签署单保持原样,顾客服务记录追加一条更正记录 ② 用卡付过的单,储值差额由系统自动补配 ③ 更正进当日日结留痕</view>
-      <view class="cta" bindtap="submitCorrect">提交更正</view>
+      <view wx:if="{{correcting.discountText}}" class="note">原个人折扣：{{correcting.discountText}}。充值退款请走账户调整。</view><view wx:if="{{correcting.memberDocument}}" class="note">{{amendPreviewText}}</view><button wx:if="{{correcting.memberDocument}}" class="ghost" bindtap="previewCorrection">重新核对</button><button class="cta" disabled="{{correcting.memberDocument && !amendPreview}}" bindtap="submitCorrect">提交更正</button>
     </view>
   </block>
 </view>

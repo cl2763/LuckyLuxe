@@ -1,0 +1,7 @@
+{
+  "scenario": "实际点击展示编辑、取消返回列表",
+  "rounds": 5,
+  "result": "passed",
+  "evidence": "mp-ui-capture.mjs完成5轮断言后输出captured U03/U03B；后续会员页超时单独修复，不计入此5轮",
+  "environment": "微信开发者工具隔离预览 SDK3.15.2"
+}

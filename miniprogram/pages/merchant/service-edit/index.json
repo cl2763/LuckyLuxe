@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "服务",
-  "usingComponents": {}
+  "usingComponents": {
+    "price-system": "/components/price-system/index"
+  }
 }

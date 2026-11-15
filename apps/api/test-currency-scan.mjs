@@ -159,7 +159,7 @@ function main() {
     'miniprogram/utils/money.js': '金额出口本身',
     'miniprogram/utils/storeclock.js': '商家端金额出口本身',
     'miniprogram/utils/dashboard-view.js': '出口本身 + 百分比(不是钱)',
-    'miniprogram/pages/merchant/orders/index.js': '时长(小时),不是钱',
+    'miniprogram/pages/merchant/orders/booking-view.js': '时长(小时),不是钱；从订单页移出的同一格式化函数',
     'miniprogram/pages/merchant/account-adjust/index.js': '往**输入框**里填的数值(输入框里塞币符会让解析炸掉)',
   }
   const fixedHits = []

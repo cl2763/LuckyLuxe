@@ -65,6 +65,7 @@ export function createMemberPricingCalculation({db,policy,apiError,balanceOf}) {
   }
   function priceOf(service,tier,ctx) {
     if(!service) return {priceCents:0,courseTimes:null,tierUsed:tier}
+    if(ctx.publicReference){const price=policy.publicPrices(ctx.tenantId,service.id).prices[tier];if(!price)throw apiError(400,'PRICE_NOT_CONFIGURED','未配置该展示价格。');return {...price,tierUsed:tier}}
     if(service.price_mode==='quote') {const quoted=ctx.quotedPrices?.[service.id];if(quoted===undefined)throw apiError(400,'QUOTED_PRICE_REQUIRED','请填写本次服务原价。');return {priceCents:quoted,courseTimes:null,tierUsed:'list'}}
     const p=policy.prices(ctx.tenantId,service.id,'settlement').prices
     const wanted=ctx.applyPersonal&&tier==='member'?'list':tier

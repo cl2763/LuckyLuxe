@@ -1,10 +1,10 @@
 const api = require('../../../utils/api')
-const { storeMoney, ensureCurrencyCached } = require('../../../utils/storeclock')
+const { storeMoney, refreshStoreClock } = require('../../../utils/storeclock')
 
 Page({
   data: {
     seg: 0,
-    segs: ['充值套餐', '会员次卡', '优惠券', '会员体系'],
+    segs: ['充值套餐', '会员次卡', '优惠券', '积分商城', '会员体系'],
     // 批④ S9:会员体系只读展示(行与说明句都读后端,与网页端/顾客端同一出口)
     msRows: [],
     msHint: '', msLoading: true, msError: '',
@@ -22,7 +22,7 @@ Page({
   async onShow() {
     if (!(await api.guardOwner())) return
     this.loadMembershipView()
-    await ensureCurrencyCached().catch(() => {})
+    await refreshStoreClock().catch(() => {})
     this.loadAll()
   },
 
@@ -140,9 +140,9 @@ Page({
     this._msPending = true
     this.setData({ msLoading: true, msError: '' })
     try {
-      const r = await api.adminGet('/admin/membership/config')
+      const [r,p]=await Promise.all([api.adminGet('/admin/membership/config'),api.adminGet('/admin/member-pricing/config')]);const personal=p.config.active && p.config.membershipEnabled
       if (!r || !Array.isArray(r.summaryRows) || !r.summaryRows.length) throw new Error('会员规则读取失败，请重试')
-      this.setData({ msRows: (r && r.summaryRows) || [], msHint: (r && r.editHint) || '' })
+      this.setData({ personalPricing:personal, msRows: r.summaryRows.map(row=>({...row,value:personal?String(row.value).replace('不分级 · 只要是会员就一个待遇','不分级 · 个人折扣按会员分别设置'):row.value})), msHint: (r && r.editHint) || '' })
     } catch (e) { this.setData({ msRows: [], msHint: '', msError: '会员规则读取失败，请重试' }) }
     finally { this._msPending = false; this.setData({ msLoading: false }) }
   },

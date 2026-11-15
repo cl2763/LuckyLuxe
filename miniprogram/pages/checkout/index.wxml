@@ -1,7 +1,7 @@
 <view class="page checkout-page {{themeClass}}">
+<view class="section-note">{{lang==='en'?'Prices shown are for reference. Personal discounts and eligible offers are confirmed on the service document.':'展示价格用于预约参考；个人折扣及符合条件的优惠将在服务确认单中核对。'}}</view>
   <view class="section-head first-head">
     <view class="section-title">{{t.confirm}}</view>
-    <view class="section-note">{{t.mockPay}}</view>
   </view>
 
   <block wx:for="{{items}}" wx:key="_id">
@@ -19,7 +19,7 @@
         </view>
         <view class="checkout-meta">
           <text class="price">{{t.deposit}} {{item.service.depositAmount === null ? '—' : cur.p + cur.s + item.service.depositAmount}}</text>
-          <text>{{t.servicePrice}} {{cur.p}}{{cur.s}}{{item.service.price}}</text>
+          <text>{{lang==='en'?'Service reference price':'服务参考价'}} {{cur.p}}{{cur.s}}{{item.service.price}}</text>
         </view>
       </view>
     </view>
@@ -29,29 +29,7 @@
     <view class="section-head">
       <view class="section-title">{{t.discount}}</view>
     </view>
-    <view class="cost-card card">
-      <view class="cost-row">
-        <text>{{t.appointmentDeposit}}</text>
-        <text>{{cur.p}}{{cur.s}}{{serviceDeposit}}</text>
-      </view>
-      <view wx:if="{{depositWaived}}" class="cost-row">
-        <text>{{lang === 'en' ? 'Member deposit waiver' : '会员定金减免'}}</text>
-        <text>-{{cur.p}}{{cur.s}}{{depositWaivedAmount}}</text>
-      </view>
-      <view class="cost-row switch-row">
-        <view>
-          <view>{{t.balance}}</view>
-          <!-- 修:{{}} 里再套 {{}} 是字面量,顾客看到的是「余额 {{cur.p}}{{cur.s}}4500」原文
-               (2026-08-11 D20 停服实测截图顺带抓到的存量缺陷) -->
-          <view class="muted">{{lang === 'en' ? ('Balance ' + cur.p + cur.s + memberBalance + ', pay deposit from balance') : ('余额 ' + cur.p + cur.s + memberBalance + ',用储值抵扣定金,充足时无需另付')}}</view>
-        </view>
-        <switch color="#C6A27E" checked="{{useBalance}}" bindchange="toggleBalance"></switch>
-      </view>
-      <view wx:if="{{balanceDeduction}}" class="cost-row">
-        <text>{{t.balanceDeduction}}</text>
-        <text>-{{cur.p}}{{cur.s}}{{balanceDeduction}}</text>
-      </view>
-    </view>
+    <view class="cost-card card"><view wx:if="{{pending}}">上次预约结果待核实，原项目与抵扣选择已保留，请重试原操作。</view><block wx:else><view class="cost-row switch-row"><text>使用储值抵扣定金</text><switch checked="{{useBalance}}" disabled="{{busy}}" bindchange="toggleBalance"/></view><view wx:if="{{previewLoading}}">正在核对定金与余额…</view><block wx:if="{{preview}}"><view class="cost-row"><text>预约定金</text><text>{{preview.display.requiredText}}</text></view><view class="cost-row"><text>会员减免</text><text>{{preview.display.waivedText}}</text></view><view class="cost-row"><text>留存定金</text><text>{{preview.display.retainedText}}</text></view><view class="cost-row"><text>储值抵扣</text><text>{{preview.display.storedText}}</text></view><view class="cost-row"><text>到店还需支付</text><text>{{preview.display.offlineText}}</text></view><view class="cost-row"><text>当前余额</text><text>{{preview.display.balanceBeforeText}}</text></view><view class="cost-row"><text>抵扣后余额</text><text>{{preview.display.balanceAfterText}}</text></view><view>{{preview.display.note}}</view></block><button wx:if="{{!preview && !previewLoading}}" bindtap="calculate">重新核对</button></block><view wx:if="{{error}}">{{error}}</view></view>
   </view>
 
   <view class="section">
@@ -97,14 +75,14 @@
     <view class="section-head">
       <view class="section-title">{{t.orderRemark}}</view>
     </view>
-    <textarea class="remark card" maxlength="100" placeholder="{{t.remarkPlaceholder}}" value="{{remark}}" bindinput="inputRemark"></textarea>
+    <textarea class="remark card" maxlength="100" placeholder="{{t.remarkPlaceholder}}" value="{{remark}}" disabled="{{busy || pending}}" bindinput="inputRemark"></textarea>
   </view>
 
   <view class="bottom-bar">
     <view class="bottom-fill">
       <view class="muted">{{t.payable}}</view>
-      <view class="price">{{cur.p}}{{cur.s}}{{payableAmount}}</view>
+      <view class="price">{{preview.display.offlineText || '—'}}</view>
     </view>
-    <button class="btn btn-primary pay-btn" bindtap="submitOrder">{{payActionText || t.payAction}}</button>
+    <button class="btn btn-primary pay-btn" bindtap="submitOrder" loading="{{busy}}" disabled="{{busy || (!pending && !preview)}}">{{pending?'核对／重试原预约':'确认预约'}}</button>
   </view>
 </view>

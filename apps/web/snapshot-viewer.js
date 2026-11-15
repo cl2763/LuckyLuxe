@@ -21,9 +21,10 @@
           <span style="opacity:.75;font-size:13px">${items.length > 1 ? `${i + 1}/${items.length}` : ''}</span>
           <button data-snap-close type="button" style="background:none;border:0;color:#fff;font-size:22px;cursor:pointer">✕</button>
         </div>
+        ${items[i].type !== 'html' ? '<p style="width:min(760px,94vw);color:#fff;font-size:13px;line-height:1.6;margin:0 0 12px">旧单未记录个人折扣。以下保留原签署文件与当时成交金额，不使用当前折扣重算。</p>' : ''}
         <div style="width:min(760px,94vw);height:min(78vh,900px);position:relative">
           <div style="width:100%;height:100%;background:#fff;border-radius:14px;overflow:auto">
-            <img src="${esc(items[i].url)}" alt="${esc(items[i].label)}" style="width:100%;display:block">
+            ${items[i].type === 'html' ? `<iframe src="${esc(items[i].url)}" title="${esc(items[i].label)}" style="width:100%;height:100%;border:0;display:block"></iframe>` : `<img src="${esc(items[i].url)}" alt="${esc(items[i].label)}" style="width:100%;display:block">`}
           </div>
           ${items.length > 1 && i > 0 ? `<button data-snap-prev type="button" aria-label="上一份" style="${ARROW}left:10px">‹</button>` : ''}
           ${items.length > 1 && i < items.length - 1 ? `<button data-snap-next type="button" aria-label="下一份" style="${ARROW}right:10px">›</button>` : ''}

@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-15",
+  "sourceLog": "member-pricing-ui-final-20261115k.log",
+  "sourceLogSHA256": "24f10aa50dfa9be9f4663ac00f3dbc728011b72b2b9d56086f49259051c2b7cf",
+  "result": "all_three_lanes_passed",
+  "main": {
+    "suites": 212,
+    "assertions": 6509,
+    "notRun": 0
+  },
+  "demoLoginDisabled": {
+    "suites": 43,
+    "failed": 0
+  },
+  "mini": {
+    "suites": 3,
+    "passed": 3,
+    "failed": 0,
+    "notRun": 0,
+    "assertions": 16
+  },
+  "baselineCheckAssertions": 7,
+  "productionAccessed": false,
+  "note": "最终k单次全量主档/权限档/小程序档均通过，保留原测试门限。不是实体手机验收或生产存量升级演练。",
+  "priorAttempts": [
+    {
+      "attempt": "i",
+      "result": "主档/权限通过，mini因preview保留其它QA门店标识读空而失败；恢复正确沙箱后补验通过。"
+    },
+    {
+      "attempt": "j",
+      "result": "新增文案已测试；交付记录的数据库未变保证缺少前后快照证据，记录改为本轮未操作这些库且未做一致性验收，未改测试门限。"
+    }
+  ]
+}

@@ -4,7 +4,7 @@ function fail(kind) {
   return () => wx.showToast({ title: '页面打开失败,请返回后重试', icon: 'none' })
 }
 module.exports = {
-  to(url) { wx.navigateTo({ url, fail: fail('to') }) },
+  to(url, onFail) { wx.navigateTo({ url, fail: onFail || fail('to') }) },
   redirect(url) { wx.redirectTo({ url, fail: fail('redirect') }) },
   tab(url) { wx.switchTab({ url, fail: fail('tab') }) },
   relaunch(url) { wx.reLaunch({ url, fail: fail('relaunch') }) },

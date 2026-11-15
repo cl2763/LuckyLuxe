@@ -1,7 +1,9 @@
+import {memberPricingReference} from './member-pricing-reference.mjs'
+import {memberPricingCatalog} from './member-pricing-catalog.mjs'
 import {memberDiscountInput} from './member-discount-input.mjs'
 import {makeActorOf} from './actor-name.mjs'
 /** Versioned endpoints for the approved future clients. Mounted after the admin tenant gate. */
-export function createMemberPricingRoutes({db,policy,preview,apiError,json,readBody,currentTenantId,isPlatformKey}) {
+export function createMemberPricingRoutes({db,policy,calculation,preview,computeSettlement,apiError,json,readBody,currentTenantId,isPlatformKey}) {
   const readInput=async req=>{const value=await readBody(req);if(!value||typeof value!=='object'||Array.isArray(value))throw apiError(400,'BAD_REQUEST','请求内容须为对象。');return value}
   const actorOf=makeActorOf({apiError})
   const owner = admin => {if(admin?.role!=='owner') throw apiError(403,'FORBIDDEN','仅老板可修改这项设置。')}
@@ -9,6 +11,8 @@ export function createMemberPricingRoutes({db,policy,preview,apiError,json,readB
     if(!path.startsWith('/admin/member-pricing/')) return false
     if(!adminSession || !['owner','staff'].includes(adminSession.role)) throw apiError(403,'FORBIDDEN','需要门店员工身份。')
     const tid=currentTenantId(),method=req.method
+    if(path==='/admin/member-pricing/reference-preview'&&method==='POST'){json(res,200,memberPricingReference({policy,computeSettlement,apiError,tenantId:tid,body:await readInput(req)}));return true}
+    if(path==='/admin/member-pricing/catalog'&&method==='POST'){json(res,200,memberPricingCatalog({db,policy,calculation,tenantId:tid,body:await readInput(req),admin:adminSession}));return true}
     if(path==='/admin/member-pricing/preview'&&method==='POST') {json(res,200,preview(tid,await readInput(req),adminSession));return true}
     if(path==='/admin/member-pricing/discount-input'&&method==='GET'){json(res,200,memberDiscountInput());return true}
     if(path==='/admin/member-pricing/config') {

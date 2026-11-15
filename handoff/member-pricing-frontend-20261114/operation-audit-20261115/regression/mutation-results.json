@@ -1,0 +1,15 @@
+{
+  "journeyRegression": {
+    "beforeExpandedTestExit": 0,
+    "expandedMutantExit": 1,
+    "restoredExit": 0,
+    "failure": "same visit friends incorrectly blocked after card exhausted",
+    "method": "temporary source copy only"
+  },
+  "nestedDialog": {
+    "reintroduceGenericSelectorsExit": 1,
+    "fixedExit": 0,
+    "failure": "outer button empty-reason guard not invoked",
+    "method": "hierarchical DOM harness plus separate actual browser actions"
+  }
+}

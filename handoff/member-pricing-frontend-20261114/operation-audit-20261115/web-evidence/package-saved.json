@@ -1,0 +1,15 @@
+[
+  {
+    "id": "pkg_mwgy4xw1_rnb6qf",
+    "giftItems": [],
+    "name": "QA charge 30 bonus 3",
+    "priceCents": 3000,
+    "bonusCents": 300,
+    "defaultPersonalDiscount": {
+      "packageId": "pkg_mwgy4xw1_rnb6qf",
+      "rateBps": 9900,
+      "revision": 1
+    },
+    "label": "QA charge 30 bonus 3 · 充 CAD $30 赠 CAD $3"
+  }
+]

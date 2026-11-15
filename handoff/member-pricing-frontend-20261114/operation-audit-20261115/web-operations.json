@@ -1,0 +1,602 @@
+{
+  "scope": "2026-11-14至15隔离合成测试：原生网页操作、页面模块及HTTP核验分级记录；不含生产、真实微信送达或实体手机。",
+  "initialState": {
+    "balanceCents": 73200,
+    "rateBps": 8500,
+    "revision": 3,
+    "displayTypes": [
+      "list"
+    ],
+    "settlementTypes": [
+      "list",
+      "member"
+    ],
+    "rechargePackages": 0
+  },
+  "operations": [
+    {
+      "id": "pricing-display-save",
+      "operation": "展示价格类型及金额保存",
+      "expected": "展示210分享190，结算不受影响，重开一致",
+      "status": "UI完成",
+      "testLevel": "真实UI五轮保存+列表复验",
+      "before": null,
+      "after": {
+        "system": "display",
+        "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+        "prices": {
+          "list": {
+            "priceCents": 21000,
+            "courseTimes": null
+          },
+          "member": {
+            "priceCents": 18000,
+            "courseTimes": null
+          },
+          "share": {
+            "priceCents": 19000,
+            "courseTimes": null
+          }
+        },
+        "revision": 1,
+        "legacy": false
+      },
+      "evidence": [],
+      "level": "真实UI五轮保存+列表复验",
+      "screenIds": [
+        "U01",
+        "U02",
+        "U03",
+        "S15"
+      ],
+      "observed": "修复后连续保存211/212/213/214/215均立即更新摘要；每次重开分类均为美甲",
+      "rounds": 5
+    },
+    {
+      "id": "pricing-display-disable",
+      "operation": "关闭可选展示价，客户端隐藏",
+      "expected": "关闭分享后顾客端不展示",
+      "status": "UI与页面模块验证完成",
+      "testLevel": "UI开关保存6轮+API配置",
+      "before": null,
+      "after": {
+        "active": true,
+        "membershipEnabled": true,
+        "displayTypes": [
+          "list"
+        ],
+        "settlementTypes": [
+          "list",
+          "member"
+        ],
+        "revision": 11
+      },
+      "evidence": [],
+      "level": "UI开关保存6轮+API配置",
+      "screenIds": [
+        "U01",
+        "S01",
+        "S02",
+        "U27"
+      ],
+      "observed": "六次开关保存，UI均已保存，最终share未选",
+      "verificationNote": "网页配置保存已实操；顾客展示可选价隐藏由本轮小程序实拍、reference-quote 和 mini-pricing-operations 第2组验证。不冒称网页顾客端本轮重新逐项点击。"
+    },
+    {
+      "id": "pricing-settlement-required",
+      "operation": "结算原价必填和会员强制选中",
+      "expected": "空原价阻止；会员必选；有效值可保存",
+      "status": "UI完成",
+      "testLevel": "UI异常输入+有效提交+API读回",
+      "before": null,
+      "after": {
+        "system": "settlement",
+        "serviceId": "nail-solid-color-manicure-mwgo6f4n1a553626",
+        "prices": {
+          "list": {
+            "priceCents": 20200,
+            "courseTimes": null
+          },
+          "member": {
+            "priceCents": 18000,
+            "courseTimes": null
+          }
+        },
+        "revision": 2,
+        "legacy": false
+      },
+      "evidence": [],
+      "level": "UI异常输入+有效提交+API读回",
+      "screenIds": [
+        "U03",
+        "U03B",
+        "S15"
+      ],
+      "observed": "空原价提示有效金额；会员disabled checked；原价202保存成功"
+    },
+    {
+      "id": "pricing-editor-cancel",
+      "operation": "编辑价格后关闭不保存",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "previous-ui-evidence",
+      "testLevel": "此前实际UI关闭后重开仍为原名，五轮编辑关闭记录；本轮尚未重做",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "../evidence/web-review/S15-editor-title-final.png"
+      ]
+    },
+    {
+      "id": "package-default-save",
+      "operation": "套餐建议折扣保存并重新读取",
+      "expected": "30赠3，9.9默认折扣保存",
+      "status": "UI完成",
+      "testLevel": "UI创建与重开+API核验",
+      "before": null,
+      "after": [
+        {
+          "id": "pkg_mwgy4xw1_rnb6qf",
+          "giftItems": [],
+          "name": "QA charge 30 bonus 3",
+          "priceCents": 3000,
+          "bonusCents": 300,
+          "defaultPersonalDiscount": {
+            "packageId": "pkg_mwgy4xw1_rnb6qf",
+            "rateBps": 9900,
+            "revision": 1
+          },
+          "label": "QA charge 30 bonus 3 · 充 CAD $30 赠 CAD $3"
+        }
+      ],
+      "evidence": [
+        "web-evidence/package-saved.json"
+      ],
+      "level": "UI创建与重开+API核验",
+      "screenIds": [
+        "U05",
+        "S16"
+      ],
+      "observed": "真实新建保存并重开看到9.9"
+    },
+    {
+      "id": "owner-discount-save",
+      "operation": "老板独立修改个人折扣",
+      "expected": "滚轮只更新草稿，外层确认保存留痕，取消不保存",
+      "status": "UI完成",
+      "testLevel": "真实滚轮/确认提交5轮 + 历史API核验",
+      "before": {
+        "rateBps": 8500,
+        "revision": 10,
+        "balanceCents": 72600
+      },
+      "after": {
+        "copyEn": {
+          "eligibilityText": "Active",
+          "discountText": "14% off · Pay 86%",
+          "statusText": "Your personal discount applies to all chargeable services."
+        },
+        "active": true,
+        "eligibilityText": "有效",
+        "discountText": "8.6折",
+        "statusText": "所有收费服务按本人折扣结算。",
+        "userId": "user_mwgo6f56_5yssab",
+        "rateBps": 8600,
+        "revision": 15,
+        "eligible": true,
+        "effectiveRateBps": 8600,
+        "status": "active",
+        "balanceCents": 72600
+      },
+      "evidence": [
+        "web-evidence/owner-discount-five-rounds.json"
+      ],
+      "level": "真实滚轮/确认提交5轮 + 历史API核验",
+      "screenIds": [
+        "U10",
+        "U26",
+        "U28"
+      ],
+      "observed": "先8.6草稿取消后仍8.5；5次保存8.6/8.5交替，最终8.6；余额726不变。CUA长批执行超时后读历史确认已完成3轮，再完成第4/5轮，未重复操作。"
+    },
+    {
+      "id": "staff-discount-denied",
+      "operation": "员工不能独立改折扣",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "接口与小程序权限验证完成",
+      "testLevel": "实际员工小程序只读/充值操作 + HTTP 403 断言",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "mini-operations.json",
+        "../evidence/regression-summary.json"
+      ],
+      "verificationNote": "本轮未重做网页员工独立改折扣按钮点击；接口拦截及小程序员工充值权限已实测。"
+    },
+    {
+      "id": "recharge-manual-submit",
+      "operation": "手输充值及折扣确认提交",
+      "expected": "本金10赠金1各入账，余额+11，个人8.5保留",
+      "status": "UI完成",
+      "testLevel": "UI提交 + API前后核验",
+      "before": {
+        "balanceCents": 73200,
+        "rateBps": 8500
+      },
+      "after": {
+        "copyEn": {
+          "eligibilityText": "Active",
+          "discountText": "15% off · Pay 85%",
+          "statusText": "Your personal discount applies to all chargeable services."
+        },
+        "active": true,
+        "eligibilityText": "有效",
+        "discountText": "8.5折",
+        "statusText": "所有收费服务按本人折扣结算。",
+        "userId": "user_mwgo6f56_5yssab",
+        "rateBps": 8500,
+        "revision": 4,
+        "eligible": true,
+        "effectiveRateBps": 8500,
+        "status": "active",
+        "balanceCents": 74300
+      },
+      "evidence": [
+        "CUA真实AX回执：已到账 CAD $10 赠 CAD $1；当前余额 CAD $743"
+      ],
+      "level": "UI提交 + API前后核验",
+      "screenIds": [
+        "U11",
+        "S20",
+        "U12"
+      ],
+      "observed": "点击确认到账后toast已到账10赠1，表单清空，余额743"
+    },
+    {
+      "id": "recharge-package-submit",
+      "operation": "选套餐充值及建议折扣提交",
+      "expected": "金额30赠3、9.9带入并入账",
+      "status": "UI完成，文案复验通过",
+      "testLevel": "UI选套餐提交+API核验",
+      "before": {
+        "balanceCents": 72600,
+        "rateBps": 8600
+      },
+      "after": {
+        "copyEn": {
+          "eligibilityText": "Active",
+          "discountText": "1% off · Pay 99%",
+          "statusText": "Your personal discount applies to all chargeable services."
+        },
+        "active": true,
+        "eligibilityText": "有效",
+        "discountText": "9.9折",
+        "statusText": "所有收费服务按本人折扣结算。",
+        "userId": "user_mwgo6f56_5yssab",
+        "rateBps": 9900,
+        "revision": 16,
+        "eligible": true,
+        "effectiveRateBps": 9900,
+        "status": "active",
+        "balanceCents": 75900
+      },
+      "evidence": [],
+      "level": "UI选套餐提交+API核验",
+      "screenIds": [
+        "U11",
+        "U05",
+        "U12",
+        "S20"
+      ],
+      "observed": "默认9.9、提示优惠减少；确认到账30赠3；余额726→759、个人折扣9.9；选择按钮名称缺失已报root",
+      "verificationNote": "最终原生截图目视确认按钮显示套餐名称、充值30及赠金3；点击正确带入30/3。"
+    },
+    {
+      "id": "recharge-cancel",
+      "operation": "充值取消不写余额和折扣",
+      "expected": "999未确认取消不记账",
+      "status": "UI完成",
+      "testLevel": "UI取消 + API核验",
+      "before": null,
+      "after": {
+        "copyEn": {
+          "eligibilityText": "Active",
+          "discountText": "15% off · Pay 85%",
+          "statusText": "Your personal discount applies to all chargeable services."
+        },
+        "active": true,
+        "eligibilityText": "有效",
+        "discountText": "8.5折",
+        "statusText": "所有收费服务按本人折扣结算。",
+        "userId": "user_mwgo6f56_5yssab",
+        "rateBps": 8500,
+        "revision": 4,
+        "eligible": true,
+        "effectiveRateBps": 8500,
+        "status": "active",
+        "balanceCents": 74300
+      },
+      "evidence": [],
+      "level": "UI取消 + API核验",
+      "screenIds": [
+        "U11"
+      ],
+      "observed": "关闭后余额74300保持"
+    },
+    {
+      "id": "refund-submit",
+      "operation": "退款重新确认折扣并提交",
+      "expected": "填确认原因后提交退款",
+      "status": "UI完成",
+      "testLevel": "UI实际提交5轮 + API核验",
+      "before": {
+        "balanceCents": 74300,
+        "rateBps": 8500
+      },
+      "after": {
+        "copyEn": {
+          "eligibilityText": "Active",
+          "discountText": "15% off · Pay 85%",
+          "statusText": "Your personal discount applies to all chargeable services."
+        },
+        "active": true,
+        "eligibilityText": "有效",
+        "discountText": "8.5折",
+        "statusText": "所有收费服务按本人折扣结算。",
+        "userId": "user_mwgo6f56_5yssab",
+        "rateBps": 8500,
+        "revision": 9,
+        "eligible": true,
+        "effectiveRateBps": 8500,
+        "status": "active",
+        "balanceCents": 73700
+      },
+      "evidence": [
+        "CUA AX五次已退款回执",
+        "root修复data-member-confirm/data-member-cancel"
+      ],
+      "level": "UI实际提交5轮 + API核验",
+      "screenIds": [
+        "U23",
+        "S21"
+      ],
+      "observed": "修复选择器冲突后首次2元，随后4次1元；余额743→741→740→739→738→737；空确认原因提示必填"
+    },
+    {
+      "id": "reversal-submit",
+      "operation": "冲销原充值重新确认折扣并提交",
+      "expected": "原本金10赠金1联动冲销，保留原记录和原因，折扣重确认",
+      "status": "UI完成",
+      "testLevel": "真实UI提交及同弹层后续充值",
+      "before": {
+        "balanceCents": 76900
+      },
+      "after": {
+        "balanceCents": 73700,
+        "rateBps": 9900
+      },
+      "evidence": [
+        "web-evidence/reversal-refresh-final.json",
+        "CUA冲销真实确认与背景余额记录"
+      ],
+      "level": "真实UI提交及同弹层后续充值",
+      "screenIds": [
+        "S21"
+      ],
+      "observed": "冲销本金30关联赠金3，769→736；列表/弹层同步，随后充值1→737成功无revision冲突；原流水与红字保留。"
+    },
+    {
+      "id": "reversal-legacy",
+      "operation": "旧无关联赠金不得虚构",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "页面模块验证完成",
+      "testLevel": "实际网页渲染模块回归，第8组",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "../../../apps/api/test-member-pricing-client.mjs"
+      ],
+      "verificationNote": "只使用明确关联回执；无关联旧赠金保持未知。没有冒充本轮网页旧单实际冲销。"
+    },
+    {
+      "id": "people-add-remove",
+      "operation": "同人增删项目及新增被服务者",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "UI完成",
+      "testLevel": "真实UI草稿操作与生成",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "web-evidence/same-name-created.json"
+      ],
+      "screenIds": [
+        "U13",
+        "U14"
+      ],
+      "level": "真实UI草稿操作与生成",
+      "observed": "新增本人第二项、朋友第一/第二项，移除朋友第二项，剩本人2项朋友1项生成2张"
+    },
+    {
+      "id": "people-same-name",
+      "operation": "同名被服务者身份仍独立",
+      "expected": "同名卡主与朋友分属独立服务单",
+      "status": "UI完成",
+      "testLevel": "真实UI生成+API身份回读",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "web-evidence/same-name-created.json"
+      ],
+      "screenIds": [
+        "U13",
+        "U14",
+        "U18"
+      ],
+      "level": "真实UI生成+API身份回读",
+      "observed": "本人2项399.96，朋友1项199.98，姓名相同仍共2张；未签不扣余额"
+    },
+    {
+      "id": "inline-recharge-toggle",
+      "operation": "随单充值挂入/移除重新试算",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "UI完成，修改按钮复验通过",
+      "testLevel": "真实UI挂入/撤挂+API未扣款",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "web-evidence/inline-edit-final-ax.txt",
+        "web-evidence/root-final-state.json"
+      ],
+      "screenIds": [
+        "U15",
+        "U16",
+        "U17",
+        "S16"
+      ],
+      "level": "真实UI挂入/撤挂+API未扣款",
+      "observed": "三项599.94挂充值50改8.5折后515.10，撤挂恢复599.94，余额始终737；改充值入口原为span已报root修button",
+      "verificationNote": "原生点击改充值，保留已挂30+3草稿进入编辑；手输40后预览无赠送、预计余额779/扣后579.02。退出不签后真实余额仍739。"
+    },
+    {
+      "id": "batch-deliver",
+      "operation": "整批推送本人签署",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "UI完成",
+      "testLevel": "真实UI五次推送+只读DB验证",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "CUA五次点击记录",
+        "只读notification_logs count=1，group sgrp_mwgyhydy_h45zyg"
+      ],
+      "screenIds": [
+        "U18",
+        "S17"
+      ],
+      "level": "真实UI五次推送+只读DB验证",
+      "observed": "5次显示站内消息成功，同一批次notification_logs仅1条inapp，无微信发送",
+      "rounds": 5
+    },
+    {
+      "id": "batch-local-sign",
+      "operation": "整批本机签署入口及连续签署",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "UI与实际签署完成",
+      "testLevel": "原生勾选/绘制笔迹/清空/提交 + API持久化核验",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "batch-sign-operations.json",
+        "batch-signed.png"
+      ],
+      "screenIds": [
+        "U18",
+        "U19",
+        "U20"
+      ],
+      "level": "真实UI点击本机签署并读取第1张",
+      "observed": "打开共2张第1张，含本人2项目399.96、预计余额737→337.04、声明/画布/确认继续控件；本代理未手写或提交签名",
+      "verificationNote": "主代理共用签署页完成双人独立签名；第1张到账/扣款后自动接第2张，刷新不能重签。"
+    },
+    {
+      "id": "pending-recheck",
+      "operation": "价格权益变化后重新核对待签单",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "UI完成，含价格变化与部分已签",
+      "testLevel": "真实UI五轮重核对+API",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "web-evidence/recheck-five-rounds.json",
+        "mini-evidence/S17-rechecked-price-final.png",
+        "mini-operations.json",
+        "mini-evidence/S17-final-source-pill-buttons.png",
+        "regression/client-30-groups.log"
+      ],
+      "screenIds": [
+        "S10",
+        "S17",
+        "U18"
+      ],
+      "level": "真实UI五轮重核对+API",
+      "observed": "5轮确认均成功，每轮旧2张作废新2张待签；2张已签原件仍signed未改；待签余额737未扣。价格变化后再核对场景由主代理补测。",
+      "rounds": 5,
+      "verificationNote": "新增小程序实际核价取消/确认：204→205，只替换未签单，另一张已签原件保持不变。 最终重新打开发现分组缺陷并修复：两端开单入口使用原服务组；小程序已签1/待签1、旧版本不重复。"
+    },
+    {
+      "id": "amend-submit",
+      "operation": "服务单更正提交及余额效果",
+      "expected": "170改160退回储值10，保留原签署",
+      "status": "UI完成，现金提示与余额刷新复验通过",
+      "testLevel": "真实UI提交+API回读",
+      "before": {
+        "balanceCents": 75900,
+        "serviceTotalCents": 17000
+      },
+      "after": {
+        "balanceCents": 76900,
+        "serviceTotalCents": 16000
+      },
+      "evidence": [
+        "web-evidence/root-final-state.json",
+        "web-evidence/daily-close-final-ax.txt"
+      ],
+      "screenIds": [
+        "S12",
+        "U25",
+        "S22"
+      ],
+      "level": "真实UI提交+API回读",
+      "observed": "真实按钮提交成功；日结330；余额769；现金抽屉1044未变，但现金找补提示误导，已报root",
+      "verificationNote": "本轮最终连续更正159→158，预览退回储值1；会员余额738→739；日结329→328；无现金找补提示，抽屉1015不变；客户列表和账户弹层立即显示739。"
+    },
+    {
+      "id": "daily-close-submit",
+      "operation": "日结确认并核对业绩明细",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "UI完成",
+      "testLevel": "原生点击确认日结 + 实际已确认状态",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "web-evidence/daily-close-final-ax.txt"
+      ],
+      "verificationNote": "2026-11-14合成日结确认成功；2张/328收入，充值1020单列；显示已确认日结和重开入口。"
+    },
+    {
+      "id": "receipt-ack",
+      "operation": "顾客核对充值回执不再次入账",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "previous-ui-evidence",
+      "testLevel": "此前实际UI确认已核对，API复核余额71000不变、pending消失",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "../evidence/web-review/U12-qa-receipt-confirmed.png"
+      ]
+    },
+    {
+      "id": "zero-eligibility",
+      "operation": "零余额失效→挂充值有效→撤挂失效",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "previous-ui-evidence",
+      "testLevel": "此前实际UI资格三态；余额始终0，未提交签署",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "../evidence/web-review/S18B-ineligible-composer-final.png"
+      ]
+    },
+    {
+      "id": "history-modal",
+      "operation": "折扣记录浮层关闭无写入",
+      "expected": "按已确认合同；具体实测中记录",
+      "status": "previous-ui-evidence",
+      "testLevel": "此前实际UI打开浮层/关闭，未保存",
+      "before": null,
+      "after": null,
+      "evidence": [
+        "../evidence/web-review/U26-history-modal-final.png"
+      ]
+    }
+  ]
+}

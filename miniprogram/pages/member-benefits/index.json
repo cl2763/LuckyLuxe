@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "会员权益"
+  "navigationBarTitleText": "会员权益",
+  "usingComponents": {
+    "member-pricing": "/components/member-pricing/index"
+  }
 }

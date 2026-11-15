@@ -93,7 +93,7 @@ export function createStoredValue({ db, randomId, iso, currentTenantId, localPar
 
   function storedValueTypeText(type) {
     return {
-      recharge: '充值到账', consume: '耗卡', bonus: '充值赠送',
+      deposit_hold:'预约定金储值抵扣',deposit_return:'取消预约定金返还',recharge: '充值到账', consume: '耗卡', bonus: '充值赠送',
       reversal: '更正冲销', migrate_opening: '期初迁移',
       refund: '退卡退款'          // 退款不是冲销:冲销=我们记错了,退卡=顾客真要退钱走人
     }[String(type || '')] || '账户调整'

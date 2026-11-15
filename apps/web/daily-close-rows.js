@@ -24,6 +24,7 @@ window.DailyCloseRows = (function () {
     const rows = (d.rows || []).map((r) => `<div class="dc-due-row${r.negative ? ' neg' : ''}"><span>${escapeHtml(r.label)}</span><span>${escapeHtml(r.sign)} ${escapeHtml(r.amountText)}</span></div>${r.note ? `<div class="dc-due-note">${escapeHtml(r.note)}</div>` : ''}`).join('')   // 裁定B:负行随行点名注
     const stats = (v.headline || []).map((h) => `<div class="dc-stat"><div class="l">${escapeHtml(h.label)}</div><div class="v">${escapeHtml(h.value)}</div></div>`).join('')
     return `
+      ${(v.personDocuments||[]).length?'<section class="admin-card"><h3>按被服务者归档的服务单</h3>'+v.personDocuments.map(d=>'<div class="mp-batch-row"><div><strong>'+escapeHtml(d.name)+'</strong><p>'+escapeHtml(d.items)+'</p><small>'+escapeHtml(d.discountText)+' · '+d.projectCount+'个项目</small></div><div><strong>'+escapeHtml(d.amountText)+'</strong><p><button class="ghost slim" data-dc-snapshot="'+escapeHtml(d.code)+'">查看原件</button></p></div></div>').join('')+'<p class="subtle">项目分配保留各项目技师归属，充值款与服务业绩分列。</p></section>':''}
       <div class="dc-due">
         <div class="dc-due-lab">${escapeHtml(d.title || d.label)}</div>
         <div class="dc-due-big">${escapeHtml(d.shouldHaveText)}</div>
@@ -97,49 +98,63 @@ window.DailyCloseRows = (function () {
       </div>
       <div class="dc-ro">
         <div class="ro-t"><span>${zh ? '顾客已签存档单(只读)' : 'Signed sheet (read-only)'}</span><span class="lock">${zh ? '不可修改' : 'locked'}</span></div>
-        ${escapeHtml(row.servedPersonName || '')}${row.isProxyPaid ? (zh ? '(代付)' : ' (proxy)') : ''} · ${String(row.signedAt || '').slice(0, 16).replace('T', ' ')}
+        ${escapeHtml(row.servedPersonName || '')}${row.isProxyPaid ? (zh ? '(代付)' : ' (proxy)') : ''} · ${escapeHtml(row.signedAtText || String(row.signedAt || '').slice(0, 16).replace('T', ' '))}
         · ${(row.technicians || []).map((t) => `${escapeHtml(t.name)}(${t.role === 'main' ? (zh ? '主' : 'main') : (zh ? '副' : 'assist')})`).join('/')}<br>
-        ${(row.items || []).map((l) => `${String(l.itemNo).padStart(2, '0')} ${escapeHtml(l.name)} ${l.isFree ? (zh ? '免收' : 'free') : money(l.amountCents, 2)}`).join(' · ')}<br>
+        ${(row.items || []).map((l, i) => `${String(l.itemNo || i + 1).padStart(2, '0')} ${escapeHtml(l.name)} ${l.isFree ? (zh ? '免收' : 'free') : money(l.amountCents, 2)}`).join(' · ')}<br>
         ${row.depositDeductCents ? `${zh ? '定金抵扣' : 'Deposit'} −${money(row.depositDeductCents, 2)} · ` : ''}<b>${zh ? '合计' : 'Total'} ${money(row.totalCents, 2)}</b>
       </div>
-      <div class="dep-block" style="margin-top:12px">
+      ${row.discountText?`<p>原个人折扣：${escapeHtml(row.discountText)}</p><p class="subtle">充值退款请走账户调整。原签名与原始单据保留。</p>`:''}<div class="dep-block" style="margin-top:12px">
         <h4>${zh ? '更正内容' : 'Amendment'}</h4>
         <div class="dep-inline" style="margin-top:0">
-          <label>${zh ? '更正后合计' : 'New total'}<input id="dcNewTotal" data-money inputmode="decimal" value="${row.totalCents / 100}"></label>
+          <label>${row.memberDocument?(zh?'更正后的服务金额':'Corrected service amount'):(zh?'更正后合计':'New total')}<input id="dcNewTotal" data-money inputmode="decimal" value="${row.totalCents / 100}"></label>
         </div>
         <textarea class="dep-text" id="dcReason" style="min-height:80px;margin-top:10px"
           placeholder="${zh ? '原因(必填):例「实际只补了 1 指,技师勾多了」' : 'Reason (required)'}"></textarea>
         <p class="subtle">${zh
           ? '提交后:① 原签署单保持原样,顾客服务记录追加一条「订单更正记录」(改前/改后/操作人/时间)② 用卡付过的单,储值差额由系统自动补配(人工不可改这笔)③ 更正进当日日结留痕'
           : 'The signed sheet stays untouched; an amendment record is appended.'}</p>
-        <button class="primary slim" id="dcCorrectSubmit" type="button">${zh ? '提交更正' : 'Submit'}</button>
+        ${row.memberDocument?'<p id="dcAmendPreview" role="status">正在核对更正后的储值变化…</p><button class="ghost slim" id="dcPreviewRetry" type="button" style="margin-right:8px">重新核对</button>':''}<button class="primary slim" id="dcCorrectSubmit" type="button" ${row.memberDocument?'disabled':''}>${zh ? '提交更正' : 'Submit'}</button>
       </div>`
   }
 
   /* 屏 1b 金额更正 + 日结确认/重开的点击处理(2026-08-27 从 admin.js 搬出,公约①②:
      本批动的就是日结这一屏,按「边改边拆」把同屏的行为一起搬过来,admin.js 只留一行分发)。
      返回 true = 这一族接住了这次点击,admin.js 那边就不用再往下找了。 */
+  function bindCorrectionPreview(state, request) {
+    const row=state.correcting,input=document.querySelector('#dcNewTotal'),button=document.querySelector('#dcCorrectSubmit'),message=document.querySelector('#dcAmendPreview')
+    if(!row?.memberDocument||!input||!button||!message)return
+    let seq=0,timer
+    const update=()=>{const n=++seq;clearTimeout(timer);row.amendPreview=null;button.disabled=true;message.textContent='正在核对更正后的储值变化…';timer=setTimeout(async()=>{
+      const raw=input.value.trim();if(!/^\d+(?:\.\d{1,2})?$/.test(raw)||Number(raw)>1000000){message.textContent='请输入有效金额，最多两位小数';return}
+      const cents=Math.round(Number(raw)*100)
+      try{const preview=await request('/admin/member-pricing/documents/'+encodeURIComponent(row.id)+'/amend-preview',{method:'POST',body:JSON.stringify({serviceTotalCents:cents})});if(n!==seq||state.correcting!==row)return;if(!preview.reviewHash)throw Error('未取得更正确认信息，请重试');row.amendPreview={...preview,serviceTotalCents:cents};message.textContent=preview.balanceEffectText;button.disabled=false}catch(e){if(n===seq&&state.correcting===row)message.textContent=(e.message||'预览失败')+'；请重新核对后再提交'}
+    },300)}
+    input.addEventListener('input',update);row.refreshAmendPreview=update;update()
+  }
   async function handleClick(event, ctx) {
     const { state, request, toast, renderDailyClose, loadDailyClose, yuanToCents, zh } = ctx
     const dcCorrect = event.target.closest('[data-dc-correct]')
     if (dcCorrect) {
       const row = (state.view?.settlements || []).find((x) => x.settlementId === dcCorrect.dataset.dcCorrect)
-      request(`/settlements/${encodeURIComponent(row.code)}`, { public: true })
-        .then((data) => { state.correcting = data.settlement; renderDailyClose() })
+      if (!row) { toast(zh ? '单据信息已变化，请刷新日结' : 'Refresh the daily close'); return true }
+      const loading = row.serviceDocument?request('/admin/member-pricing/documents/'+encodeURIComponent(row.serviceDocument.id)).then(d=>({settlement:{...d,code:d.id,memberDocument:true,servedPersonName:d.quote.display?.beneficiaryName,totalCents:d.correction.serviceTotalCents,items:d.quote.components.flatMap(c=>c.lines),technicians:[],discountText:d.quote.display?.discountText}})):request(`/settlements/${encodeURIComponent(row.code)}`, { public: true })
+      loading.then((data) => { state.correcting = data.settlement; renderDailyClose(); bindCorrectionPreview(state,request) })
         .catch((error) => toast(error.message))
       return true
     }
+    if (event.target.closest('#dcPreviewRetry')) { state.correcting?.refreshAmendPreview?.(); return true }
     if (event.target.closest('#dcCorrectCancel')) { state.correcting = null; renderDailyClose(); return true }
     if (event.target.closest('#dcCorrectSubmit')) {
       const reason = document.querySelector('#dcReason')?.value.trim()
       if (!reason) { toast(zh ? '原因必填' : 'Reason is required'); return true }
-      request(`/admin/settlements/${encodeURIComponent(state.correcting.id)}/amend`, {
+      if(state.correcting.memberDocument&&(!state.correcting.amendPreview||state.correcting.amendPreview.serviceTotalCents!==yuanToCents(document.querySelector('#dcNewTotal')?.value))){toast('请先核对储值变化预览');return true}
+      request(state.correcting.memberDocument?'/admin/member-pricing/documents/'+encodeURIComponent(state.correcting.id)+'/amend':`/admin/settlements/${encodeURIComponent(state.correcting.id)}/amend`, {
         method: 'POST',
-        body: JSON.stringify({ totalCents: yuanToCents(document.querySelector('#dcNewTotal')?.value), reason })
+        body: JSON.stringify({ [state.correcting.memberDocument?'serviceTotalCents':'totalCents']: yuanToCents(document.querySelector('#dcNewTotal')?.value), reason,...(state.correcting.memberDocument?{reviewHash:state.correcting.amendPreview.reviewHash}:{}) })
       }).then((r) => {
         toast(zh ? (r.autoBalanceAdjustCents ? '已更正,储值差额已自动补配' : '已更正,原签署单未改动') : 'Amended')
         state.correcting = null
-        return loadDailyClose(state.date)
+        return Promise.all([loadDailyClose(state.date), ctx.onAmended?.()])
       }).catch((error) => toast(error.message))
       return true
     }
@@ -183,5 +198,5 @@ window.DailyCloseRows = (function () {
     return false
   }
 
-  return { targetCellText, cashAndRefundRows, correctionForm, handleClick }
+  return { targetCellText, cashAndRefundRows, correctionForm, handleClick, bindCorrectionPreview }
 })()

@@ -331,8 +331,11 @@ const LOGGED_IN = `(() => {
 async function login() {
   await send('Page.navigate', { url: `${BASE}/admin` })
   await sleep(1800)
-  await ev(`(() => { const el = document.querySelector('#tokenInput'); if (!el) return 0; el.value = ${JSON.stringify(TOKEN)};
-    const b = Array.from(document.querySelectorAll('button')).find((x) => /刷新|Refresh/.test(x.textContent)); if (b) b.click(); return 1 })()`)
+  // Reuse an already issued merchant session; the legacy token textbox is retired.
+  const response = await fetch(`${BASE}/admin/auth/me`, { headers: { authorization: `Bearer ${TOKEN}` } })
+  const session = await response.json()
+  if (!response.ok || !session.admin) throw new Error('对比度扫描需要有效商家会话，不能把登录页算作后台。')
+  await ev(`localStorage.setItem('lucky-owner-auth', ${JSON.stringify(JSON.stringify({ accessToken: TOKEN, admin: session.admin }))}); location.reload(); true`)
   for (let i = 0; i < 40; i += 1) {
     if (await ev(LOGGED_IN)) break
     await sleep(500)

@@ -145,7 +145,7 @@
     "onboarding-steps": 21,
     "plan-expiry": 36,
     "platform-expiry-ui": 10,
-    "onboarding-lamps": 435,
+    "onboarding-lamps": 441,
     "demo-kind-gate": 18,
     "phone2-gate": 9,
     "prod-ro-gate": 34,
@@ -191,7 +191,7 @@
     "manual-draft-http": 26,
     "release17-behavior": 23,
     "release18-behavior": 42,
-    "membership-summary-ui": 12,
+    "membership-summary-ui": 14,
     "media-privacy-review": 128,
     "public-share": 13,
     "customer-messages": 6,
@@ -208,12 +208,18 @@
     "booking-acceptance": 2,
     "member-pricing-policy": 4,
     "member-pricing-transactions": 1,
-    "member-pricing-http": 5
+    "member-pricing-http": 18,
+    "member-discount-history-display": 3,
+    "member-pricing-client": 30,
+    "mini-pricing-operations": 5,
+    "member-pricing-daily-facts": 4,
+    "booking-checkout": 10,
+    "booking-deposit-funding": 6
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
     "说明": "棘轮双基线(店主 09-08 裁,05r 补三):预检取 min(上一提交行数, 这里记的历史最低)。只许写小不许写大 —— 写大预检自己红。治的是「红着提交一次,下一次基线跟着抬」那个口子。",
-    "apps/api/local-server.mjs": 17168,
+    "apps/api/local-server.mjs": 16926,
     "apps/web/admin.js": 7752
   },
   "小程序档_移出主档_2026-09-14": {

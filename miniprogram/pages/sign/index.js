@@ -13,7 +13,8 @@ const theme = require('../../utils/theme')
 // its host and then prepending API_BASE caused /experience/experience/sign.
 function signWebUrl(raw) {
   const plain = String(raw || '')
-  const url = plain + (plain.includes('?') ? '&' : '?') + 'theme=' + theme.chromeOf().eff
+  const split = plain.indexOf('#'), baseUrl = split < 0 ? plain : plain.slice(0, split), fragment = split < 0 ? '' : plain.slice(split)
+  const url = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'theme=' + theme.chromeOf().eff + fragment
   if (/^https?:\/\//i.test(url)) {
     const sameService = /^https:\/\/(?:www\.luckyluxeatelier\.com|app\.jingshengyouji\.com)(?:\/|$)/i.test(url) && api.API_BASE === 'https://api.jingshengyouji.com'
     if (!api.SANDBOX && !sameService) return url
@@ -30,6 +31,7 @@ Page({
   data: { url: '', code: '' },
 
   async onLoad(q) {
+    if(q.memberGroup){try{const id=encodeURIComponent(q.memberGroup),r=q.merchant==='1'?await api.adminPost('/admin/member-pricing/groups/'+id+(q.archive==='1'?'/archive-link':'/sign-link'),{}):await api.getMemberGroupLink(q.memberGroup);this.setData({url:signWebUrl(r.url),code:q.memberGroup})}catch(e){wx.showToast({title:e.message||'签署页面打开失败',icon:'none'})}return}
     const scanToken = decodeURIComponent(q.token || '')
     if (scanToken) {
       try {
