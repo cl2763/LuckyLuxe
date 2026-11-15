@@ -1,11 +1,11 @@
 {
   "date": "2026-11-15",
-  "sourceLog": "member-pricing-ui-final-20261115k.log",
-  "sourceLogSHA256": "24f10aa50dfa9be9f4663ac00f3dbc728011b72b2b9d56086f49259051c2b7cf",
+  "sourceLog": "../operation-audit-20261115/regression/full-regression.log",
+  "sourceLogSHA256": "02e16139a1fbd92fb3b996092298ae0cbbae07237f464a1c9ddbd55b729085bd",
   "result": "all_three_lanes_passed",
   "main": {
-    "suites": 212,
-    "assertions": 6509,
+    "suites": 213,
+    "assertions": 6528,
     "notRun": 0
   },
   "demoLoginDisabled": {
@@ -21,7 +21,7 @@
   },
   "baselineCheckAssertions": 7,
   "productionAccessed": false,
-  "note": "最终k单次全量主档/权限档/小程序档均通过，保留原测试门限。不是实体手机验收或生产存量升级演练。",
+  "note": "最终e轮完整主档/权限档/小程序档全部通过。此前UI最终k为212/6509；本轮新增小程序操作5、HTTP7、客户端6、日结事实1，共19条有效断言；门限未放宽。实际实体微信送达与手机验收、生产存量升级未完成。",
   "priorAttempts": [
     {
       "attempt": "i",
@@ -30,6 +30,24 @@
     {
       "attempt": "j",
       "result": "新增文案已测试；交付记录的数据库未变保证缺少前后快照证据，记录改为本轮未操作这些库且未做一致性验收，未改测试门限。"
+    },
+    {
+      "attempt": "operation-a",
+      "result": "订单视图拆分后测试桩未加载新模块，39项签署入口测试修复为加载实际模块。"
+    },
+    {
+      "attempt": "operation-b",
+      "result": "时长格式化白名单仍在旧文件，迁移到新文件；上限不变。"
+    },
+    {
+      "attempt": "operation-c",
+      "result": "新服务单列表按钮12rpx违反既有胶囊规范，修成999rpx；门限不变。"
+    },
+    {
+      "attempt": "operation-d",
+      "result": "213/6525三档通过后，实际重新打开小程序发现重核价后的已签/待签分组错误；复用原始组追溯、修正双端入口，新增3条检查，再从头完成e轮。"
     }
-  ]
+  ],
+  "exitCode": 0,
+  "durationSeconds": 274
 }

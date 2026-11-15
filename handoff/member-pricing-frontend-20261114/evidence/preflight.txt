@@ -1,8 +1,9 @@
+   [看门狗] 259 套(主 213 + 门关 43 + 小程序 3) × 4s + 120s 固定开销 = **1156s**
 ════ 预检(不起服务)════
-  护栏三列清单                 ✅ 已是最新(摘要:d4ece94034ff)
+  护栏三列清单                 ✅ 已是最新(摘要:4b6058505fc3)
 外部件预检 —— 逐条现查(清单:handoff/外部件清单.md)
 
-1  miniprogram-automator             ✅ 在 · /Users/changliu/ll-mp-tools/node_modules/miniprogram-automator · v0.12.1 · ⚠️ **MP_AUTOMATOR 没设,是按外部件清单里的路径自己找到的**(要跑那三把刀,记得把它传给 run-all-tests.sh)
+1  miniprogram-automator             ✅ 在 · /Users/changliu/ll-mp-tools/node_modules/miniprogram-automator · v0.12.1
 2  微信开发者工具自动化端口          🔴 **9420 没开** —— `cli auto --project miniprogram --auto-port 9420`
 3  Google Chrome                     ✅ 在 · /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
 4  栅格化后端(SVG→PNG)               ✅ 当前用 qlmanage
@@ -15,12 +16,12 @@
    装法与踩过的坑:handoff/外部件清单.md §二
   外部件缺件                    ⚠️ 提醒(不拦):缺哪一个已经点名(装法见 handoff/外部件清单.md §二);缺 automator 时那三支刀会自己红
   local-server.mjs                   ✅ 16823 ≤ 16926(上一提交 16926 · 历史最低 16926)
-  admin.js                           ✅ 7557 ≤ 7752(上一提交 7752 · 历史最低 7752)
+  admin.js                           ✅ 7558 ≤ 7752(上一提交 7752 · 历史最低 7752)
   J-34 造病还原路径            ✅ 可执行件里零处 git checkout --/git restore(自守:分得开真执行与提及)
   J-34 造病备份收尾            ✅ 没有残留的 .pre-k
   回归 export 已登记            ✅ 都在 REGRESSION_ONLY_ENV 表里
   语法(全仓 .mjs/.js)            ✅ 全过
-  自由标识符(本批新模块)   ✅ 13 个
+  自由标识符(本批新模块)   ✅ 14 个
   交付完整性(import 都入库)  ✅
   回执引用的评测明细        ✅ 最近 6 份回执共引用 0 处评测明细,文件都在
   styles.css 写死色棘轮         ✅ 31 ≤ 31(只许降)
@@ -30,12 +31,12 @@
   回归不依赖演示种子        ✅ 0 处引用
   小程序 wxss 写死色棘轮     ✅ 113 ≤ 2350(只许降;07c 2356→2353 · 07d 2353→2350)
   UTC 日期前缀判天棘轮(#14)  ✅ 8 ≤ 12(只许降;存量清单 handoff/UTC判天存量清单_2026-09-09.md)
-  对比度全扫跟得上样式     ✅ 指纹 62b62466f02a 有红榜扫过 · 用的是 对比度红榜_会员价格_2026-11-15.md
-  D188 运行判据跟得上界面   ✅ 指纹 a16b6f9885f1 有报告量过 · 用的是 D188运行判据_会员价格_2026-11-15.md
+  对比度全扫跟得上样式     ✅ 指纹 4bf1e81e1328 有红榜扫过 · 用的是 对比度红榜_会员价格_2026-11-15.md
+  D188 运行判据跟得上界面   ✅ 指纹 1e4539d8caf2 有报告量过 · 用的是 D188运行判据_会员价格_2026-11-15.md
   J-43 棘轮对账                  ⚠️ 提醒(不拦):9 个棘轮的数比它的判据旧 —— 交付前跑一次 node tools/ratchet-audit.mjs 并重量
   开批快照齐不齐              ✅ 本机库 / 沙箱库 各有结构 + 指纹两份
   flaky 计数                       ✅ 没有崩过两次的套件
-  有服务没起来                 ⚠️ 提醒(不拦):4310 没起来;全量跑在 ci 临时库上,**不依赖这两台**
+  有服务没起来                 ⚠️ 提醒(不拦):4128 与 4310 没起来;全量跑在 ci 临时库上,**不依赖这两台**
      如果没起来的那台是 4128,多半是还没配顾客令牌签名密钥(J-53)——
         怎么办(这把钥匙由店主亲手创建与灌入,Code 不查看、不打印、不拷贝):
           1) 生成一把:  node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"

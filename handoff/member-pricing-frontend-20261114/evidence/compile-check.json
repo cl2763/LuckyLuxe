@@ -1,6 +1,6 @@
 {
   "wxmlCompiler": "WeChat DevTools wcc",
-  "wxmlFiles": 94,
+  "wxmlFiles": 95,
   "exitCode": 0,
-  "note": "在源码工作树编译；不是实体手机验证。"
+  "note": "完整源码工作树编译；含新增订单服务单模板。不是实体手机验证。"
 }
