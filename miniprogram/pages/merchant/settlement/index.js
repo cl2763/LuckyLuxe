@@ -477,6 +477,7 @@ const definition={
     const groups = this.data.groups.slice()
     groups[gi].collapsed = !groups[gi].collapsed
     this.setData({ groups })
+    this.renderAll()
   },
 
 

@@ -104,7 +104,7 @@ window.TodayBoard = (function () {
           lane: lane || 0, lanes: lanes || 1,
           startTime: b.startTime, endTime: b.endTime, customerName: b.customerName, serviceName: b.serviceName,
           isNewCustomer: b.isNewCustomer, isDesignated: b.isDesignated, ownerDirect: b.ownerDirect,
-          depositUnpaid: b.depositUnpaid, afterSalesTag: b.afterSalesTag || ''
+          depositUnpaid: b.depositUnpaid,depositWorkflow:b.depositWorkflow, afterSalesTag: b.afterSalesTag || ''
         }
       })
       // Empty slots are authoritative backend intervals clipped to the technician's shift.
@@ -190,7 +190,7 @@ window.TodayBoard = (function () {
                           : b.ownerDirect ? '<em class="tb-tag owner">老板排</em>'
                           : b.isDesignated ? '<em class="tb-tag zhi">指定</em>'
                           : b.isNewCustomer ? '<em class="tb-tag xin">新客</em>' : ''}
-                        ${b.depositUnpaid ? '<em class="tb-unpaid">未付定金</em>' : ''}
+                        ${b.depositUnpaid ? '<em class="tb-unpaid">'+escapeHtml(b.depositWorkflow?.display?.status||'待核对定金')+'</em>' : ''}
                       </span>
                     </button>`).join('')}
                 </div>`).join('')}

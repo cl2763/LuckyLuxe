@@ -408,9 +408,10 @@ async function main() {
 
   // 取消预约后:定金记录照样留着(留痕),不因订单取消而消失
   await request(`/admin/bookings/${bk.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
-  await request(`/admin/bookings/${bk.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) }, shop.token)
+  const beforeCancel = (await request(`/admin/bookings/${bk.id}/deposit-receipt`, {}, shop.token)).data
+  const cancelled = await request(`/admin/bookings/${bk.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) }, shop.token)
   const list3 = (await request(`/admin/bookings/${bk.id}/deposit-receipt`, {}, shop.token)).data
-  check('A 取消预约后定金留痕还在', list3.receipts.length === 3, JSON.stringify(list3.receipts.map((r) => r.kind)))
+  check('A 取消预约后定金留痕还在', cancelled.status === 200 && list3.workflow.cancelled && beforeCancel.receipts.every(old => JSON.stringify(list3.receipts.find(r => r.id === old.id)) === JSON.stringify(old)) && list3.workflow.cashRefundDueCents > 0, JSON.stringify(list3.receipts.map((r) => r.kind)))
 
   // DB 层:定金记录删不掉、金额改不动(不靠人记纪律)
   {

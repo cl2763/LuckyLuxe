@@ -18,7 +18,8 @@ import { readFileSync, existsSync, unlinkSync, mkdtempSync, rmSync } from 'node:
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { DatabaseSync, backup } from 'node:sqlite'
+import { DatabaseSync } from 'node:sqlite'
+import { backupDb } from './db-backup-core.mjs'
 import { backfillIdentities, createIdentityUpsert, scanIdentityMismatch, repairIdentityTenant, identityRulers } from './user-identity.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
@@ -62,8 +63,7 @@ if (!existsSync(SRC)) {
   const dir = mkdtempSync(join(tmpdir(), 'll-d130-'))
   const COPY = join(dir, 'probe.sqlite')
   // Include the live WAL: a plain file copy can retain the pre-migration schema.
-  const sourceDb=new DatabaseSync(SRC,{readOnly:true})
-  try {await backup(sourceDb,COPY)} finally {sourceDb.close()}
+  backupDb(SRC, COPY)
   const db = new DatabaseSync(COPY)
   const iso = (d) => d.toISOString()
   let seq = 0

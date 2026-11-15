@@ -1,1 +1,1 @@
-{"navigationBarTitleText":"结算开单","usingComponents":{"discount-wheel":"/components/discount-wheel/index"}}
+{"navigationBarTitleText": "结算开单", "usingComponents": {"discount-wheel": "/components/discount-wheel/index", "deposit-panel": "/components/deposit-panel/index"}}

@@ -551,6 +551,7 @@ async function handleBookingDraftParam() {
     }
     state.cart = [item, ...state.cart.filter((cartItem) => cartItem.bookingDraftId !== draft.id).map(cartItem=>({...cartItem,selected:false}))]
     writeJson(`lucky-web-cart:${TENANT_ID}`, state.cart)
+    state.checkoutDraftId=draft.id;state.checkoutUseBalance=false
     state.view = 'checkout'
     toast(t('draftLoaded'))
     const cleanUrl = new URL(window.location.href)
@@ -700,7 +701,8 @@ async function showApp() {
     }
     state.view = pending.view || state.view || 'home'
   }
-  if (requiresAuth(state.view) && !state.user && !(state.view === 'checkout' && state.cart.length)) state.view = 'home'
+  if (state.view === 'checkout') { await setView('checkout'); return }
+  if (requiresAuth(state.view) && !state.user) state.view = 'home'
   render()
 }
 
@@ -1279,9 +1281,10 @@ function renderCartItem(item) {
 function renderCheckout() {
   const selected = state.cart.filter((item) => item.selected)
   const payableText=state.checkoutPreview?.display?.offlineText||'—'
+  const fromDraft=selected.length===1&&selected[0].bookingDraftId===state.checkoutDraftId
   els.screen.innerHTML = `
     <section class="checkout-page-web"><p class="subtle">${state.lang==='zh'?'服务参考价格用于预约；个人折扣及符合条件的优惠将在服务确认单中核对。':'Reference prices are used for booking. Your personal discount and eligible offers will be confirmed on the service document.'}</p>
-      <div class="section-row"><h1>${t('confirmOrder')}</h1></div>
+      <div class="section-row"><h1>${fromDraft?'确认预约内容':t('confirmOrder')}</h1></div>${fromDraft?'<p class="subtle">商家发送的预约通知</p>':''}
       ${selected.length ? selected.map((item) => `
         <article class="checkout-item-web card">
           <div class="checkout-copy-web">
@@ -1308,8 +1311,8 @@ function renderCheckout() {
         <div class="store-box card"><strong>${currentStore().name || ''}</strong><span>${[storeContactLine(currentStore()), storeHoursSummary(currentStore())].filter(Boolean).join(' · ')}</span></div>
       </section>
       <div class="summary-bar">
-        <div><span>${t('requiredDeposit')}</span><strong>${escapeHtml(payableText)}</strong></div>
-        <button class="primary" data-submit-payment type="button" ${selected.length&&state.checkoutPreview&&!window.BookingCheckout.pending(state)?'':'disabled'}>确认预约</button>
+        <div><span>剩余定金线下支付</span><strong>${escapeHtml(payableText)}</strong></div>
+        <button class="primary" data-submit-payment type="button" ${selected.length&&state.checkoutPreview&&!window.BookingCheckout.pending(state)?'':'disabled'}>${escapeHtml(state.checkoutPreview?.display?.confirmText||'确认预约')}</button>
       </div>
     </section>
   `
@@ -1735,7 +1738,7 @@ function renderOrderDetailWeb() {
           <p><span>${t('remark')}</span><strong>${order.notes || t('none')}</strong></p>
         </div>
       </section>
-      ${window.BookingCheckout.receipt(order.depositPayment,escapeHtml)}${window.MemberPricingCustomer.documents(order.memberDocuments,escapeHtml,state.lang==='en')}<section class="section" ${order.memberDocuments||order.depositPayment&&!order.payment?'hidden':''}>
+      ${window.DepositWorkflow.panel(order.depositWorkflow,order.id)}${window.MemberPricingCustomer.documents(order.memberDocuments,escapeHtml,state.lang==='en')}<section class="section" ${order.memberDocuments||order.depositPayment&&!order.payment?'hidden':''}>
         <div class="section-row"><h2>${state.lang === 'zh' ? '服务签署单' : 'Signed sheet'}</h2>${order.payment ? `<span class="subtle">${state.lang === 'zh' ? '已签署' : 'Signed'} ${escapeHtml(String(order.payment.signedAt || '').slice(0, 16).replace('T', ' '))}</span>` : ''}</div>
         <div class="info-card-web card">
           ${order.payment && (order.payment.sheets || []).length > 1 ? `
@@ -2094,7 +2097,7 @@ async function handleScreenClick(event) {
     if (key === 'cancel') {
       const zh = state.lang === 'zh'
       try {
-        const out=await window.BookingCheckout.cancel(order.id,request,d=>window.UIDialog.confirm(zh?'确定取消这个预约吗？':'Cancel this booking?',{hint:['已收定金 '+d.paidText,'退回储值 '+d.storedRefundText,'不退部分 '+d.forfeitText,'线下退款 '+d.cashRefundText,d.note].filter(Boolean).join(' · '),danger:true}));if(!out)return;toast(out.refundReceipt?.display?.note||(zh?'已取消':'Cancelled'))
+        const out=await window.BookingCheckout.cancel(order.id,request,d=>window.DepositWorkflow.cancel(d));if(!out)return;toast(out.refundReceipt?.display?.note||(zh?'已取消':'Cancelled'))
         await loadUserOrders()
         render()
       } catch (error) { toast(error.message) }

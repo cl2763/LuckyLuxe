@@ -1,7 +1,7 @@
 const api = require('../../../utils/api')
 const nav = require('../../../utils/nav')
 const { storeMoney } = require('../../../utils/storeclock')
-const { buildOwnerHome, clockGate, clockFailText, staffSmalls, STAFF_PERIODS } = require('../../../utils/dashboard-view')
+const { buildOwnerHome, clockGate, clockFailText, staffSmalls, STAFF_PERIODS } = require('./dashboard-view')
 const { loadNumberFont } = require('../../../utils/numfont')   // D168 段 4:数字大字字体,拿不到就如实说
 const { currentTheme, themeClass } = require('../../../utils/theme')   // D183:明暗双模式
 

@@ -5,6 +5,7 @@ export function memberDocumentDisplay(quote,{money,customerName,storeName}) {
  const appliedDiscountText=memberOnly?(quote.personalDiscount.eligible?discountLabel(quote.personalDiscount.effectiveRateBps):'当前无会员折扣资格'):tiers.length>1?'按各项目所选价档':({list:'原价',share:'分享价',course:'疗程价'}[tiers[0]]||'次卡核销');
  const row=(label,cents)=>({label,value:money(cents)}),payments=components.map(c=>c.payment);
  rows.push(row('服务原价',quote.listTotalCents),row(memberOnly&&quote.personalDiscount.eligible?'个人会员优惠 · '+discountLabel(quote.personalDiscount.effectiveRateBps):'价格优惠',-quote.tierDiscountCents),row('服务折后小计',quote.subtotalCents),row('优惠券',-quote.couponDiscountCents),row('已付定金',-quote.depositDeductCents),row('服务应付',quote.totalCents-quote.rechargeCents-quote.purchaseCents));
+ for(const c of components)if(c.depositDeductCents&&c.depositDetail?.sourceText)rows.splice(rows.length-1,0,{label:'定金来源',value:c.depositDetail.sourceText});
  const recharges=components.filter(c=>c.recharge),paymentRows=[row('次卡抵扣',sum(payments,'timecardCoverCents')),row('储值余额扣款',sum(payments,'storedUsedCents')),row('到店收款 · 服务差额',sum(payments,'offlineCents')-quote.rechargeCents-quote.purchaseCents)];
  if(quote.purchaseCents)paymentRows.push(row('线下收款 · 购卡款',quote.purchaseCents));
  if(Number.isSafeInteger(quote.expectedBalanceBeforeCents))paymentRows.push(row('签署前账户余额（预计）',quote.expectedBalanceBeforeCents));

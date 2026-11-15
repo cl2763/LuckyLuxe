@@ -264,6 +264,7 @@
 }
 
 .member-extra view {
+  color:var(--ink);
   max-width: 100%;
   padding: 10rpx 16rpx;
   border-radius: 999rpx;

@@ -198,13 +198,14 @@ Page(Object.assign({
      写入一律 PATCH /status 带 action;爽约与处置定金各有自己的写入路由,在这里分出去。
      需要填字的两个动作(发起售后=问题描述、结束售后=处理结果)用可输入弹层收,
      **必填**:空串不发请求(后端也再挡一道,裁 B)。 */
-  runBookingAction(ctx, key, label) {
+  async runBookingAction(ctx, key, label) {
     if (key === 'reschedule') return this.openReschedule(ctx.id)
     if (key === 'noShow') return this.markNoShow(ctx)
     if (key === 'disposeDeposit') return this.openDisposal(ctx.id)
+    let cancelPreview=null
     const send = async (note) => {
       try {
-        await api.adminPatch(`/admin/bookings/${encodeURIComponent(ctx.id)}/status`, note === undefined ? { action: key } : { action: key, note })
+        await api.adminPatch(`/admin/bookings/${encodeURIComponent(ctx.id)}/status`, {action:key,...(note===undefined?{}:{note}),...(cancelPreview?{reviewHash:cancelPreview.reviewHash}:{})})
         wx.showToast({ title: '已更新', icon: 'none' })
         this.loadList(); this.loadDayView(this.data.selDate)
       } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
@@ -226,12 +227,8 @@ Page(Object.assign({
       return
     }
     if (key === 'cancel') {
-      wx.showModal({
-        title: label || '取消订单',
-        content: '确认取消?将释放该时段;若已入账会自动冲销。',
-        success: (r) => { if (r.confirm) send() },
-        fail: (e) => console.warn('[showModal fail]', e)
-      })
+      cancelPreview=await this.selectComponent('#depositEditor').confirmCancel(ctx.id)
+      if(cancelPreview)await send()
       return
     }
     send()
@@ -401,9 +398,7 @@ Page(Object.assign({
       try { await api.adminPatch(`/admin/bookings/${encodeURIComponent(id)}/status`, { status: s }); wx.showToast({ title: '已更新', icon: 'none' }); this.loadList() }
       catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
     }
-    if (s === 'CANCELLED') { wx.showModal({ title: '取消预约', content: '确认取消?将释放该时段;若已入账会自动冲销。', success: (r) => { if (r.confirm) doIt() },
-  fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-}); return }
+    if (s === 'CANCELLED') return this.runBookingAction({id},'cancel','取消预约')
     doIt()
   },
 
@@ -455,7 +450,7 @@ Page(Object.assign({
             top: Math.round((s - openMin) / 60 * PX_PER_HOUR), height: Math.max(34, Math.round((e - s) / 60 * PX_PER_HOUR)),
             startTime: b.startTime, endTime: b.endTime, customerName: b.customerName,
             serviceId: b.serviceId || '', serviceName: b.serviceName,
-            isNewCustomer: b.isNewCustomer, isDesignated: b.isDesignated, ownerDirect: b.ownerDirect, depositUnpaid: b.depositUnpaid,
+            isNewCustomer: b.isNewCustomer, isDesignated: b.isDesignated, ownerDirect: b.ownerDirect, depositUnpaid: b.depositUnpaid,depositWorkflow:b.depositWorkflow,
             afterSalesTag: b.afterSalesTag || '' // 裁C:售后单蓝徽标上日历(句后端唯一)
           }
         })
@@ -525,7 +520,7 @@ Page(Object.assign({
       } else if (sheets.filter((x) => x.status !== 'voided').length) { items.push('查看结算单'); actions.push('preview') }
       // 待签状态可撤回改单(与列表那条路径同一套语义:全撤未签的、券回券包、回到去结算)
       if (pending.length) { items.push('撤回改单'); actions.push('void') }
-      if (b.depositUnpaid) { items.push('标记已收定金'); actions.push('paid') }
+      if (b.depositUnpaid) { items.push('登记线下已收'); actions.push('paid') }
       items.push('写服务小记'); actions.push('note')
       /* 「归属备注」已随 v6 定稿退役(代付不涉技师业绩归属,且日结已逐日确认过)——
          2026-08-09 集中核验时发现网格这条路径还留着,清掉。 */
@@ -547,29 +542,7 @@ Page(Object.assign({
   /* 标记已收定金(拍板 A · 《财务记账总逻辑》v1.1 §五)。
      金额由后端按本店 deposit_config 算,这里只显示;标记那一刻只记定金预收(负债),
      不进收入账本 —— 签字时才兑现。重复标记后端幂等,不会记两笔。 */
-  async markDepositPaid(b) {
-    let amountText = ''
-    try {
-      const dep = await api.adminGet('/admin/deposit-config')
-      const c = (dep && dep.config) || {}
-      if (c.enabled === false) { wx.showToast({ title: '本店没开定金,先去门店设置配规则', icon: 'none' }); return }
-      if (c.mode === 'fixed' && c.fixedAmountCents) amountText = storeMoney(c.fixedAmountCents, 0)
-    } catch (e) { /* 拉不到配置也照常让后端算 */ }
-    wx.showModal({
-      title: '标记已收定金',
-      content: `确认已经收到 ${b.customerName || '顾客'} 的定金${amountText ? ` ${amountText}` : ''}?\n记为定金预收(负债),不进收入;签字时才兑现。`,
-      confirmText: '已收到',
-      success: async (r) => {
-        if (!r.confirm) return
-        try {
-          const resp = await api.adminPost(`/admin/bookings/${encodeURIComponent(b.id)}/deposit-receipt`, {})
-          wx.showToast({ title: resp && resp.created === false ? '之前已标过,没重复记账' : '已记定金预收', icon: 'none' })
-          this.loadDayView(this.data.selDate)
-        } catch (err) { wx.showToast({ title: (err && err.message) || '标记失败', icon: 'none' }) }
-      },
-      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-    })
-  },
+  markDepositPaid(b) { this.setData({depositBookingId:b.id},()=>this.selectComponent('#depositEditor').openForm({currentTarget:{dataset:{kind:'collect'}}})) },
 
   async setArrival(id, arrived) {
     try { await api.adminPatch(`/admin/bookings/${encodeURIComponent(id)}/arrival`, { arrived }); wx.showToast({ title: arrived ? '已到店' : '已改回未到', icon: 'none' }); this.loadDayView(this.data.selDate) }

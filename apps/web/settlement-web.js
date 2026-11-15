@@ -228,10 +228,11 @@ window.SettlementWeb = (function () {
         ${/* ═══ 单级卡:定金 / 券 / 整单规则(小程序屏 3 上半)═══ */''}
         <div class="sw-card" id="swPayBlock">
           <div class="sw-ch">定金 <span class="sw-hint">按店配收取 · 有收取记录才出开关</span></div>
+          ${v.depositDetail ? window.DepositWorkflow.panel(v.depositDetail.w,state.bookingId,{merchant:true,compact:true}):''}
           ${state.bookingId && state.depositDeductible && (v.depositReceiptCents || 0) > 0 ? `
             <div class="sw-radios">
               <button class="sw-radio ${state.depositApplied ? 'on' : ''}" data-sw-deposit="1" type="button"><span class="sw-dt"></span>已付定金抵扣${v.depositDeduct ? ` <span class="sw-ok">−${escapeHtml(v.depositDeduct)}</span>` : ''}</button>
-              <button class="sw-radio ${state.depositApplied ? '' : 'on'}" data-sw-deposit="0" type="button"><span class="sw-dt"></span>未付定金</button>
+              <button class="sw-radio ${state.depositApplied ? '' : 'on'}" data-sw-deposit="0" type="button"><span class="sw-dt"></span>本次不抵扣</button>
             </div>`
           : (state.depositDeductible
             ? '<p class="sw-empty">这张单没有定金收取记录,没有可抵扣的定金</p>'
@@ -598,6 +599,7 @@ window.SettlementWeb = (function () {
       state.groups[Number(parts[0])].customItems.splice(Number(parts[1]), 1)
       render(); schedulePreview()
     })
+    on('[data-deposit-collect]',async el=>{await window.DepositWorkflow.open(el.dataset.depositCollect,'collect',state._deps.request,()=>doPreview())});
     on('[data-sw-deposit]', function (el) { state.depositApplied = el.dataset.swDeposit === '1'; render(); schedulePreview() })
     on('[data-sw-balance]', function () {
       const m = state.payMenu
@@ -737,7 +739,7 @@ window.SettlementWeb = (function () {
         discountLabel: (grp.couponDiscountCents || 0) > 0 ? '共优惠（含券）' : '较原价共优惠',
         couponDeduct: (grp.couponDiscountCents || 0) > 0 ? money(grp.couponDiscountCents, 2) : '',
         depositDeduct: (grp.depositDeductCents || 0) > 0 ? money(grp.depositDeductCents, 2) : '',
-        depositReceiptCents: grp.depositReceiptCents || 0,
+        depositReceiptCents: grp.depositReceiptCents || 0, depositDetail:sheets.find(s=>s.depositDetail)?.depositDetail,
         timecardCover: (pay2.timecardCoverCents || 0) > 0 ? money(pay2.timecardCoverCents, 2) : '',
         hasStored: (pay2.storedUsedCents || 0) > 0,
         storedDeduct: money(pay2.storedUsedCents || 0, 2),
@@ -771,6 +773,7 @@ window.SettlementWeb = (function () {
       if (hasTc && !g.timecardServiceId) { toast(`项目${i + 1} 请选本次核销项目`); return }
       if (!g.selectedTechs.length) { toast(`项目${i + 1} 先勾本组技师`); return }
     }
+    if(state.view?.depositDetail?.w.canDeduct&&!state.depositApplied&&!await window.DepositWorkflow.confirmUnused(state.view.depositDetail,state.view.offlineDue)){state.depositApplied=true;await doPreview();return;}
     state.submitting = true; render()
     try {
       const body=buildBody(state);if(state.pricingConfig?.active)body.operationId=window.MemberPricingInput.retryKey(state.createRetry,body)

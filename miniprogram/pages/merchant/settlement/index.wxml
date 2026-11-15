@@ -146,12 +146,13 @@
 
     <view class="card">
       <view class="ch">定金 <text class="hint">按店配收取 · 有收取记录才出开关</text></view>
+      <deposit-panel wx:if="{{view.depositDetail.w}}" workflow="{{view.depositDetail.w}}" booking-id="{{bookingId}}" merchant="{{true}}" compact="{{true}}" bind:updated="refresh"/>
       <view wx:if="{{depositDeductible && view.hasDepositReceipt}}" class="radios">
         <view class="radio {{depositApplied ? 'on' : ''}}" data-v="1" bindtap="setDeposit">
           <view class="dt"></view>已付定金抵扣
           <text wx:if="{{view.hasDeposit}}" class="ok">−{{view.depositDeduct}}</text>
         </view>
-        <view class="radio {{depositApplied ? '' : 'on'}}" data-v="0" bindtap="setDeposit"><view class="dt"></view>未付定金</view>
+        <view class="radio {{depositApplied ? '' : 'on'}}" data-v="0" bindtap="setDeposit"><view class="dt"></view>本次不抵扣</view>
       </view>
       <view wx:elif="{{depositDeductible}}" class="empty">这张单没有定金收取记录,没有可抵扣的定金</view>
       <view wx:else class="empty">本店定金不抵扣尾款（门店设置 → 定金与取消规则）</view>
@@ -334,3 +335,5 @@
     <view wx:else class="qhandtip">新客只有扫码一条签署路 —— 扫码签署会自动建立档案绑定</view>
   </view>
 </block></view>
+
+<view wx:if="{{depositWarning}}" class="dep-warn-veil"><view class="dep-warn-panel"><view class="ch">还有定金未抵扣</view><view class="dep-warn-text">{{depositWarning}}</view><view class="dep-warn-text">本次还需支付 {{view.offlineDue}}</view><button data-confirm="{{false}}" bindtap="depositWarningDecision">返回并抵扣定金</button><button data-confirm="{{true}}" bindtap="depositWarningDecision">确认本次不抵扣</button></view></view>

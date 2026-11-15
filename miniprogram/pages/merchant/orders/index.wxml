@@ -6,7 +6,7 @@
     <view>预约时间：{{focusedBooking.date}} {{focusedBooking.time}}</view>
     <view>服务技师：{{focusedBooking.tech || '未分配'}}</view>
     <view>预约状态：{{focusedBooking.statusLabel}}</view>
-    <view>备注：{{focusedBooking.notes}}</view>
+    <view>备注：{{focusedBooking.notes}}</view><deposit-panel wx:if="{{focusedBooking.depositWorkflow}}" workflow="{{focusedBooking.depositWorkflow}}" booking-id="{{focusedBooking.id || ''}}" merchant="{{true}}" bind:updated="onShow"/>
   </view>
 
   <view class="seg">
@@ -85,7 +85,7 @@
                   <text wx:elif="{{b.ownerDirect}}" class="dv-tag owner">老板排</text>
                   <text wx:elif="{{b.isDesignated}}" class="dv-tag zhi">指定</text>
                   <text wx:elif="{{b.isNewCustomer}}" class="dv-tag xin">新客</text>
-                  <text wx:if="{{b.depositUnpaid}}" class="dv-unpaid">未付定金</text>
+                  <text wx:if="{{b.depositUnpaid}}" class="dv-unpaid">{{b.depositWorkflow.display.status}}</text>
                 </view>
               </view>
             </view>
@@ -218,7 +218,7 @@
       <view class="oghead">{{item.title}}</view>
       <view class="orow" wx:for="{{item.items}}" wx:for-item="it" wx:key="id" data-id="{{it.id}}" data-status="{{it.status}}" data-userid="{{it.userId}}" data-customer="{{it.customer}}" data-service="{{it.serviceName}}" data-serviceid="{{it.serviceId}}" data-tech="{{it.tech}}" bindtap="orderActions">
         <view class="otime">{{it.time}}</view>
-        <view class="omain"><view class="oname">{{it.customer}}<text class="ostatus {{it.statusCls}}">{{it.statusLabel}}</text><text wx:if="{{it.ddBadge}}" class="ostatus {{it.ddCls}}">{{it.ddBadge}}</text></view><view class="oline">{{it.line}}{{it.tech ? ' · ' + it.tech : ''}}</view></view>
+        <view class="omain"><view class="oname">{{it.customer}}<text class="ostatus {{it.statusCls}}">{{it.statusLabel}}</text><text wx:if="{{it.ddBadge}}" class="ostatus {{it.ddCls}}">{{it.ddBadge}}</text></view><view class="oline">{{it.line}}{{it.tech ? ' · ' + it.tech : ''}}</view><deposit-panel wx:if="{{it.depositWorkflow}}" workflow="{{it.depositWorkflow}}" booking-id="{{it.id}}" merchant="{{true}}" compact="{{true}}" bind:updated="onShow"/></view>
         <text class="ochev">›</text>
       </view>
     </view>
@@ -380,3 +380,5 @@
 
 <!-- D68③:签署原件浮层查看器(全仓共用组件;数据走 /admin/settlements/:key/snapshots) -->
 <snapshot-viewer open="{{snapViewer.open}}" items="{{snapViewer.items}}" index="{{snapViewer.index}}" bind:close="closeSnapViewer"></snapshot-viewer>
+
+<deposit-panel id="depositEditor" editor-only="{{true}}" booking-id="{{depositBookingId || ''}}" merchant="{{true}}" bind:updated="onShow"/>

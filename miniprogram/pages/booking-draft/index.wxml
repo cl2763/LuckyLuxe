@@ -7,8 +7,10 @@
 <view class="row">技师<text>{{draft.technician.name}}</text></view>
 <view class="row">时间<text>{{draft.date}} {{draft.time}}</text></view>
 <view wx:if="{{draft.notes}}" class="hint">{{draft.notes}}</view>
-<view class="hint">收款在门店线下完成。草稿有效 30 分钟，不锁定档期；确认时重新检查。旧系统档案尚未绑定微信的顾客，请先让店员出示档案绑定码，避免新建另一份档案。</view>
-<button wx:if="{{!done}}" class="primary" loading="{{busy}}" disabled="{{busy || error}}" bindtap="confirm">登录并确认预约</button>
+<view class="deposit-draft" wx:if="{{!done}}"><view class="title">预约定金</view><view class="row"><text>本次应收定金</text><text>{{preview.display.requiredText || policy.amountText || '待核对'}}</text></view><view class="row"><text>使用已有储值余额抵定金</text><switch checked="{{useBalance}}" disabled="{{busy||pending}}" bindchange="toggleBalance"/></view><block wx:if="{{preview}}"><view class="row"><text>本次使用储值余额</text><text>{{preview.display.storedText}}</text></view><view class="row"><text>剩余定金线下支付</text><text>{{preview.display.offlineText}}</text></view><view class="row"><text>账户余额</text><text>{{preview.display.balanceBeforeText}} → {{preview.display.balanceAfterText}}</text></view><view class="hint">{{preview.display.note}}</view></block><view wx:else class="hint">不开启余额抵扣时，确认预约不会扣除账户余额。定金请与门店线下办理，收到后由门店登记。</view></view>
+<view wx:if="{{policy}}" class="deposit-draft"><view class="title">定金与取消规则</view><view class="hint">{{policy.text.zh}}</view></view>
+<view class="hint">草稿有效 30 分钟，不锁定档期；确认时重新检查。旧系统档案尚未绑定微信的顾客，请先让店员出示档案绑定码，避免新建另一份档案。</view>
+<button wx:if="{{!done}}" class="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="confirm">{{pending?'核对／重试原预约':preview.display.confirmText || '登录并核对预约'}}</button>
 <button wx:else class="primary" bindtap="orders">查看我的订单</button>
 <button class="secondary" bindtap="home">返回我的</button>
 </view>

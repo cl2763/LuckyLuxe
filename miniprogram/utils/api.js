@@ -374,7 +374,7 @@ function toMiniBooking(booking) {
 
     depositCents: booking.depositCents == null ? null : booking.depositCents,
     memberDocuments:booking.memberDocuments||null,
-    depositPayment:booking.depositPayment||null,
+    depositPayment:booking.depositPayment||null,depositWorkflow:booking.depositWorkflow||null,
     payment: booking.payment || null,
     payableAmount: booking.depositCents == null ? null : Math.round(booking.depositCents / 100),
     finalDue: booking.finalDue == null ? null : booking.finalDue,

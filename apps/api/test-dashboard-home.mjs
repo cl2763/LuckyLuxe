@@ -222,7 +222,7 @@ check('⑬i2 大数字**固定为营业收入**,不再有轮播位',
 check('⑬i3 轮播定时器删干净(不是留着不调 —— 留着迟早有人再打开)',
   !/ROTATE_MS/.test(home) && !/scheduleRotate/.test(home) && !/rotateAt/.test(home))
 check('⑬j 小程序端 dots 照旧 5 颗(§一 明写;这条是**反向守**:别把两端一起削了)',
-  /CAROUSEL = \['revenue', 'cash', 'cardUse', 'newCard', 'visits'\]/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
+  /CAROUSEL = \['revenue', 'cash', 'cardUse', 'newCard', 'visits'\]/.test(readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/dashboard-view.js'), 'utf8')))
 check('⑬j2 全屏态轮播照旧(§五 line 377 明写「每 6 秒一换」)',
   /ROTATE_MS = 6000/.test(fs))
 check('⑬k AI 今日一句显示的是**门店当地时刻**,不是一串 ISO(后端出文本,前端零格式化)',

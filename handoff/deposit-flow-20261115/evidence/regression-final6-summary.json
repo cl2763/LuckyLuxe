@@ -1,0 +1,22 @@
+{
+  "recordedAt": "2026-11-15T15:52:20.869703+00:00",
+  "runtime": "Node 22.11.0 --experimental-sqlite",
+  "preflight": "passed",
+  "mainSuites": 214,
+  "mainAssertions": 6546,
+  "mainFailed": 0,
+  "demoDisabledSuites": 44,
+  "demoDisabledFailed": 0,
+  "nativeLayoutSuites": {
+    "passed": 3,
+    "assertions": 16,
+    "failed": 0,
+    "unexecuted": 0,
+    "mode": "official SDK executed separately; full run verified exact source/log hashes"
+  },
+  "releaseGate": "local-regression-passed; GitHub CI pending",
+  "runExitCode": 0,
+  "logLocalPath": "/tmp/deposit-full-regression-final6.log",
+  "logSha256": "21926e4da819ad7f36d85857c19745c1d9bdf6129a98e8a650a871b4c6453b42",
+  "deploymentPerformed": false
+}

@@ -1,0 +1,45 @@
+{
+  "checkedAt": "2026-11-15T15:48:16.566177+00:00",
+  "productionNode": "22.11.0",
+  "productionCommit": "bba130f69857524550735dbc7c647854ec471079",
+  "backupSha256": "140224f5aba27b38f1d0299833a2f05819a98eef7991e2ff69cf9e4ba863c862",
+  "backupRemotePath": "/app/apps/api/local-data/backups/lucky-luxe-deposit-final-20261115-234748.sqlite",
+  "runs": [
+    {
+      "turn": 1,
+      "node": "22.11.0",
+      "oldTables": 130,
+      "oldRows": 12141,
+      "changedTables": [],
+      "addedRowsInOldTables": {},
+      "changedTriggers": [],
+      "originalTriggers": 47,
+      "changedIndexes": [],
+      "originalIndexes": 220,
+      "newTables": [
+        "deposit_settlement_snapshots",
+        "deposit_workflow_operations"
+      ],
+      "integrity": "ok",
+      "healthy": true
+    },
+    {
+      "turn": 2,
+      "node": "22.11.0",
+      "oldTables": 130,
+      "oldRows": 12141,
+      "changedTables": [],
+      "addedRowsInOldTables": {},
+      "changedTriggers": [],
+      "originalTriggers": 47,
+      "changedIndexes": [],
+      "originalIndexes": 220,
+      "newTables": [
+        "deposit_settlement_snapshots",
+        "deposit_workflow_operations"
+      ],
+      "integrity": "ok",
+      "healthy": true
+    }
+  ]
+}

@@ -145,7 +145,7 @@
     "onboarding-steps": 21,
     "plan-expiry": 36,
     "platform-expiry-ui": 10,
-    "onboarding-lamps": 441,
+    "onboarding-lamps": 447,
     "demo-kind-gate": 18,
     "phone2-gate": 9,
     "prod-ro-gate": 34,
@@ -210,11 +210,12 @@
     "member-pricing-transactions": 1,
     "member-pricing-http": 18,
     "member-discount-history-display": 3,
-    "member-pricing-client": 30,
+    "member-pricing-client": 32,
     "mini-pricing-operations": 5,
     "member-pricing-daily-facts": 4,
     "booking-checkout": 10,
-    "booking-deposit-funding": 6
+    "booking-deposit-funding": 6,
+    "deposit-workflow": 10
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

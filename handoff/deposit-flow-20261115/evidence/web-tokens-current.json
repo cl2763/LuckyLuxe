@@ -1,0 +1,101 @@
+[
+  {
+    "page": "商家后台",
+    "theme": "dark",
+    "bodyBg": "rgb(26, 21, 18)",
+    "brand": "#d3b483",
+    "hero": "#15130f",
+    "ink": "#f0e7da",
+    "linked": 1,
+    "paper": "#1a1512",
+    "textLen": 297
+  },
+  {
+    "page": "商家后台",
+    "theme": "light",
+    "bodyBg": "rgb(250, 248, 243)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "linked": 1,
+    "paper": "#faf8f3",
+    "textLen": 297
+  },
+  {
+    "page": "顾客首页",
+    "theme": "system",
+    "bodyBg": "rgb(26, 21, 18)",
+    "brand": "#d3b483",
+    "hero": "#15130f",
+    "ink": "#f0e7da",
+    "linked": 1,
+    "paper": "#1a1512",
+    "textLen": 150
+  },
+  {
+    "page": "平台控制台",
+    "theme": "light",
+    "bodyBg": "rgb(250, 248, 243)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "linked": 1,
+    "paper": "#faf8f3",
+    "textLen": 88
+  },
+  {
+    "page": "分享页",
+    "theme": "light",
+    "bodyBg": "rgb(250, 248, 243)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "linked": 1,
+    "paper": "#faf8f3",
+    "textLen": 50
+  },
+  {
+    "page": "微信模拟器",
+    "theme": "system",
+    "bodyBg": "rgb(26, 21, 18)",
+    "brand": "#d3b483",
+    "hero": "#15130f",
+    "ink": "#f0e7da",
+    "linked": 1,
+    "paper": "#1a1512",
+    "textLen": 716
+  },
+  {
+    "page": "分享页",
+    "theme": "dark",
+    "bodyBg": "rgb(26, 21, 18)",
+    "brand": "#d3b483",
+    "hero": "#15130f",
+    "ink": "#f0e7da",
+    "linked": 1,
+    "paper": "#1a1512",
+    "textLen": 50
+  },
+  {
+    "page": "顾客签单页",
+    "theme": "light",
+    "bodyBg": "rgb(241, 238, 230)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "linked": 1,
+    "paper": "#faf8f3",
+    "textLen": 351
+  },
+  {
+    "page": "顾客签单页",
+    "theme": "dark",
+    "bodyBg": "rgb(34, 28, 23)",
+    "brand": "#d3b483",
+    "hero": "#15130f",
+    "ink": "#f0e7da",
+    "linked": 1,
+    "paper": "#1a1512",
+    "textLen": 351
+  }
+]

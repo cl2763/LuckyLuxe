@@ -1,0 +1,44 @@
+{
+  "environment": "isolated local synthetic fixture",
+  "signedDocuments": 2,
+  "serviceComponents": [
+    1,
+    2
+  ],
+  "signedInDependencyOrder": true,
+  "balancesCents": [
+    6000,
+    26400,
+    0
+  ],
+  "serviceSubtotalsCents": [
+    39600,
+    79200
+  ],
+  "depositAppliedCents": 10000,
+  "depositApplications": 1,
+  "rechargeCents": 50000,
+  "rechargeApplications": 1,
+  "discountRateBps": 9900,
+  "discountEvents": 1,
+  "serviceRevenueCents": 118800,
+  "serviceCashDueCents": 52800,
+  "rechargeCashCents": 50000,
+  "ledger": [
+    {
+      "type": "recharge",
+      "amount_cents": 50000
+    },
+    {
+      "type": "consume",
+      "amount_cents": -29600
+    },
+    {
+      "type": "consume",
+      "amount_cents": -26400
+    }
+  ],
+  "originalSignedRowsPreserved": true,
+  "knownIssue": "Historical second-document discountAfter snapshot had pre-consumption balance; prospective fix now passed expanded keep/drop HTTP regression and final5 main suite; historical signed JSON preserved",
+  "checkedAt": "2026-11-15T14:52:58.924198+00:00"
+}

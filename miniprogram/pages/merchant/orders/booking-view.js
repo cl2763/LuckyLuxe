@@ -37,7 +37,7 @@ function vm(b) {
         : (dd.state === 'forfeit' || dd.state === 'auto_forfeit' ? `已没收入账 ${dd.amountText}` : '')))
     : ''
   return {
-    id: b.id, status: b.status, date: b.appointmentDate || '', time: b.appointmentTime || '',
+    id: b.id, depositWorkflow:b.depositWorkflow, status: b.status, date: b.appointmentDate || '', time: b.appointmentTime || '',
     statusLabel: b.noShowAt ? '已爽约' : s.label, statusCls: b.noShowAt ? 'n' : s.cls, customer, tech,
     userId: b.userId || (b.user && (b.user.id || b.user.sub)) || '',
     serviceId: b.serviceId || (b.service && b.service.id) || '', serviceName: service,

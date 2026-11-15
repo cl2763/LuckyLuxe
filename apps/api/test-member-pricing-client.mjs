@@ -159,7 +159,8 @@ let cancelMiniPage
 const cancelMiniApi={currentTenantId:()=> 't',previewBookingCancel:async()=>({reviewHash:'mini-cancel-hash',display:{}}),cancelBooking:async()=>{throw Error('timeout')},getBookings:async()=>{throw Object.assign(Error('expired'),{statusCode:403})},refreshMember:async()=>null}
 vm.runInNewContext(readFileSync(new URL('../../miniprogram/pages/order-detail/index.js',import.meta.url),'utf8'),{Page:x=>cancelMiniPage=x,require:p=>p.endsWith('member-pricing')?P:p.endsWith('api')?cancelMiniApi:p.endsWith('storage')?{setOrders(){}}:p.endsWith('i18n')?{pageCopy:()=>({})}:{},wx:{showModal:o=>o.success?.({confirm:true}),showToast(){}},setTimeout,clearTimeout})
 cancelMiniPage.data.order={_id:'mini-auth-cancel'};cancelMiniPage.load=async()=>{};cancelMiniPage.setData=x=>Object.assign(cancelMiniPage.data,x)
-await cancelMiniPage.cancelOrder();const miniCancelKey='booking-cancel:t:mini-auth-cancel',miniCancelOriginal=P.pending(miniCancelKey).body.operationId
+let miniCancellation=cancelMiniPage.cancelOrder();await new Promise(resolve=>setTimeout(resolve,0));assert.equal(cancelMiniPage.data.cancelPreview.reviewHash,'mini-cancel-hash');cancelMiniPage.cancelDecision({currentTarget:{dataset:{confirm:false}}});await miniCancellation;assert.equal(P.pending('booking-cancel:t:mini-auth-cancel'),null)
+miniCancellation=cancelMiniPage.cancelOrder();await new Promise(resolve=>setTimeout(resolve,0));cancelMiniPage.cancelDecision({currentTarget:{dataset:{confirm:true}}});await miniCancellation;const miniCancelKey='booking-cancel:t:mini-auth-cancel',miniCancelOriginal=P.pending(miniCancelKey).body.operationId
 cancelMiniApi.cancelBooking=async()=>{throw Object.assign(Error('expired'),{statusCode:403})};await cancelMiniPage.cancelOrder();assert.equal(P.pending(miniCancelKey).body.operationId,miniCancelOriginal)
 cancelMiniApi.cancelBooking=async()=>({booking:{status:'cancelled'}});await cancelMiniPage.cancelOrder();assert.equal(P.pending(miniCancelKey),null)
 console.log('ok 16 - mini cancellation retains the original operation when both retry and status lookup lose authorization')
@@ -267,3 +268,31 @@ const batchContext={window:{MemberPricingInput:{mutation:async()=>({groupId:'rep
 batchContext.window.MemberPricingComposer.bind({querySelector:()=>recheckButton,querySelectorAll:()=>[]},batchState,{render:()=>batchRenders++,preview(){},newGroup(){}});await recheckButton.onclick();assert.equal(batchState.documentGroupId,'original-visit');assert.equal(batchState.pendingSheets.length,2);assert.equal(batchState.pendingSheets[0].id,'signed');assert.ok(batchReads.includes('/admin/member-pricing/groups/original-visit'));assert.equal(batchRenders,1);
 let settleMixin,loadedVisit;const miniBatchContext={module:{exports:{}},require:p=>p.endsWith('/api')?{adminGet:async()=>({documents:[],reviewHash:'review'})}:{mutation:async()=>({groupId:'replacement',documents:[replacement]}),pending:()=>null},wx:{showModal:o=>o.success({confirm:true}),showToast:o=>assert.fail(o.title)}};vm.runInNewContext(readFileSync(new URL('../../miniprogram/pages/merchant/settlement/member-pricing.js',import.meta.url),'utf8'),miniBatchContext);settleMixin=miniBatchContext.module.exports;await settleMixin.mpRecheck.call({data:{userId:'u',memberDocuments:[{id:'old-pending',status:'pending_sign'}]},mpLoadBatch:async id=>loadedVisit=id});assert.equal(loadedVisit,'original-visit');
 console.log('ok 30 - both merchant recheck actions reload the whole original visit, retaining signed companions')
+
+let groupPage
+vm.runInNewContext(readFileSync(new URL('../../miniprogram/pages/merchant/settlement/index.js',import.meta.url),'utf8'),{
+ Page:p=>groupPage=p,require:p=>p==='../../../utils/member-pricing'?P:{},wx:{showToast:()=>assert.fail('unexpected toast')}
+})
+for(const active of [true,false]){
+ const groups=['self','friend','friend'].map((beneficiaryKey,i)=>({...groupPage.makeGroup('member','nail'),beneficiaryKey,servedPersonName:i?'同名朋友':'',collapsed:true,mainId:'service-'+i,selectedTechs:['tech-'+i]}))
+ const page={...groupPage,data:{groups,pricingConfig:{active}},setData(v){Object.assign(this.data,structuredClone(v))},renderGroup:g=>g}
+ page.renderAll()
+ const shown=()=>page.data.people.flatMap(p=>p.groups).find(g=>g.index===1)
+ for(let i=0;i<5;i++){
+  page.gToggleCollapse({currentTarget:{dataset:{g:1}}});assert.equal(shown().collapsed,false)
+  assert.equal(shown().mainId,'service-1');assert.equal(shown().selectedTechs[0],'tech-1')
+  assert.equal(page.data.people.flatMap(p=>p.groups).find(g=>g.index===2).collapsed,true)
+  page.gToggleCollapse({currentTarget:{dataset:{g:1}}});assert.equal(shown().collapsed,true)
+ }
+ assert.equal(page.data.people.length,active?2:3)
+}
+console.log('ok 31 - reopening a collapsed project updates rendered people for both pricing modes without moving services or technicians')
+
+const customerSource=readFileSync(new URL('../web/customer.js',import.meta.url),'utf8')
+const customerFunction=name=>{const start=customerSource.indexOf('async function '+name+'(');return customerSource.slice(start,customerSource.indexOf('\n}\n',start)+3)}
+const draftState={view:'checkout',user:null,cart:[{id:'draft',selected:true}],pendingAuth:null},draftEvents=[]
+const draftContext={state:draftState,TENANT_ID:'draft-tenant',storeId:'draft-store',els:{authView:{classList:{add(){}}},appView:{classList:{remove(){}}},langZh:{classList:{toggle(){}}},langEn:{classList:{toggle(){}}},tabs:[]},requiresAuth:v=>v==='checkout',requireLogin:p=>{draftState.pendingAuth=p;draftEvents.push('login')},request(){},writeTenantJson(){},toast:assert.fail,render:()=>{assert.ok(draftState.user,'private checkout cannot render anonymously');draftEvents.push('render')},loadUserOrders:async()=>{},localStorage:{removeItem(){}},window:{MemberPricingCustomer:{refreshUser:async()=>draftEvents.push('refresh-user')},BookingCheckout:{preview:s=>{assert.equal(s.tenant,'draft-tenant');assert.equal(s.storeId,'draft-store');draftEvents.push('preview')}}}}
+vm.runInNewContext(customerFunction('setView')+'\n'+customerFunction('showApp'),draftContext)
+await draftContext.showApp();assert.deepEqual(draftEvents,['login']);assert.equal(draftState.cart[0].id,'draft');assert.equal(draftState.pendingAuth.view,'checkout')
+draftState.user={id:'signed-in'};draftEvents.length=0;await draftContext.showApp();assert.deepEqual(draftEvents,['refresh-user','preview','render']);assert.equal(draftState.cart[0].id,'draft')
+console.log('ok 32 - direct booking-draft entry preserves cart through login and loads authoritative deposit preview after authentication')

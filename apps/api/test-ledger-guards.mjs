@@ -15,7 +15,8 @@
 
    ⚠️ standalone:CI_SUITES="ledger-guards" bash apps/api/run-all-tests.sh */
 import { assertTestTarget } from './test-guard.mjs'
-import { DatabaseSync, backup } from 'node:sqlite'
+import { DatabaseSync } from 'node:sqlite'
+import { backupDb } from './db-backup-core.mjs'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join as probeJoin } from 'node:path'
 import { LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
@@ -24,11 +25,9 @@ const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
 const RUN = Date.now().toString(36)
 // 护栏造病只操作测试库的独立副本；错误积分与孤立单据不会进入后续业务套件。
-const source = new DatabaseSync(process.env.TEST_DB_PATH || '', {readOnly:true})
 const probeDir = mkdtempSync('/tmp/ll-ci-data.ledger-probes-')
 const probePath = probeJoin(probeDir, 'ledger.sqlite')
-await backup(source, probePath)
-source.close()
+backupDb(process.env.TEST_DB_PATH || '', probePath)
 const db = new DatabaseSync(probePath)
 
 let checks = 0
@@ -337,7 +336,13 @@ await lawPair('⑪储值流水禁改', 'stored_value_no_update',
       const body = src.slice(m.index, end + 1)
       scannedFns += 1
       const writes = MONEY_TABLES.reduce((n, t) => n + (body.match(new RegExp(`(INSERT INTO|UPDATE)\\s+${t}\\b`, 'g')) || []).length, 0)
-      if (writes >= 2 && !/BEGIN IMMEDIATE/.test(body)) {
+      // These two writers participate in the transaction-owning entry points.
+      // test-deposit-workflow injects failures after their first write and verifies full rollback.
+      const delegated = f === 'deposit-workflow.mjs' && (
+        (/^function refund\(/.test(m[0]) && /return transact\(booking,body,'refund'/.test(body) && /db\.exec\('BEGIN IMMEDIATE'\)/.test(src)) ||
+        (/^function settle\(/.test(m[0]) && /Caller owns the signing transaction/.test(src))
+      )
+      if (writes >= 2 && !/BEGIN IMMEDIATE/.test(body) && !delegated) {
         bad.push(`${f} · ${m[0].replace(/\s*\{$/, '')} · ${writes} 处写`)
       }
     }

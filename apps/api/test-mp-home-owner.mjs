@@ -1,7 +1,7 @@
 /* 段 9 · 小程序商家端首页「老板视角」按图 v3.2 §一 重画
 
    为什么这把刀能在常驻回归里跑:页面要显示的**每一句话**都由
-   `miniprogram/utils/dashboard-view.js` 的纯函数算出来 —— 喂它三份数据,逐句对。
+   `miniprogram/pages/merchant/home/dashboard-view.js` 的纯函数算出来 —— 喂它三份数据,逐句对。
    像素与交互由 DevTools 截图背书(`handoff/night-runs/段9截图/`),两者分工写在这儿,
    免得下一个人以为静态全绿就等于页面对了(L1 末端验证律)。
 
@@ -16,7 +16,7 @@ import { createRequire } from 'node:module'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
 const requireCjs = createRequire(import.meta.url)
-const view = requireCjs(join(ROOT, 'miniprogram/utils/dashboard-view.js'))
+const view = requireCjs(join(ROOT, 'miniprogram/pages/merchant/home/dashboard-view.js'))
 const wxml = readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/index.wxml'), 'utf8')
 const pageJs = readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/index.js'), 'utf8')
 const webHome = readFileSync(join(ROOT, 'apps/web/dashboard-home.js'), 'utf8')
@@ -152,7 +152,7 @@ check('④c 单页没超 600 行(公约③)', pageJs.split('\n').length <= 600, 
 const pulseMod = readFileSync(join(ROOT, 'apps/api/dashboard-pulse.mjs'), 'utf8')
 check('⑤ 后端 pulse 一并下发 `currencyDisplay`(币符怎么摆也由后端说了算)',
   /currencyDisplay: currencyDisplayOf\(tenantCurrencyCodeOrNull\(tid\)\)/.test(pulseMod))
-const viewSrc = readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')
+const viewSrc = readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/dashboard-view.js'), 'utf8')
 check('⑤b 按**下发的那份**格式化,出口在 dashboard-view;页面一个格式化动作都不做',
   /makeMoneyFor\(pulse && pulse\.currencyDisplay, cur\)/.test(viewSrc)
   && !/storeCurrencyDisplay\(/.test(pageJs) && !/toFixed\(/.test(pageJs))
@@ -171,7 +171,7 @@ check('⑦b 🔴 打卡失败:钮不收起、说清原因、**不进大屏**(没
   wxml.includes('data-clock-err') && /clockErr: clockFailText\(e\)/.test(pageJs)
   && !/showBoard: true[\s\S]{0,80}?clockErr/.test(pageJs))
 check('⑦c 打了卡:角标说真话(已打卡几点 / 已下班几点)',
-  wxml.includes('data-clock-badge') && /已下班 \$\{/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
+  wxml.includes('data-clock-badge') && /已下班 \$\{/.test(readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/dashboard-view.js'), 'utf8')))
 check('⑦d 🔴 休息日 / 没排班**不出打卡钮**,大屏直接显示,顶一句「今天没有你的班」',
   (() => { const g = view.clockGate(null, { scheduled: false })
     return g.state === 'off' && g.showButton === false && g.showBoard === true && g.note === '今天没有你的班' })())
@@ -198,7 +198,7 @@ check('⑦l 走**现有考勤接口**,没另做一套',
 check('⑦m `wx.getConnectedWifi` 带 fail 处理(波及面回归律四之八⑤)',
   /fail: \(\) => resolve\(\{\}\)/.test(pageJs))
 check('⑦n 打卡失败那句**原样透后端**,自己不翻译不编',
-  /const msg = \(err && \(err\.message \|\| err\.errMsg\)\) \|\| ''/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
+  /const msg = \(err && \(err\.message \|\| err\.errMsg\)\) \|\| ''/.test(readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/dashboard-view.js'), 'utf8')))
 
 check('⑦o 员工端旧块退役:台面卡 / 打卡待办条 / 快捷格都不在了(图 §二)',
   !/我的今日台面 · 点击看全店/.test(wxml) && !/rowname">打卡</.test(wxml) && !/<view class="sec">快捷</.test(wxml))
@@ -251,19 +251,19 @@ check('㉑c 大数字**三段式**:币码 / 主数 / 分位,三个节点三个�
   && /\.dh-big-code\{[^}]*font-size:22rpx/.test(wxssD178) && /\.dh-big-num\{[^}]*font-size:62rpx/.test(wxssD178)
   && /\.dh-big-cent\{[^}]*font-size:30rpx/.test(wxssD178))
 check('㉑d 三段由**后端下发的 currencyDisplay** 拆出来,页面零拼串(币种红线)',
-  /makePartsFor\(pulse && pulse\.currencyDisplay, cur\)/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8'))
+  /makePartsFor\(pulse && pulse\.currencyDisplay, cur\)/.test(readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/dashboard-view.js'), 'utf8'))
   /* 币符扫的是**样式规则**,不扫注释 —— 注释里写着她截图那句「现金业绩 CAD $5,760.00」,
      那是案由,不是代码(判据看代码不看散文,与 ⑰/⑲ 同一条) */
   && !/[¥$]/.test(wxssD178.replace(/\/\*[\s\S]*?\*\//g, '')))
 check('㉑e 轮播放大谁,那一格**位置保留、数字淡出**(不是整格消失、不是重排)',
-  /dimmed: key === hk/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8'))
+  /dimmed: key === hk/.test(readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/dashboard-view.js'), 'utf8'))
   && /item\.dimmed\?'dim':''/.test(wxml) && /\.dh-small\.dim\{opacity:/.test(wxssD178))
 check('㉑g 顶行留了安全区,长店名单行省略号(她截图里店名首字母缺了一块)',
   /\.page\{padding:calc\(24rpx \+ env\(safe-area-inset-top\)\)/.test(wxssD178)
   && /\.greeting\{[^}]*white-space:nowrap[^}]*text-overflow:ellipsis/.test(wxssD178)
   && /\.topbar > view:first-child\{flex:1;min-width:0\}/.test(wxssD178))
 check('㉑f 大数字默认停在营业收入(轮播位的起点)',
-  /headKey = 'revenue'/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
+  /headKey = 'revenue'/.test(readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/dashboard-view.js'), 'utf8')))
 
 /* ══ D179 · 图 §六 七行 · 小程序端(夜班令6 段 5)══ */
 check('㉒ 第 3 行:点大数字 = 暂停轮播并切指标,再点继续',
@@ -352,7 +352,7 @@ check('㉖ 五格里的金额只报数、不带币码,且数字串与大数字�
       && tile === `${b.headParts.amount}${b.headParts.cents}`
   })())
 check('㉖b 仍然只走后端下发的 currencyDisplay(页面零拼串)',
-  !/'CAD|\bUS \$/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')))
+  !/'CAD|\bUS \$/.test(readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/dashboard-view.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')))
 
 /* ══ D183 · 小程序也有明暗双模式(夜班令6 段 3;双端同批律)══ */
 const themeUtil = readFileSync(join(ROOT, 'miniprogram/utils/theme.js'), 'utf8')
@@ -416,7 +416,7 @@ check('⑮e dots 恒 5 个且选中那个会变胶囊(名单在 dashboard-view.j
   view.buildOwnerHome({ pulse: { currency: 'CNY', metrics: [] }, now: {}, todo: {}, period: 'today',
     nowHM: '10:00', storeMoney: () => '—' }).dots.length === 5
   && /\.dh-dot-i\.on\{[^}]*width:28rpx/.test(homeWxss)
-  && /CAROUSEL = \['revenue', 'cash', 'cardUse', 'newCard', 'visits'\]/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
+  && /CAROUSEL = \['revenue', 'cash', 'cardUse', 'newCard', 'visits'\]/.test(readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/dashboard-view.js'), 'utf8')))
 check('⑮f 轮播换指标**不发请求**:只把 headKey 换一个再跑一遍纯函数',
   /switchMetric\(e\)/.test(pageJs) && /repaintMetric\(\)/.test(pageJs)
   && !/repaintMetric\(\)\s*\{[\s\S]{0,400}?adminGet/.test(pageJs))

@@ -72,7 +72,7 @@ test('enlarged last cannot enter same technician other service',()=>assert.equal
 test('enlarged previous first remains valid',()=>assert.equal(nav.previewOf(works,works[0],-1).work.id,'0'))
 test('empty albums are excluded',()=>assert.equal(nav.albumsOf([{id:'empty'}]).length,0))
 test('single photo remains navigable without a next item',()=>assert.equal(nav.previewOf([works[0]],works[0],1).total,1))
-const {buildOwnerHome}=require('../../miniprogram/utils/dashboard-view.js')
+const {buildOwnerHome}=require('../../miniprogram/pages/merchant/home/dashboard-view.js')
 const labels=['00:00–04:00','04:00–08:00','08:00–12:00','12:00–16:00','16:00–20:00','20:00–24:00']
 const home=buildOwnerHome({pulse:{metrics:[{key:'visits',unit:'people',value:1,spark:[0,1,0,0,null,null],sparkDates:labels.map(()=> '2026-10-08'),sparkLabels:labels}]},headKey:'visits',period:'today',now:{},todo:{}})
 test('intraday labels split into two nonoverlapping short lines',()=>assert.deepEqual(home.sparkTicks.map(t=>[t.label,t.labelEnd]),labels.map(l=>l.split('–'))))

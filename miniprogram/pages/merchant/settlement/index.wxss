@@ -36,7 +36,7 @@
 
 .sw{width:78rpx;height:44rpx;border-radius:999rpx;background:var(--wall);flex:none;position:relative;transition:background .2s}
 .sw.on{background:var(--good)}
-.sw .dot{position:absolute;top:5rpx;left:5rpx;width:34rpx;height:34rpx;border-radius:50%;background:#fff;transition:transform .2s}
+.sw .dot{position:absolute;top:5rpx;left:5rpx;width:34rpx;height:34rpx;border-radius:50%;background:var(--card);transition:transform .2s}
 .sw.on .dot{transform:translateX(34rpx)}
 
 .inputline{display:flex;gap:10rpx;align-items:center}
@@ -101,7 +101,7 @@
 .cpn.dis .s{color:var(--brandd)}
 .cpn .d{font-size:27rpx;font-weight:800;color:var(--good);margin-right:8rpx}
 .cpn .pick{width:34rpx;height:34rpx;flex:none;border-radius:50%;border:3rpx solid var(--line)}
-.cpn.on .pick{border-color:var(--good);background:var(--goodbg);box-shadow:inset 0 0 0 6rpx #fff}
+.cpn.on .pick{border-color:var(--good);background:var(--goodbg);box-shadow:inset 0 0 0 6rpx var(--card)}
 .cpnok{margin-top:8rpx;background:var(--hero);color:var(--heroink);text-align:center;padding:26rpx;border-radius:16rpx;font-size:29rpx;font-weight:800}
 
 /* 屏 S2:顾客行 + 「新客·未绑定」徽标(文案后端下发,绑定后整块消失) */
@@ -192,7 +192,7 @@
 .bindbar{margin-top:10rpx;padding:12rpx 16rpx;background:var(--paper);color:var(--brandd);border-radius:12rpx;font-size:22rpx;display:flex;align-items:center;justify-content:space-between}.bindbtn {background:var(--hero);color:var(--heroink);border-radius:999rpx;padding:8rpx 20rpx;font-size:22rpx;margin-left:16rpx;flex-shrink:0}
 .qrbox{display:flex;justify-content:center;margin:20rpx 0}
 .qrph{width:280rpx;height:280rpx;border:2rpx dashed var(--line);border-radius:16rpx;display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:22rpx;text-align:center;white-space:pre-line}
-.qrimg{width:300rpx;height:300rpx;display:block;border-radius:12rpx;background:#fff}
+.qrimg{width:300rpx;height:300rpx;display:block;border-radius:12rpx;background:var(--card)}
 .qbtns{display:flex;justify-content:center;margin:12rpx 0}.qbtn {background:var(--wall);border-radius:999rpx;padding:14rpx 32rpx;font-size:24rpx;color:var(--ink)}
 
 /* 规则⑧:条目编号清单 + 技师数字排(原样恢复) */
@@ -220,3 +220,5 @@
 
 .mp-person{padding:24rpx;border:1rpx solid var(--line);border-radius:12rpx;background:var(--card);margin:24rpx 0}.mp-person-head{padding-bottom:24rpx}.mp-add-actions{display:flex;gap:16rpx;padding-top:24rpx}.mp-add-actions button{flex:1;min-height:88rpx;font-size:24rpx;white-space:normal;padding:12rpx 16rpx}.mp-batch-row{display:flex;justify-content:space-between;gap:24rpx;padding:24rpx 0;border-bottom:1rpx solid var(--line)}
 .mp-batch-row>view:first-child{min-width:0;flex:1}.mp-batch-row>view:last-child{flex:none;white-space:nowrap;text-align:right}
+
+.dep-warn-veil{position:fixed;inset:0;background:rgba(40,33,24,.35);z-index:980;display:flex;align-items:center;padding:32rpx}.dep-warn-panel{background:var(--card);border-radius:12rpx;padding:32rpx;width:100%;box-sizing:border-box}.dep-warn-text{margin:24rpx 0;line-height:1.7;font-size:28rpx}.dep-warn-panel button{margin-top:20rpx;border-radius:999rpx;font-size:28rpx}.dep-warn-panel button:first-of-type{background:var(--brand);color:var(--hero)}
