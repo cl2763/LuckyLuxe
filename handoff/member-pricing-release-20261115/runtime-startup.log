@@ -1,0 +1,2 @@
+ok - finance lock migration preserves existing NULL and explicit settings on repeated startup
+ok - full production-mode startup on Node 22.11.0, demo login disabled
