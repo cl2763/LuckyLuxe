@@ -295,13 +295,31 @@ const inbox=(await request('/my/messages',{},cust.accessToken,{'x-tenant-id':sho
 assert.equal(inbox.messages.filter(m=>m.memberDocumentGroupId===batchDraft.groupId).length,1)
 const entry=(await request(`/my/settlements/${batchDraft.documents[0].components[0].code}/sign-link`,{method:'POST',body:'{}'},cust.accessToken)).data
 assert.equal(entry.groupId,batchDraft.groupId)
+const legacyComponent=batchDraft.documents[0].components[0]
+const legacyLink=await ok(`/admin/settlements/${legacyComponent.id}/sign-token`,{})
+assert.equal(legacyLink.settlement.id,legacyComponent.id)
+assert.equal(legacyLink.settlement.groupTotal,2)
+assert.equal(legacyLink.settlement.subtotalCents,batchDraft.documents[0].quote.subtotalCents)
+assert.equal(legacyLink.customerBound,true)
+assert.equal(legacyLink.state,'waiting')
+// The released mini-program appends theme after the fragment. Token parsing
+// must still work when opening the new shared signing page through that shell.
+const legacyOpenedUrl=new URL(legacyLink.url+'&theme=light',BASE_URL)
+assert.equal(new URLSearchParams(legacyOpenedUrl.hash.slice(1)).get('token'),legacyLink.token)
+assert.equal((await request(`/member-document-groups/${batchDraft.groupId}`,{},null,{'x-document-token':legacyLink.token})).status,200)
+assert.equal((await call(`/admin/settlements/${legacyComponent.id}/sign-token`,{},'POST',other.token)).status,404)
+assert.equal((await request(`/admin/settlements/${legacyComponent.id}/sign-state`,{},other.token)).status,404)
+assert.equal((await request(`/admin/settlements/${legacyComponent.id}/sign-state`,{},null)).status,401)
+assert.equal((await request(`/admin/settlements/${legacyComponent.id}/sign-state`,{},shop.token)).data.state,'waiting')
 const pending=(await request('/my/pending-sign',{},cust.accessToken,{'x-tenant-id':shop.tenantId})).data.pendingSign
 assert.equal(pending.filter(p=>p.memberDocumentGroupId===batchDraft.groupId).length,1)
 // Changing only display prices must not invalidate a service confirmation.
 const beforeDisplay=(await request(`/admin/member-pricing/services/${svc.id}/display`,{},shop.token)).data
 await ok(`/admin/services/${svc.id}`,{priceCents:45000,priceSystemUpdate:{system:'display',expectedRevision:beforeDisplay.revision,prices:{list:{priceCents:45000}}}},'PATCH')
 assert.equal((await docSign(batchDraft.documents[0],batchLink)).status,200)
+assert.equal((await request(`/admin/settlements/${legacyComponent.id}/sign-state`,{},shop.token)).data.state,'waiting','one signed person must not dismiss the entire visit')
 assert.equal((await docSign(batchDraft.documents[1],batchLink)).status,200)
+assert.equal((await request(`/admin/settlements/${legacyComponent.id}/sign-state`,{},shop.token)).data.state,'signed')
 const beforeMetadata=(await request('/admin/pricing/items',{},shop.token)).data.items.find(i=>i.id===svc.id)
 const failedMetadata=await call(`/admin/services/${svc.id}`,{nameZh:'不该落库',priceSystemUpdate:{system:'display',expectedRevision:beforeDisplay.revision,prices:{list:{priceCents:99000}}}},'PATCH')
 assert.equal(failedMetadata.status,409)

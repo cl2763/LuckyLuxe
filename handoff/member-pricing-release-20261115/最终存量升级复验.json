@@ -1,0 +1,99 @@
+{
+  "liveCommit": "4b84bfd",
+  "productionNode": "22.11.0",
+  "backupBytes": 20897792,
+  "backupSHA256": "ae30a0cdfab84332662e42cea53eafcef016c665c2e9bb9d981f6dc711ff0df6",
+  "merchantCount": 8,
+  "merchantsWithImports": 1,
+  "merchantsWithoutImports": 7,
+  "migrationRecords": 600,
+  "pendingImportBalances": 414,
+  "activatedImportBalances": 0,
+  "originalIndexesPreserved": 202,
+  "rehearsals": [
+    {
+      "turn": 1,
+      "node": "22.11.0",
+      "oldTables": 115,
+      "oldRows": 12137,
+      "changedTables": [],
+      "addedRowsInOldTables": {
+        "tenant_settings": 1,
+        "user_identities": 1
+      },
+      "changedTriggers": [],
+      "originalTriggers": 33,
+      "changedIndexes": [],
+      "originalIndexes": 202,
+      "newTables": [
+        "booking_checkout_operations",
+        "booking_deposit_cancellations",
+        "booking_deposit_funding",
+        "member_discount_events",
+        "member_document_components",
+        "member_document_coupon_allocations",
+        "member_document_events",
+        "member_document_groups",
+        "member_document_tokens",
+        "member_personal_discounts",
+        "member_pricing_operations",
+        "member_pricing_settings",
+        "member_service_documents",
+        "recharge_package_discounts",
+        "service_price_systems"
+      ],
+      "integrity": "ok",
+      "healthy": true
+    },
+    {
+      "turn": 2,
+      "node": "22.11.0",
+      "oldTables": 115,
+      "oldRows": 12137,
+      "changedTables": [],
+      "addedRowsInOldTables": {
+        "tenant_settings": 1,
+        "user_identities": 1
+      },
+      "changedTriggers": [],
+      "originalTriggers": 33,
+      "changedIndexes": [],
+      "originalIndexes": 202,
+      "newTables": [
+        "booking_checkout_operations",
+        "booking_deposit_cancellations",
+        "booking_deposit_funding",
+        "member_discount_events",
+        "member_document_components",
+        "member_document_coupon_allocations",
+        "member_document_events",
+        "member_document_groups",
+        "member_document_tokens",
+        "member_personal_discounts",
+        "member_pricing_operations",
+        "member_pricing_settings",
+        "member_service_documents",
+        "recharge_package_discounts",
+        "service_price_systems"
+      ],
+      "integrity": "ok",
+      "healthy": true
+    }
+  ],
+  "legacyPrices": {
+    "services": 79,
+    "priceEntriesAcrossBothSystems": 386,
+    "existingPricesPreserved": true,
+    "noInventedPersonalDiscounts": true,
+    "noStoreConfigurationOverwritten": true
+  },
+  "existingFieldChanges": 0,
+  "originalRecordDeletions": 0,
+  "additiveLegacyRowsExplanation": {
+    "tenant_settings": "补充1条原有积分政策标记，不改已有配置",
+    "user_identities": "补充1条与原users手机号及门店一致的身份映射，不改已有绑定"
+  },
+  "productionDeployment": "not_started",
+  "checkedAt": "2026-11-15T09:12:35.537728+00:00",
+  "comparison": "Original row hash multiplicities, original schema, triggers and indexes; exact repeated-start snapshot equality"
+}

@@ -1,0 +1,24 @@
+{
+  "log": "final-regression.log",
+  "sha256": "fb2a9b1108462d759dbaf4143b9404e6e3ae0d854c0ec759cfa9145d59ceccb0",
+  "exitCode": 0,
+  "mainSuites": 213,
+  "mainAssertions": 6528,
+  "permissionSuites": 43,
+  "miniSuites": 3,
+  "miniAssertions": 16,
+  "notRun": 0,
+  "durationSeconds": 325,
+  "exactProductionNode": "22.11.0",
+  "productionRuntimeChecks": [
+    "32 timezone checks",
+    "8 mutation checks",
+    "finance lock migration and repeated startup",
+    "full production-mode startup"
+  ],
+  "retainedDataRehearsal": "存量升级核对.json",
+  "rawLogSHA256": "b1da2aa788f7f461be0ceae13426fddb3f06ffde01fa550911b16f37223ec545",
+  "logNormalization": "Trim trailing whitespace only; original run retained locally",
+  "checkedAt": "2026-11-15T09:12:35.537728+00:00",
+  "additionalChecks": "13 assertions for installed-client signing links, visit completion and access control (inside existing HTTP suite)"
+}

@@ -1,12 +1,33 @@
 import {createMemberDocumentBatch} from './member-document-batch.mjs'
-export function createMemberDocumentRoutes({db,policy,documents,json,readBody,currentTenantId,apiError,requireCustomer,isUserBound}) {
+export function createMemberDocumentRoutes({db,policy,documents,json,readBody,currentTenantId,apiError,requireCustomer,isUserBound,serializeSettlement,formatMoneyCents}) {
   const batch=createMemberDocumentBatch({db,documents,apiError,requireCustomer,currentTenantId,isUserBound})
   const readInput=async req=>{const value=await readBody(req);if(!value||typeof value!=='object'||Array.isArray(value))throw apiError(400,'BAD_REQUEST','请求内容须为对象。');return value}
   return async function(req,res,{path,query={},adminSession}) {
-    const legacy=path.match(/^\/(my|admin)\/settlements\/([^/]+)\/(sign-link|document-link|sign-token|snapshots)$/)
-    if(legacy && ((req.method==='GET'&&['document-link','snapshots'].includes(legacy[3]))||req.method==='POST')) {
+    const legacy=path.match(/^\/(my|admin)\/settlements\/([^/]+)\/(sign-link|document-link|sign-token|snapshots|sign-state)$/)
+    if(legacy && ((req.method==='GET'&&['document-link','snapshots','sign-state'].includes(legacy[3]))||(req.method==='POST'&&legacy[3]!=='sign-state'))) {
       const key=decodeURIComponent(legacy[2]),row=db.prepare('SELECT d.* FROM member_document_components c JOIN settlements s ON s.id=c.settlement_id JOIN member_service_documents d ON d.id=c.document_id WHERE (s.code=? OR s.id=?)').get(key,key)
-      if(row){const link=legacy[1]==='admin'?(legacy[3]==='snapshots'?batch.archiveLink(row.group_id,adminSession):batch.merchantLink(row.group_id,adminSession)):batch.customerLink(row.group_id,req);json(res,200,{...link,memberDocumentGroupId:row.group_id}, {'cache-control':'no-store'});return true}
+      if(row){
+        // Old installed clients still open/poll component IDs. Authorize the entire
+        // visit before returning anything, and expose person totals, not one item.
+        if(legacy[1]==='admin'&&['sign-token','sign-state'].includes(legacy[3])) {
+          const visit=batch.adminView(row.group_id,adminSession),active=visit.documents.filter(d=>d.status!=='voided')
+          const current=active.find(d=>d.id===row.id)||active.find(d=>d.beneficiaryKey===row.beneficiary_key)
+          const next=active.find(d=>d.status==='pending_sign'),done=active.length>0&&active.every(d=>d.status==='signed')
+          const state=done?'signed':active.length?'waiting':'voided'
+          const status={state,text:done?'全部服务单已签署':next?.recheck?'价格或权益已变化，请重新核对':active.length?'等待顾客完成本次全部服务单签署':'已撤回'}
+          if(legacy[3]==='sign-state'){json(res,200,{...status,memberDocumentGroupId:row.group_id},{'cache-control':'no-store'});return true}
+          const link=batch.merchantLink(row.group_id,adminSession),component=current?.components[0]
+          const stored=component?db.prepare('SELECT * FROM settlements WHERE id=? AND tenant_id=?').get(component.id,row.tenant_id):null
+          const quote=current?.quote
+          const settlement=stored?{...serializeSettlement(stored),groupIndex:active.indexOf(current)+1,groupTotal:active.length,
+            subtotalCents:quote.subtotalCents,totalCents:quote.totalCents,depositDeductCents:quote.depositDeductCents,
+            flow:{cashDueText:formatMoneyCents(quote.components.reduce((n,c)=>n+(c.payment?.offlineCents||0),0),row.tenant_id,2)}}:null
+          json(res,200,{...link,...status,settlement,customerBound:visit.customerBound,memberDocumentGroupId:row.group_id},{'cache-control':'no-store'});return true
+        }
+        if(legacy[3]==='sign-state')throw apiError(404,'NOT_FOUND','没有这个查询入口。')
+        const link=legacy[1]==='admin'?(legacy[3]==='snapshots'?batch.archiveLink(row.group_id,adminSession):batch.merchantLink(row.group_id,adminSession)):batch.customerLink(row.group_id,req)
+        json(res,200,{...link,memberDocumentGroupId:row.group_id}, {'cache-control':'no-store'});return true
+      }
     }
     let bm=path.match(/^\/admin\/member-pricing\/groups\/([^/]+)(?:\/(sign-link|archive-link|deliver))?$/)
     if(bm){const id=decodeURIComponent(bm[1]);if(req.method==='GET'&&!bm[2]){json(res,200,batch.adminView(id,adminSession));return true}if(req.method==='POST'&&bm[2]){json(res,200,bm[2]==='deliver'?batch.deliver(id,adminSession,await readInput(req)):bm[2]==='archive-link'?batch.archiveLink(id,adminSession):batch.merchantLink(id,adminSession),{'cache-control':'no-store'});return true}}

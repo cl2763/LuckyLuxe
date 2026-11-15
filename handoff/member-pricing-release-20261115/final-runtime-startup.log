@@ -1,0 +1,4 @@
+(node:96535) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ok - finance lock migration preserves existing NULL and explicit settings on repeated startup
+ok - full production-mode startup on Node 22.11.0, demo login disabled

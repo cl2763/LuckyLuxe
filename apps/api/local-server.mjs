@@ -10099,7 +10099,7 @@ const {signLedger,signSettlement}=createSettlementSigner({db,apiError,iso,random
 const storedValueRechargeRoutes=createStoredValueRechargeRoutes({db,apiError,readBody,json,currentTenantId,isUserBound,DATA_SCOPE_NAME,giftSnapshotOfPackage,actorOf:a=>actorOf(a),insertStoredValueTransaction,storedValueOverview,storedValueBalanceCents,pricingTransactions})
 const memberDocuments=createMemberServiceDocuments({db,policy:memberPricing,preview:memberPricingPreview,apiError,currentTenantId,createSettlementGroup,signLedger,
   balanceOf:storedValueBalanceDetail,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,amendSettlement:(id,b,a,o={})=>amendSettlement(id,b,a,{...o,personDocument:true}),amendmentShape,formatMoneyCents,formatSignedAt:(v,t)=>{const p=localParts(v,tenantTimezone(t));return `${p.date} ${p.time}（${tenantTimezone(t)}）`},assertStaff:(a,r)=>settlementAccess.assertStaff(a,r)})
-const memberDocumentRoutes=createMemberDocumentRoutes({db,policy:memberPricing,documents:memberDocuments,json,readBody,currentTenantId,apiError,requireCustomer,isUserBound})
+const memberDocumentRoutes=createMemberDocumentRoutes({db,policy:memberPricing,documents:memberDocuments,json,readBody,currentTenantId,apiError,requireCustomer,isUserBound,serializeSettlement,formatMoneyCents})
 
 const serviceEditRoutes=createServiceEditRoutes({db,apiError,currentTenantId,servicePayload,assertServicePriceOk,assertCategoryOk,serviceIdFrom,upsertServicePrice,serializeService,getService,pricingItemShape,writePricingItemPrices,serializePricingItem,memberPricing,json,readBody})
 async function route(req, res) {
