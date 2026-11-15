@@ -85,8 +85,10 @@ check('② 状态字形同句(●进行中 / ✓完成)',
 check('🔴 ③ 零下拉:今天台面模块渲染输出零 <select>', !servedTb.includes('<select'))
 check('③ 小程序同形件在场:日期条/今天返回今天/汇总 pills/技师表头忙空/空档点排/图例',
   ['tb-datebar', '返回今天', 'tb-pill', 'tb-st', '+ 直接排单', '图例 · 平时不用看'].every((k) => servedTb.includes(k)))
-check('③ 徽标族同句(售后蓝/老板排/指定/新客/未付定金 —— 售后句后端 afterSalesTag)',
-  ['afterSalesTag', '老板排', '指定', '新客', '未付定金'].every((k) => servedTb.includes(k)))
+check('③ 徽标族保留售后/老板排/指定/新客；两端定金状态取后端共同出口',
+  ['afterSalesTag', '老板排', '指定', '新客'].every((k) => servedTb.includes(k)) &&
+  servedTb.includes('b.depositWorkflow?.display?.status') &&
+  readFileSync(new URL('../../miniprogram/pages/merchant/orders/index.wxml', import.meta.url), 'utf8').includes('{{b.depositWorkflow.display.status}}'))
 
 /* ===== ④ 「去结算」原位不动 ===== */
 const servedAdmin = await fetch(`${BASE_URL}/web/admin.js`).then((r) => r.text())

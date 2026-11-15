@@ -15,7 +15,7 @@ Page({
       const signed = Boolean(b.payment)
       this.setData({
         booking: {
-          id: b.id,
+          id: b.id, depositWorkflow:b.depositWorkflow,
           code: b.publicCode || '',
           customer: (b.user && b.user.display_name) || '顾客',
           service: (b.service && b.service.name) || '服务',

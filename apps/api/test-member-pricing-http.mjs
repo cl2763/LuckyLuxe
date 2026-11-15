@@ -434,7 +434,10 @@ console.log('ok 13 - unset uses store member price; explicit no-discount and 0.1
 
 const lifecycle=await journeyCustomer('耗尽余额资格核验',8500,8500)
 const lifeDoc=(await makeJourney(lifecycle,'consume-zero'))[0]
-assert.equal((await signJourney(lifeDoc)).status,200)
+const signedLife=await signJourney(lifeDoc)
+assert.equal(signedLife.status,200)
+assert.equal(signedLife.data.signed.discountAfter.balanceCents,0)
+assert.equal(signedLife.data.signed.discountAfter.eligible,true)
 let life=await memberState(lifecycle.userId)
 assert.equal(life.balanceCents,0);assert.equal(life.eligible,true);assert.equal(life.rateBps,8500)
 await setZeroRule('drop')
@@ -460,13 +463,20 @@ const sharedDocs=await makeJourney(shared,'same-name',{settlements:[journeySheet
   {...journeySheet,beneficiaryKey:'friend-b',servedPersonName:'同名朋友'}]})
 assert.equal(sharedDocs.length,3);assert.equal(new Set(sharedDocs.map(d=>d.beneficiaryKey)).size,3)
 assert.ok(sharedDocs.every(d=>d.quote.subtotalCents===8500))
-assert.equal((await signJourney(sharedDocs[0])).status,200)
+const signedSharedFirst=await signJourney(sharedDocs[0])
+assert.equal(signedSharedFirst.status,200)
+assert.equal(signedSharedFirst.data.signed.discountAfter.balanceCents,0)
+assert.equal(signedSharedFirst.data.signed.discountAfter.eligible,false)
+assert.equal(signedSharedFirst.data.signed.discountAfter.effectiveRateBps,null)
+assert.equal(signedSharedFirst.data.signed.personalDiscount.current.rateBps,8500)
 assert.equal((await memberState(shared.userId)).balanceCents,0)
 assert.equal((await memberState(shared.userId)).eligible,false)
 for(const document of sharedDocs.slice(1)) {
   const result=await signJourney(document)
   assert.equal(result.status,200,JSON.stringify(result.data))
   assert.equal(result.data.signed.balanceAfterCents,0)
+  assert.equal(result.data.signed.discountAfter.balanceCents,0)
+  assert.equal(result.data.signed.discountAfter.eligible,false)
   assert.equal(result.data.signed.subtotalCents,8500)
 }
 const sharedCodes=sharedDocs.flatMap(d=>d.components.map(c=>c.code))

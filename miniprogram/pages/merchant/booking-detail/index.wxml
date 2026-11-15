@@ -7,6 +7,7 @@
       <view class="title">{{booking.service}}</view>
       <view class="muted">{{booking.code}}</view>
     </view>
+    <deposit-panel wx:if="{{booking.depositWorkflow}}" workflow="{{booking.depositWorkflow}}" booking-id="{{booking.id}}" merchant="{{true}}" bind:updated="load"/>
     <view class="card rows">
       <view><text>顾客</text><text>{{booking.customer}}</text></view>
       <view><text>预约时间</text><text>{{booking.date}} {{booking.time}}{{booking.end ? '–' + booking.end : ''}}</text></view>

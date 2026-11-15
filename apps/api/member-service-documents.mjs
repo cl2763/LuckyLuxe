@@ -28,7 +28,7 @@ export function ensureMemberDocumentSchema(db) {
     CREATE TRIGGER IF NOT EXISTS member_document_signed_delete BEFORE DELETE ON member_service_documents WHEN OLD.status='signed'
       BEGIN SELECT RAISE(ABORT,'signed person document is immutable');END;`)
 }
-export function createMemberServiceDocuments({db,policy,preview,apiError,currentTenantId,createSettlementGroup,signLedger,balanceOf,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,assertStaff,amendSettlement,amendmentShape,formatMoneyCents,formatSignedAt=v=>v}) {
+export function createMemberServiceDocuments({db,policy,preview,apiError,currentTenantId,createSettlementGroup,signLedger,balanceOf,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,assertStaff,amendSettlement,amendmentShape,formatMoneyCents,formatSignedAt=v=>v,validateDeposit=()=>{}}) {
   const actorOf=makeActorOf({apiError}),now=()=>new Date().toISOString()
   const canonical=v=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v
   const digest=v=>pricingDigest(canonical(v))
@@ -55,7 +55,8 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
     const group=db.prepare('SELECT * FROM member_document_groups WHERE id=?').get(row.group_id);if(!group)return null
     const context=JSON.parse(group.context_json),current=policy.discount(row.tenant_id,row.user_id),previous=db.prepare("SELECT * FROM member_discount_events WHERE tenant_id=? AND user_id=? AND source='recharge' AND source_id=?").get(row.tenant_id,row.user_id,`document-group:${row.group_id}`)
     let reason=''
-    if(proof(row.tenant_id,JSON.parse(group.input_json))!==group.proof_hash)reason='服务价格或会员规则已变化，请店员重新核对。'
+    try{components(row).forEach(validateDeposit)}catch(e){reason=e.message}
+    if(!reason&&proof(row.tenant_id,JSON.parse(group.input_json))!==group.proof_hash)reason='服务价格或会员规则已变化，请店员重新核对。'
     else if(current.revision!==(previous?previous.revision:context.oldRevision))reason='个人折扣已变化，请店员重新核对。'
     const begun=db.prepare("SELECT 1 FROM member_service_documents WHERE group_id=? AND status='signed'").get(row.group_id)
     const recharge=JSON.parse(group.input_json).some(s=>s.rechargePackageId||s.rechargeAmountCents!==undefined)
@@ -184,7 +185,7 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
         const ledger=signLedger(c,{signature,signedBy:row.user_id,strokes,withinTransaction:true,couponLogDiscountCents:quote.coupon?.discountCents,finalizeDeposit:!depositTarget||depositTarget.id===c.id})
         if(ledger.rechargeTxnId)rechargeReceipt={rechargeTxnId:ledger.rechargeTxnId,bonusTxnId:ledger.bonusTxnId,documentId:row.id}
       }
-      let afterDiscount=current
+      let afterDiscount=policy.discount(row.tenant_id,row.user_id)
       if(hasRecharge) afterDiscount=policy.setDiscount(row.tenant_id,row.user_id,{rateBps:context.proposedRateBps,expectedRevision:context.oldRevision,reason:context.reason},
         {actor:context.actor,role:context.role,source:'recharge',sourceId:`document-group:${row.group_id}`})
       if(rechargeReceipt)db.prepare('INSERT INTO member_pricing_operations VALUES(?,?,?,?,?,?,?)').run(row.tenant_id,`inline:${row.group_id}`,'recharge',row.user_id,digest(rechargeReceipt),JSON.stringify({...rechargeReceipt,discountReceipt:{before:current,after:afterDiscount,actor:context.actor,source:'recharge'}}),now())

@@ -1,0 +1,21 @@
+{
+  "recordedAt": "2026-11-15T15:03:58.849668+00:00",
+  "runtime": "Node 22.11.0 --experimental-sqlite",
+  "preflight": "passed",
+  "mainSuites": 214,
+  "mainAssertions": 6546,
+  "mainFailed": 0,
+  "demoDisabledSuites": 44,
+  "demoDisabledFailed": 0,
+  "nativeLayoutSuites": {
+    "passed": 0,
+    "failed": 0,
+    "unexecuted": 3
+  },
+  "releaseGate": "blocked",
+  "runExitCode": 1,
+  "durationSeconds": 265,
+  "logLocalPath": "/tmp/deposit-full-regression-final5.log",
+  "logSha256": "48887e58985bdaf41343d17b3cb70bc4ea736809079c4e8ab9aac00e803cb66c",
+  "deploymentPerformed": false
+}

@@ -3,6 +3,7 @@
   "usingComponents": {
     "merchant-tabbar": "/components/merchant-tabbar/index",
     "sheet-preview": "/components/sheet-preview/index",
-    "snapshot-viewer": "/components/snapshot-viewer/index"
+    "snapshot-viewer": "/components/snapshot-viewer/index",
+    "deposit-panel": "/components/deposit-panel/index"
   }
 }

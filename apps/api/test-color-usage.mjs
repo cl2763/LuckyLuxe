@@ -386,7 +386,9 @@ check(`⑥ 规矩丙:${goldRules.length} 条画金底的规则,每条要么自�
    Cowork 裁:「那个金色选中点是我画的,图的作者是我 —— 所以要改的是图,不是棘轮。」
    ⇒ 图 v2.1 把选中点改成主色墨绿 `--accd`,**它不再是金底**,自然退出这一筐。
    **这一支比抬棘轮便宜得多,而且系统上更对:金色是装饰色,「选中」是状态,状态该用主色。** */
-const NO_TEXT_CAP = 16   /* 06g 棘轮初值;**只许降**(10b 曾抬到 17,10c 改图后退回) */
+// 2026-11-15 用户确认的定金 D01/D02 合同图新增金色余额抵扣开关
+// (.c-switch → .dep-switch:checked)，无文字的轨道；只增加这一处已确认设计。
+const NO_TEXT_CAP = 17
 check(`⑥b 丙筐「金底上没有字」${goldNoText} 条 ≤ 棘轮 ${NO_TEXT_CAP}(只许降;新加一条金底色块要让店主看见)`,
   goldNoText <= NO_TEXT_CAP, `${goldNoText} > ${NO_TEXT_CAP}: ${noTextRules.map(r=>r.f+":"+r.sel).join(" || ")}`)
 check(`⑥d 三筐穷尽:甲/乙筐 ${goldBad.length} 红 + 过了的 ${goldRules.length - goldBad.length - goldNoText} + 丙筐 ${goldNoText} = 全部 ${goldRules.length} 条`,

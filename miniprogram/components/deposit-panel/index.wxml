@@ -1,0 +1,47 @@
+<view wx:if="{{workflow && !editorOnly}}" class="dp">
+ <view class="dp-head"><text class="dp-title">{{workflow.cancelled?'定金退款进度':'预约定金'}}</text><text wx:if="{{workflow.display.status}}" class="dp-badge">{{workflow.display.status}}</text></view>
+ <block wx:if="{{workflow.cancelled}}">
+  <view class="dp-row"><text>已付定金</text><text class="dp-value">{{workflow.display.collectedText}}</text></view>
+  <view class="dp-row"><text>储值返还原账户</text><text class="dp-value">{{workflow.display.storedRefundText}}</text></view>
+  <view class="dp-row"><text>线下待退</text><text class="dp-value">{{workflow.display.cashRefundDueText}}</text></view>
+  <view class="dp-row"><text>线下退款已登记</text><text class="dp-value">{{workflow.display.cashRefundedText}}</text></view>
+  <view class="dp-row" wx:if="{{!compact}}"><text>按规则不退部分</text><text class="dp-value">{{workflow.display.forfeitText}}</text></view>
+  <view class="dp-note">{{workflow.display.cancelNote}}</view>
+ </block>
+ <block wx:else>
+  <view class="dp-row"><text>应收定金</text><text class="dp-value">{{workflow.display.requiredText}}</text></view>
+  <view class="dp-row"><text>储值余额已抵定金</text><text class="dp-value">{{workflow.display.storedText}}</text></view>
+  <view class="dp-row"><text>门店线下已收</text><text class="dp-value">{{workflow.display.offlineText}}</text></view>
+  <view class="dp-row dp-total"><text>线下待收</text><text class="dp-value">{{workflow.display.offlineDueText}}</text></view>
+  <view wx:if="{{!compact}}" class="dp-note">{{workflow.display.settlementNote}}</view>
+ </block>
+ <view class="dp-actions">
+  <button class="dp-button" wx:if="{{merchant && workflow.canCollect}}" data-kind="collect" catchtap="openForm">登记线下已收</button>
+  <button class="dp-button" wx:if="{{merchant && workflow.canRefund}}" data-kind="refund" catchtap="openForm">处理线下退款</button>
+  <button class="dp-button dp-ghost" catchtap="history">{{historyOpen?'收起定金记录':'查看定金记录'}}</button>
+ </view>
+ <view wx:if="{{historyOpen}}" class="dp-history"><view wx:if="{{!workflow.history.length}}" class="dp-note">尚无定金收退记录。</view><view wx:for="{{workflow.history}}" wx:key="id" class="dp-event"><view>{{item.label}} {{item.amountText}}</view><view class="dp-note">{{item.createdAt}} · {{item.actor}}</view><view class="dp-note">{{item.channel}} {{item.note}}</view><view wx:if="{{item.settlementId}}" class="dp-note">关联服务单：{{item.settlementId}}</view></view></view>
+</view>
+<view wx:if="{{form}}" class="dp-veil" catchtap="closeForm"><view class="dp-modal" catchtap="swallow">
+ <view class="dp-head"><text class="dp-title">{{form==='refund'?'登记线下退款':'登记线下已收定金'}}</text><button class="dp-close" catchtap="closeForm" disabled="{{busy}}">×</button></view>
+ <view class="dp-note">{{bookingLabel}}</view>
+ <view class="dp-row"><text class="dp-label">{{form==='refund'?'线下待退':'剩余待收'}}</text><text class="dp-value">{{form==='refund'?workflow.display.cashRefundDueText:workflow.display.offlineDueText}}</text></view>
+ <view class="dp-row"><text class="dp-label">{{form==='refund'?'储值已返还':'储值余额已抵定金'}}</text><text class="dp-value">{{form==='refund'?workflow.display.storedRefundText:workflow.display.storedText}}</text></view>
+ <label class="dp-field"><text class="dp-label">{{form==='refund'?'实际退款金额':'本次线下实收金额'}}</text><input class="dp-edit" type="digit" value="{{amount}}" bindinput="amountInput" disabled="{{busy||pending}}"/></label>
+ <view class="dp-field"><text class="dp-label">{{form==='refund'?'退款方式':'收款方式'}}</text><picker range="{{channels}}" value="{{channelIndex}}" bindchange="channelChange" disabled="{{busy||pending}}"><view class="dp-input">{{channels[channelIndex]}} <text>⌄</text></view></picker></view>
+ <view class="dp-field"><text class="dp-label">经手人</text><view class="dp-input">{{operator}}</view></view>
+ <label class="dp-field"><text class="dp-label">备注（选填）</text><input class="dp-edit" maxlength="200" value="{{note}}" bindinput="noteInput" disabled="{{busy||pending}}" placeholder="填写实际收退情况"/></label>
+ <view class="dp-note dp-warning">{{form==='refund'?workflow.display.refundNote:workflow.display.collectNote}}</view>
+ <view wx:if="{{error}}" class="dp-error">{{error}}</view>
+ <view class="dp-actions"><button class="dp-button" catchtap="save" disabled="{{busy}}" loading="{{busy}}">{{pending?'核对／重试原登记':form==='refund'?'确认已线下退款':collectConfirm}}</button><button class="dp-button dp-ghost" catchtap="closeForm" disabled="{{busy}}">取消</button></view>
+</view></view>
+<view wx:if="{{cancelPreview}}" class="dp-veil" catchtap="swallow"><view class="dp-modal" catchtap="swallow">
+ <view class="dp-title">确认取消预约</view>
+ <view class="dp-row"><text>已付定金</text><text class="dp-value">{{cancelPreview.display.paidText}}</text></view>
+ <view class="dp-row"><text>退回储值账户</text><text class="dp-value">{{cancelPreview.display.storedRefundText}}</text></view>
+ <view class="dp-row"><text>门店线下应退</text><text class="dp-value">{{cancelPreview.display.cashRefundText}}</text></view>
+ <view class="dp-row"><text>按规则不退部分</text><text class="dp-value">{{cancelPreview.display.forfeitText}}</text></view>
+ <view class="dp-note">{{cancelPreview.display.note}}</view>
+ <view class="dp-note dp-warning">确认取消后，可退储值会返还原账户。线下款由门店另行退还；取消预约不代表线下钱款已退。</view>
+ <view class="dp-actions"><button class="dp-button" data-confirm="{{true}}" catchtap="cancelDecision">确认取消预约</button><button class="dp-button dp-ghost" catchtap="cancelDecision">保留预约</button></view>
+</view></view>

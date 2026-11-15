@@ -88,7 +88,7 @@ module.exports={
       })
       const storedUsed = pay.storedUsedCents || 0
       const view = {
-        groups: detailGroups,
+        groups: detailGroups,depositDetail:sheets.find(s=>s.depositDetail)?.depositDetail,
         listTotal: m(grp.listTotalCents || 0),
         subtotal: m(grp.subtotalCents || 0),
         discountTotal: m(grp.discountTotalCents || 0),
@@ -310,6 +310,7 @@ module.exports={
     })
   },
 
+  depositWarningDecision(e){const ok=e.currentTarget.dataset.confirm===true;this.setData({depositWarning:null,...(!ok?{depositApplied:true}:{})});if(!ok)this.refresh();if(this._depositWarningResolve){this._depositWarningResolve(ok);this._depositWarningResolve=null}},
   async submit() {
     if (this.data.submitting) return
     if (!this.data.userId) { wx.showToast({ title: '这单没有绑定顾客,无法结算', icon: 'none' }); return }
@@ -327,6 +328,7 @@ module.exports={
       }
       if (!g.selectedTechs.length) { wx.showToast({ title: `项目${i + 1} 先勾本组技师`, icon: 'none' }); return }
     }
+    if(this.data.view?.depositDetail?.w.canDeduct&&!this.data.depositApplied){const ok=await new Promise(resolve=>{this._depositWarningResolve=resolve;this.setData({depositWarning:this.data.view.depositDetail.warning})});if(!ok)return}
     this.setData({ submitting: true })
     try {
       const body=this.formBody();if(this.data.pricingConfig?.active)body.operationId=MemberPricingInput.retryKey(this._createRetry,body)

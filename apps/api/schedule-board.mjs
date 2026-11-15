@@ -169,7 +169,7 @@ export function createScheduleBoard(deps) {
           isNewCustomer: !earlier,
           isDesignated: /指定|指名|点名/.test(String(row.notes || '')),
           ownerDirect: row.source_channel === 'owner_direct',
-          depositUnpaid: Boolean(row.direct_deposit_unpaid),
+          depositUnpaid: Boolean(row.direct_deposit_unpaid),depositWorkflow:deps.depositWorkflow(row),
           // 裁C:售后单蓝徽标(句后端唯一)
           afterSales: Boolean(row.after_sales_status),             // 合同⑤:台面日历的售后标记读轨道
           afterSalesTag: row.after_sales_status ? '售后' : ''

@@ -1,6 +1,6 @@
 <include src="../../templates/media-privacy.wxml" />
 <view wx:if="{{order}}" class="page order-detail-page {{order.actions.length ? 'has-bottom-actions' : ''}} {{themeClass}}" style="{{bottomInset ? 'padding-bottom:' + bottomInset + 'px' : ''}}">
-<view wx:if="{{order.depositPayment}}" class="card" style="padding:24rpx;margin:24rpx"><view>预约定金储值抵扣：{{order.depositPayment.storedDeductionText}}</view><view wx:if="{{order.depositPayment.retainedStoredCents > 0}}">沿用储值定金：{{order.depositPayment.retainedStoredText}}</view><view wx:if="{{order.depositPayment.offlineDueCents > 0}}">仍需线下支付：{{order.depositPayment.offlineDueText}}</view><view>{{order.depositPayment.note}}</view><block wx:if="{{order.depositPayment.refundReceipt}}"><view>退回储值：{{order.depositPayment.refundReceipt.display.storedRefundText}}</view><view>不退部分：{{order.depositPayment.refundReceipt.display.forfeitText}}</view><view>退款后余额：{{order.depositPayment.refundReceipt.balanceAfterText}}</view><view>{{order.depositPayment.refundReceipt.display.note}}</view></block></view>
+<deposit-panel wx:if="{{order.depositWorkflow}}" workflow="{{order.depositWorkflow}}" booking-id="{{order._id}}"/>
   <!-- 批③首件 A1(§二):头卡=服务名+状态徽标(后端三态同源)+单号 -->
   <view class="detail-card card">
     <view class="status-line">
@@ -80,7 +80,7 @@
     <view class="info-card card" wx:elif="{{order.status === 'completed' || order.status === 'after_sales'}}">
       <view class="archive-empty">本单未产生结算单</view>
     </view>
-    <view class="info-card card" wx:elif="{{!order.depositPayment}}">
+    <view class="info-card card" wx:elif="{{!order.depositWorkflow}}">
       <view class="info-row"><text>服务总价</text><text wx:if="{{order.servicePrice !== null}}">{{cur.p}}{{cur.s}}{{order.servicePrice}}</text><text wx:else>—</text></view>
       <view wx:if="{{order.depositState === 'received'}}" class="info-row"><text>定金(已收)</text><text class="price" wx:if="{{order.payableAmount !== null}}">{{cur.p}}{{cur.s}}{{order.payableAmount}}</text><text wx:else>—</text></view>
       <view wx:elif="{{order.depositState === 'unpaid'}}" class="info-row"><text>定金(待到店支付)</text><text>—</text></view>
@@ -142,3 +142,5 @@
     <button wx:for="{{order.actions}}" wx:key="key" class="btn btn-primary bottom-fill" bindtap="onAction" data-key="{{item.key}}">{{item.label}}</button>
   </view>
 </view>
+
+<view wx:if="{{cancelPreview}}" class="cancel-veil {{themeClass}}"><view class="cancel-panel"><view class="cancel-title">确认取消预约</view><view class="cancel-row"><text>已付定金</text><text>{{cancelPreview.display.paidText}}</text></view><view class="cancel-row"><text>退回储值账户</text><text>{{cancelPreview.display.storedRefundText}}</text></view><view class="cancel-row"><text>门店线下应退</text><text>{{cancelPreview.display.cashRefundText}}</text></view><view class="cancel-row"><text>按规则不退部分</text><text>{{cancelPreview.display.forfeitText}}</text></view><view class="cancel-note">{{cancelPreview.display.note}}</view><view class="cancel-note">确认取消后，可退储值会返还原账户。线下款由门店另行退还；取消预约不代表线下钱款已退。</view><button class="cancel-primary" data-confirm="{{true}}" bindtap="cancelDecision">确认取消预约</button><button data-confirm="{{false}}" bindtap="cancelDecision">保留预约</button></view></view>

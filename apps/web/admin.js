@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261115-member-pricing-v3-ops2'
+const ADMIN_BUILD = '20261115-deposit-flow1'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -3563,16 +3563,6 @@ function dateHeading(date) {
 }
 
 // 服务安全:订单上直接亮出顾客的过敏史/忌讳标签与服务前备注,技师上钟前必看
-function renderCustomerCare(booking) {
-  const care = booking.customerCare || {}
-  const tags = care.tags || []
-  if (!tags.length && !care.notes) return ''
-  return `
-    <div class="customer-care-strip">
-      ${tags.map((tag) => `<span class="customer-tag care-tag">⚠ ${escapeHtml(tag)}</span>`).join('')}
-      ${care.notes ? `<span class="care-note">📌 ${escapeHtml(care.notes)}</span>` : ''}
-    </div>`
-}
 
 // 员工端:我的今日时间线——按时间排今天自己的单,一眼看完该知道的事
 // renderStaffTodayTimeline(员工「我的今天」卡)搬到 /web/order-state.js(2026-08-30 边改边拆)
@@ -3602,7 +3592,7 @@ function renderBookingCard(booking) {
         ${booking.settleAction ? `<button class="primary slim" data-settle-booking="${booking.id}" type="button">${escapeHtml(booking.settleAction.label)}</button>` : ''}
         ${bookingActionButtons(booking)}
         <!-- 裁 A:「处置定金」由状态机出(disposeDeposit,金额在后端 label 里)——不再前端自判,那是与小程序分叉的第二份判据 -->
-      </div>
+      </div>${window.DepositWorkflow.panel(booking.depositWorkflow,booking.id,{merchant:true,compact:true})}
     </article>
     ${isOpen ? renderBookingDetail(booking) : ''}
   `
@@ -3666,7 +3656,7 @@ function renderBookingDetail(booking) {
         <p><span>${t('sourceChannel')}</span><strong>${escapeHtml(bookingSource(booking))}</strong></p>
         <p><span>${t('depositCad')}</span><strong>${money(booking.depositCents)}</strong></p>
       </div>
-      ${afterSalesBlock ? `<section class="booking-detail-section">${afterSalesBlock}</section>` : ''}
+      ${window.DepositWorkflow.panel(booking.depositWorkflow,booking.id,{merchant:true})}${afterSalesBlock ? `<section class="booking-detail-section">${afterSalesBlock}</section>` : ''}
       ${signBlock ? `<section class="booking-detail-section">${signBlock}</section>` : ''}
       <section class="booking-detail-section">
         <h3>${t('notes')}</h3>
@@ -5796,7 +5786,7 @@ els.schedulePage.addEventListener('change', (event) => {
   perfRankState.period = 'month'
   loadPerfRanking().catch((error) => toast(error.message))
 })
-els.bookingList.addEventListener('click', async (event) => {
+els.bookingList.addEventListener('click', async (event) => { if(await window.DepositWorkflow.handle(event,request,async()=>{owner.bookings=(await request('/admin/bookings')).bookings;renderBookings()}))return;
   if (event.target.closest('[data-close-booking-detail]')) {
     owner.selectedBookingId = ''
     renderBookings()
@@ -5844,12 +5834,8 @@ els.bookingList.addEventListener('click', async (event) => {
   if (!action) return
   if (action === 'reschedule') return openRescheduleBooking(button.dataset.booking)
   if (action === 'cancel') {
-    const booking = owner.bookings.find((item) => item.id === button.dataset.booking)
-    const label = booking ? `${booking.appointmentDate} ${booking.appointmentTime} ${booking.service?.name || ''}` : ''
-    const confirmed = await window.UIDialog.confirm(owner.lang === 'zh'
-      ? `确定取消这个预约吗?\n${label}\n取消后时段将释放,已入账收入会自动冲销。`
-      : `Cancel this booking?\n${label}`)
-    if (!confirmed) return
+    try {const cancellation = await request('/admin/bookings/' + encodeURIComponent(button.dataset.booking) + '/deposit-cancel-preview');if(!await window.DepositWorkflow.cancel(cancellation.display))return;button.dataset.cancelReviewHash=cancellation.reviewHash}
+    catch(error){toast(error.message||'取消信息加载失败，请重新核对');return}
   }
   /* 裁 A:爽约与处置定金有各自的写入路由(定金处置链),按 key 分出去;
      分发不是状态判断 —— 能不能点由后端 allowedActions 决定,这里只负责"点了走哪条路"。 */
@@ -5895,7 +5881,7 @@ els.bookingList.addEventListener('click', async (event) => {
     })
     return
   }
-  request(`/admin/bookings/${encodeURIComponent(button.dataset.booking)}/status`, { method: 'PATCH', body: JSON.stringify({ action }) })
+  request(`/admin/bookings/${encodeURIComponent(button.dataset.booking)}/status`, { method: 'PATCH', body: JSON.stringify({ action, ...(action === 'cancel' ? {reviewHash:button.dataset.cancelReviewHash} : {}) }) })
     .then(async () => {
       const data = await request('/admin/bookings')
       owner.bookings = data.bookings

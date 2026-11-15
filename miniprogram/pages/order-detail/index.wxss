@@ -98,3 +98,5 @@
 /* L3 裁:逐张卡右侧签署时间小字 */
 .info-row .muted{color:var(--sub);font-size:22rpx}
 .order-detail-page.has-bottom-actions{padding-bottom:calc(200rpx + env(safe-area-inset-bottom))}
+
+.cancel-veil{position:fixed;inset:0;background:rgba(40,33,24,.35);z-index:950;display:flex;align-items:center;justify-content:center;padding:32rpx}.cancel-panel{background:var(--card);border-radius:12rpx;padding:32rpx;width:100%;box-sizing:border-box;max-height:88vh;overflow:auto}.cancel-title{font-size:32rpx;font-weight:600;margin-bottom:24rpx}.cancel-row{display:flex;justify-content:space-between;gap:24rpx;line-height:1.6;padding:12rpx 0;font-size:27rpx}.cancel-row text:last-child{white-space:nowrap}.cancel-note{font-size:25rpx;line-height:1.7;margin:20rpx 0;color:var(--sub)}.cancel-panel button{display:flex;align-items:center;justify-content:center;width:100%;min-height:88rpx;padding:20rpx 28rpx;margin-top:20rpx;font-size:28rpx;line-height:1.5;border-radius:999rpx;border:1rpx solid var(--line);background:var(--card);color:var(--ink)}.cancel-panel .cancel-primary{background:var(--brand);color:var(--hero)}

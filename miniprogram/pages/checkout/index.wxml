@@ -29,7 +29,7 @@
     <view class="section-head">
       <view class="section-title">{{t.discount}}</view>
     </view>
-    <view class="cost-card card"><view wx:if="{{pending}}">上次预约结果待核实，原项目与抵扣选择已保留，请重试原操作。</view><block wx:else><view class="cost-row switch-row"><text>使用储值抵扣定金</text><switch checked="{{useBalance}}" disabled="{{busy}}" bindchange="toggleBalance"/></view><view wx:if="{{previewLoading}}">正在核对定金与余额…</view><block wx:if="{{preview}}"><view class="cost-row"><text>预约定金</text><text>{{preview.display.requiredText}}</text></view><view class="cost-row"><text>会员减免</text><text>{{preview.display.waivedText}}</text></view><view class="cost-row"><text>留存定金</text><text>{{preview.display.retainedText}}</text></view><view class="cost-row"><text>储值抵扣</text><text>{{preview.display.storedText}}</text></view><view class="cost-row"><text>到店还需支付</text><text>{{preview.display.offlineText}}</text></view><view class="cost-row"><text>当前余额</text><text>{{preview.display.balanceBeforeText}}</text></view><view class="cost-row"><text>抵扣后余额</text><text>{{preview.display.balanceAfterText}}</text></view><view>{{preview.display.note}}</view></block><button wx:if="{{!preview && !previewLoading}}" bindtap="calculate">重新核对</button></block><view wx:if="{{error}}">{{error}}</view></view>
+    <view class="cost-card card"><view wx:if="{{pending}}">上次预约结果待核实，原项目与抵扣选择已保留，请重试原操作。</view><block wx:else><view class="cost-row switch-row"><text>使用已有储值余额抵定金</text><switch checked="{{useBalance}}" disabled="{{busy}}" bindchange="toggleBalance"/></view><view wx:if="{{previewLoading}}">正在核对定金与余额…</view><block wx:if="{{preview}}"><view class="cost-row"><text>预约定金</text><text>{{preview.display.requiredText}}</text></view><view class="cost-row"><text>会员减免</text><text>{{preview.display.waivedText}}</text></view><view class="cost-row"><text>留存定金</text><text>{{preview.display.retainedText}}</text></view><view class="cost-row"><text>储值抵扣</text><text>{{preview.display.storedText}}</text></view><view class="cost-row"><text>剩余定金线下支付</text><text>{{preview.display.offlineText}}</text></view><view class="cost-row"><text>当前余额</text><text>{{preview.display.balanceBeforeText}}</text></view><view class="cost-row"><text>抵扣后余额</text><text>{{preview.display.balanceAfterText}}</text></view><view>{{preview.display.note}}</view></block><button wx:if="{{!preview && !previewLoading}}" bindtap="calculate">重新核对</button></block><view wx:if="{{error}}">{{error}}</view></view>
   </view>
 
   <view class="section">
@@ -80,9 +80,9 @@
 
   <view class="bottom-bar">
     <view class="bottom-fill">
-      <view class="muted">{{t.payable}}</view>
+      <view class="muted">剩余定金线下支付</view>
       <view class="price">{{preview.display.offlineText || '—'}}</view>
     </view>
-    <button class="btn btn-primary pay-btn" bindtap="submitOrder" loading="{{busy}}" disabled="{{busy || (!pending && !preview)}}">{{pending?'核对／重试原预约':'确认预约'}}</button>
+    <button class="btn btn-primary pay-btn" bindtap="submitOrder" loading="{{busy}}" disabled="{{busy || (!pending && !preview)}}">{{pending?'核对／重试原预约':preview.display.confirmText || '确认预约'}}</button>
   </view>
 </view>

@@ -1,0 +1,386 @@
+[
+  {
+    "page": "后台首页",
+    "tab": "整页",
+    "theme": "light",
+    "bad": [],
+    "gradients": 26,
+    "scanned": 89
+  },
+  {
+    "page": "订单管理",
+    "tab": "整页",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 86
+  },
+  {
+    "page": "客户档案",
+    "tab": "整页",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 53
+  },
+  {
+    "page": "服务与价目",
+    "tab": "整页",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 45
+  },
+  {
+    "page": "客服工作台",
+    "tab": "整页",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 40
+  },
+  {
+    "page": "AI 图库",
+    "tab": "整页",
+    "theme": "light",
+    "bad": [],
+    "gradients": 1,
+    "scanned": 31
+  },
+  {
+    "page": "门店设置",
+    "tab": "整页",
+    "theme": "light",
+    "bad": [],
+    "gradients": 6,
+    "scanned": 275
+  },
+  {
+    "page": "通用设置",
+    "tab": "整页",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 56
+  },
+  {
+    "page": "财务",
+    "tab": "趋势",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 80
+  },
+  {
+    "page": "财务",
+    "tab": "记一笔",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 55
+  },
+  {
+    "page": "财务",
+    "tab": "储值卡",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 57
+  },
+  {
+    "page": "财务",
+    "tab": "日结",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 82
+  },
+  {
+    "page": "财务",
+    "tab": "员工工资",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 61
+  },
+  {
+    "page": "财务",
+    "tab": "流水",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 45
+  },
+  {
+    "page": "财务",
+    "tab": "财务设置",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 63
+  },
+  {
+    "page": "员工管理",
+    "tab": "技师业绩",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 79
+  },
+  {
+    "page": "员工管理",
+    "tab": "薪资方案",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 33
+  },
+  {
+    "page": "员工管理",
+    "tab": "技师排班",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 53
+  },
+  {
+    "page": "员工管理",
+    "tab": "账号管理",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 32
+  },
+  {
+    "page": "会员与营销",
+    "tab": "① 充值套餐",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 36
+  },
+  {
+    "page": "会员与营销",
+    "tab": "② 次卡",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 36
+  },
+  {
+    "page": "会员与营销",
+    "tab": "③ 优惠券",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 56
+  },
+  {
+    "page": "会员与营销",
+    "tab": "④ 积分商城",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 34
+  },
+  {
+    "page": "会员与营销",
+    "tab": "⑤ 会员体系",
+    "theme": "light",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 41
+  },
+  {
+    "page": "后台首页",
+    "tab": "整页",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 26,
+    "scanned": 89
+  },
+  {
+    "page": "订单管理",
+    "tab": "整页",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 86
+  },
+  {
+    "page": "客户档案",
+    "tab": "整页",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 53
+  },
+  {
+    "page": "服务与价目",
+    "tab": "整页",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 45
+  },
+  {
+    "page": "客服工作台",
+    "tab": "整页",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 40
+  },
+  {
+    "page": "AI 图库",
+    "tab": "整页",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 1,
+    "scanned": 31
+  },
+  {
+    "page": "门店设置",
+    "tab": "整页",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 6,
+    "scanned": 275
+  },
+  {
+    "page": "通用设置",
+    "tab": "整页",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 56
+  },
+  {
+    "page": "财务",
+    "tab": "趋势",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 80
+  },
+  {
+    "page": "财务",
+    "tab": "记一笔",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 55
+  },
+  {
+    "page": "财务",
+    "tab": "储值卡",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 57
+  },
+  {
+    "page": "财务",
+    "tab": "日结",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 82
+  },
+  {
+    "page": "财务",
+    "tab": "员工工资",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 61
+  },
+  {
+    "page": "财务",
+    "tab": "流水",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 45
+  },
+  {
+    "page": "财务",
+    "tab": "财务设置",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 63
+  },
+  {
+    "page": "员工管理",
+    "tab": "技师业绩",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 79
+  },
+  {
+    "page": "员工管理",
+    "tab": "薪资方案",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 33
+  },
+  {
+    "page": "员工管理",
+    "tab": "技师排班",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 53
+  },
+  {
+    "page": "员工管理",
+    "tab": "账号管理",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 32
+  },
+  {
+    "page": "会员套餐/券",
+    "tab": "① 充值套餐",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 36
+  },
+  {
+    "page": "会员套餐/券",
+    "tab": "② 次卡",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 36
+  },
+  {
+    "page": "会员套餐/券",
+    "tab": "③ 优惠券",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 56
+  },
+  {
+    "page": "会员套餐/券",
+    "tab": "④ 积分商城",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 34
+  },
+  {
+    "page": "会员套餐/券",
+    "tab": "⑤ 会员体系",
+    "theme": "dark",
+    "bad": [],
+    "gradients": 0,
+    "scanned": 41
+  }
+]

@@ -1,0 +1,35 @@
+{
+  "checkedAt": "2026-11-15T15:43:58.254Z",
+  "proof": [
+    {
+      "mode": "light",
+      "text": "累计消费 CAD $1188",
+      "color": "rgb(36, 31, 26)",
+      "bg": "rgb(255, 255, 255)",
+      "ratio": 16.330663894099303
+    },
+    {
+      "mode": "light",
+      "text": "到店 1 次",
+      "color": "rgb(36, 31, 26)",
+      "bg": "rgb(255, 255, 255)",
+      "ratio": 16.330663894099303
+    },
+    {
+      "mode": "dark",
+      "text": "累计消费 CAD $1188",
+      "color": "rgb(240, 231, 218)",
+      "bg": "rgb(42, 34, 28)",
+      "ratio": 12.758528995623506
+    },
+    {
+      "mode": "dark",
+      "text": "到店 1 次",
+      "color": "rgb(240, 231, 218)",
+      "bg": "rgb(42, 34, 28)",
+      "ratio": 12.758528995623506
+    }
+  ],
+  "draftLabels": "left aligned",
+  "database": "isolated test 4387"
+}

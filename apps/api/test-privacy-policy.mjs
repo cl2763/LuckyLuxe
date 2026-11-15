@@ -25,8 +25,8 @@ async function web(path, mode, replies) {
   return {target,retry,toggle,root,calls}
 }
 const rendered = await web('/web/privacy.html','dark',[policy])
-check('无登录会话可公开读取真实主体、日期及电话', rendered.target.content.includes(policy.operator) && rendered.target.content.includes(policy.phone) && rendered.target.content.includes('2026-10-07'))
-check('正文无需顾客令牌，明确线下收款及绑定不等于会员', rendered.calls[0].options.credentials === undefined && rendered.target.content.includes('不在小程序内执行上述支付') && rendered.target.content.includes('不等于充值'))
+check('无登录会话可公开读取真实主体、日期及电话', rendered.target.content.includes(policy.operator) && rendered.target.content.includes(policy.phone) && rendered.target.content.includes(policy.effectiveDate))
+check('正文无需顾客令牌，明确储值抵扣、取消返还、线下补款及绑定不等于会员', rendered.calls[0].options.credentials === undefined && rendered.target.content.includes('已有储值余额') && rendered.target.content.includes('返还可退余额') && rendered.target.content.includes('不发起微信支付') && !rendered.target.content.includes('定金均由门店在线下收取') && rendered.target.content.includes('不等于充值'))
 check('成功加载结束 aria-busy，不残留重试按钮', rendered.target.attributes['aria-busy']==='false' && rendered.retry.hidden)
 check('深色加载和按钮切浅色均有效', rendered.root.dataset.theme==='dark' && (rendered.toggle.listeners.click(),rendered.root.dataset.theme==='light'))
 const scoped = await web('/experience/web/privacy.html','system',[policy])

@@ -1,1 +1,7 @@
-{"navigationBarTitleText":"订单详情","usingComponents":{"snapshot-viewer":"/components/snapshot-viewer/index"}}
+{
+  "navigationBarTitleText": "订单详情",
+  "usingComponents": {
+    "snapshot-viewer": "/components/snapshot-viewer/index",
+    "deposit-panel": "/components/deposit-panel/index"
+  }
+}

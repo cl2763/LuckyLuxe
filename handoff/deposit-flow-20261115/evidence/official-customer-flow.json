@@ -1,0 +1,94 @@
+{
+  "checkedAt": "2026-11-15T15:42:40.252Z",
+  "scope": "isolated local test database 4387",
+  "bookingId": "booking_mwi04xk7_d4hgwy",
+  "checks": [
+    "draft default does not debit",
+    "stored preview60 offline40",
+    "confirm stored debit only",
+    "merchant offline40 receipt",
+    "cancel preview source split",
+    "keep booking",
+    "cancel refunds stored60 only",
+    "offline40 remains due",
+    "merchant refund40",
+    "customer history"
+  ],
+  "workflow": {
+    "cancelled": true,
+    "requiredCents": 10000,
+    "collectedCents": 0,
+    "storedCents": 0,
+    "offlineCents": 0,
+    "offlineDueCents": 0,
+    "availableCents": 0,
+    "cashRefundDueCents": 0,
+    "cashRefundedCents": 4000,
+    "canCollect": false,
+    "canRefund": false,
+    "canDeduct": false,
+    "history": [
+      {
+        "id": "dep_mwi04xk9_3ftr4p",
+        "label": "已抵扣储值定金",
+        "amountText": "CAD $60.00",
+        "actor": "预约系统",
+        "createdAt": "2026-11-15 10:41",
+        "note": "顾客确认储值抵扣预约定金",
+        "channel": "已有储值余额",
+        "settlementId": ""
+      },
+      {
+        "id": "dep_mwi05pgy_e4kx3o",
+        "label": "已登记线下收取",
+        "amountText": "CAD $40.00",
+        "actor": "boss-p12-ui-mwhphhaj",
+        "createdAt": "2026-11-15 10:41",
+        "note": "",
+        "channel": "线下转账",
+        "settlementId": ""
+      },
+      {
+        "id": "stored-refund",
+        "label": "储值返还原账户 · 已到账",
+        "amountText": "CAD $60.00",
+        "actor": "系统",
+        "createdAt": "2026-11-15 10:42",
+        "note": "按原定金资金来源返还",
+        "channel": "原储值账户"
+      },
+      {
+        "id": "mp-mwi06uy0-r46a6racpde",
+        "label": "已登记线下退款",
+        "amountText": "CAD $40.00",
+        "actor": "boss-p12-ui-mwhphhaj",
+        "createdAt": "2026-11-15 10:42",
+        "note": "",
+        "channel": "线下转账"
+      }
+    ],
+    "display": {
+      "status": "退款已处理",
+      "requiredText": "CAD $100.00",
+      "collectedText": "CAD $100.00",
+      "storedText": "CAD $0.00",
+      "offlineText": "CAD $0.00",
+      "offlineDueText": "CAD $0.00",
+      "availableText": "CAD $0.00",
+      "collectAmountValue": "0.00",
+      "refundAmountValue": "0.00",
+      "storedRefundText": "CAD $60.00",
+      "cashRefundDueText": "CAD $0.00",
+      "cashRefundedText": "CAD $40.00",
+      "forfeitText": "CAD $0.00",
+      "collectTitle": "登记线下已收定金",
+      "collectButton": "登记线下已收",
+      "collectConfirm": "确认已收到 CAD $0.00",
+      "collectNote": "请在实际收到款项后登记。本操作只记收款，不会扣顾客储值余额。",
+      "refundButton": "处理线下退款",
+      "refundNote": "请先向顾客实际退还线下款，再登记完成。系统不会发起线上退款。",
+      "settlementNote": "已收定金将在本次结算中带入，不需要再次收取。",
+      "cancelNote": "退款处理记录已更新，请核对实际到账。"
+    }
+  }
+}
