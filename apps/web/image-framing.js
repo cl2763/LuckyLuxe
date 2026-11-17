@@ -51,7 +51,7 @@ window.ImageFraming = (() => {
     const measureKey=()=>{measure.style.width=(key==='desktop'?1240:375)+'px';measure.contentWindow.postMessage({type:'youji-home-preview',name:'',slides:[{image:src,imageView:{}}],device:key==='mini'?'mini':key==='desktop'?'desktop':'mobile',zh},location.origin)}
     const metrics=e=>{if(e.source!==measure.contentWindow||e.origin!==location.origin||e.data?.type!=='youji-frame-metrics'||kind!=='hero')return;const k=e.data.device;if(!keys.includes(k)||!e.data.width||!e.data.height)return;ratios[k]=e.data.width/e.data.height;if(key===k){frame.style.aspectRatio=String(ratios[k]);frame.style.setProperty('--frame-ratio',ratios[k]);dialog.querySelector('[data-frame-size]').textContent=(zh?'展示画框 ':'Display frame ')+Math.round(e.data.width)+' × '+Math.round(e.data.height)+' px · '+profiles[k][zh?0:1]}}
     addEventListener('message',metrics);measure.onload=()=>{measuredFrame=true;measureKey()};dialog.querySelectorAll('[data-profile]').forEach(e=>e.addEventListener('click',()=>{if(measuredFrame)measureKey()}))
-    dialog.onclose=()=>{removeEventListener('message',metrics);measure.remove();dialog.remove()};dialog.showModal();select(key)
+    dialog.onclose=()=>{removeEventListener('message',metrics);measure.remove();dialog.remove()};dialog.oncancel=e=>e.preventDefault();dialog.showModal();select(key)
   }
   async function read(file,{maxChars=2*1024*1024}={}){
     if(!file.type.startsWith('image/'))throw Error('请选择图片文件 / Choose an image')

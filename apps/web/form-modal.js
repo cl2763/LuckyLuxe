@@ -1,5 +1,5 @@
 window.FormModal=(()=>{
-function open({ title, hint, fields, saveText, onSave, mountContent }, {escapeHtml,toast}) {
+function open({ title, hint, fields, saveText, onSave, mountContent, closeButtonOnly = false }, {escapeHtml,toast}) {
   let busy=false
   document.querySelector('.form-modal-overlay')?.remove()
   const overlay = document.createElement('div')
@@ -18,7 +18,7 @@ function open({ title, hint, fields, saveText, onSave, mountContent }, {escapeHt
       ${fields.some((f) => f.hint) ? fields.filter((f) => f.hint).map((f) => `<p class="subtle" style="margin:6px 0 0${f.danger ? ';color:var(--bad);font-weight:700' : ''}">· ${escapeHtml(f.label)}:${escapeHtml(f.hint)}</p>`).join('') : ''}
       <div class="action-row" style="margin-top:14px">
         <button class="primary slim" data-fm-save type="button">${escapeHtml(saveText || '保存')}</button>
-        <button class="ghost slim" data-fm-cancel type="button">取消</button>
+        ${closeButtonOnly ? '' : '<button class="ghost slim" data-fm-cancel type="button">取消</button>'}
       </div>
     </div>`
   // showIf 动态显隐:值变化只切 display,不重建 DOM(输入不丢);D50-c② 两态切换靠它
@@ -41,10 +41,10 @@ function open({ title, hint, fields, saveText, onSave, mountContent }, {escapeHt
   overlay.addEventListener('change', applyVisibility)
   overlay.addEventListener('input', applyVisibility)
   const close = () => { if(busy)return; overlay.remove(); document.removeEventListener('keydown', onKey) }
-  const onKey = (e) => { if (e.key === 'Escape') close() }
+  const onKey = (e) => { if (e.key === 'Escape') e.preventDefault() }
   document.addEventListener('keydown', onKey)
   overlay.addEventListener('click', async (e) => {
-    if (e.target === overlay || e.target.closest('[data-fm-close]') || e.target.closest('[data-fm-cancel]')) { close(); return }
+    if (e.target.closest('[data-fm-close]') || e.target.closest('[data-fm-cancel]')) { close(); return }
     if (e.target.closest('[data-fm-save]')) {
       if(busy)return;busy=true;const btn=overlay.querySelector('[data-fm-save]');btn.disabled=true
       try { const result=await onSave(readValues());busy=false;if(result!==false)close() } catch (error) { toast(error.message) } finally{busy=false;btn.disabled=false}

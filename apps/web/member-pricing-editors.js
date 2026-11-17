@@ -176,6 +176,7 @@ async function savePackage(kind, existing) {
     }
   }
   openFormModal({
+    closeButtonOnly: !isTimes,
     mountContent:overlay=>{if(!isTimes){const host=document.createElement("div");overlay.querySelector(".action-row").before(host);giftEditor=window.GiftEditor.mount(host,existing?.giftItems||[],mMoney(0).replace(/[0-9.,\s]/g,""));const wheel=document.createElement("div");host.after(wheel);discountWheel=window.DiscountWheel.mount(wheel,{value:packageDiscount.rateBps})}},
     title: existing ? `编辑${isTimes ? '次卡' : '充值套餐'}` : `新建${isTimes ? '次卡' : '充值套餐'}`,
     hint: isTimes ? '售卡=预收负债不计积分;核销按折算单价确认收入(批②)。' : '赠送=营销让利:入储值负债、单独列示,不算实收/业绩/积分。',

@@ -17,7 +17,7 @@
    panel.innerHTML='<button type="button" data-close>关闭</button><h2>消息 · 未读 '+r.unreadCount+'</h2>'+items.map(m=>'<button type="button" class="merchant-message-item" data-message="'+esc(m.id)+'"><strong>'+esc(m.readAt?'已读':'未读')+' · '+esc(m.title)+'</strong><small>'+esc(m.timeText)+'</small><span>'+esc(m.text)+'</span></button>').join('')+(items.length?'':'<p>暂无消息</p>')+'<p>'+esc(r.scopeText)+'</p>'
   }catch(e){if(g===generation&&panel.open)panel.innerHTML='<button type="button" data-close>关闭</button><h2>消息</h2><p>'+esc(e.message||'消息加载失败')+'</p><button type="button" data-retry>重试</button>'}
  }
- entry.addEventListener('click',()=>{panel.showModal();load()})
+ entry.addEventListener('click',()=>{panel.oncancel=e=>e.preventDefault();panel.showModal();load()})
  panel.addEventListener('close',()=>{generation++;items=[];panel.innerHTML='';badge()})
  panel.addEventListener('click',async e=>{
   if(e.target.closest('[data-close]')){panel.close();return}

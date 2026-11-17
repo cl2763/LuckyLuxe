@@ -14,7 +14,7 @@ window.ScheduleEditor = (() => {
     document.body.append(mask)
     const box = mask.firstElementChild, feedback = mask.querySelector('[data-feedback]')
     function close() { if (busy) return; document.removeEventListener('keydown', key); mask.remove(); before?.focus() }
-    function key(e) { if (e.key === 'Escape') close(); if(e.key === 'Tab') { const list=[...box.querySelectorAll('button,input')].filter(x=>!x.disabled&&x.getClientRects().length); if(e.shiftKey&&document.activeElement===list[0]) {e.preventDefault();list.at(-1)?.focus()} else if(!e.shiftKey&&document.activeElement===list.at(-1)) {e.preventDefault();list[0]?.focus()} } }
+    function key(e) { if (e.key === 'Escape') e.preventDefault(); if(e.key === 'Tab') { const list=[...box.querySelectorAll('button,input')].filter(x=>!x.disabled&&x.getClientRects().length); if(e.shiftKey&&document.activeElement===list[0]) {e.preventDefault();list.at(-1)?.focus()} else if(!e.shiftKey&&document.activeElement===list.at(-1)) {e.preventDefault();list[0]?.focus()} } }
     function lock(value) { busy=value; box.querySelectorAll('button,input').forEach(x=>x.disabled=value); box.setAttribute('aria-busy', String(value)) }
     function report(state, html) {
       feedback.className = `shift-result ${state}`
@@ -28,7 +28,7 @@ window.ScheduleEditor = (() => {
       box.querySelector('[data-range]').textContent=kind==='off'?t('当天不接预约','Not available that day'):kind==='custom'?t('选择开始与结束时间','Choose start and end times'):range.every(time)?range.join('–'):t('当天没有营业时段，请选自定义或休息。','No opening hours. Choose custom or off.')
     }
     mask.addEventListener('click', async e=>{
-      if(e.target===mask || e.target.closest('[data-close]')) {close();return}
+      if(e.target.closest('[data-close]')) {close();return}
       if(busy)return
       const pick=e.target.closest('[data-kind]'); if(pick){kind=pick.dataset.kind;feedback.textContent='';render();return}
       if(e.target.closest('[data-save-split]')) {

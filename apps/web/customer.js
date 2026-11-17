@@ -960,7 +960,7 @@ async function openStoreSwitcher() {
       overlay.remove()
       return
     }
-    if (event.target.closest('[data-switch-close]') || event.target === overlay) overlay.remove()
+    if (event.target.closest('[data-switch-close]')) overlay.remove()
   })
   document.body.appendChild(overlay)
 }
@@ -2001,7 +2001,7 @@ async function handleScreenClick(event) {
     if(!step)return
     const dialog=document.createElement('dialog')
     dialog.innerHTML=`<button type="button">${state.lang==='en'?'Close':'关闭'}</button>${window.ImgPlaceholder.tag(step.image,{className:'guide-dialog-image',alt:'到店指引'})}`
-    document.body.append(dialog);dialog.querySelector('button').onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();dialog.showModal();return
+    document.body.append(dialog);dialog.querySelector('button').onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();dialog.oncancel=e=>e.preventDefault();dialog.showModal();return
   }
 
   if(event.target.closest('[data-checkout-refresh]')){window.BookingCheckout.preview(state,request,render);return}

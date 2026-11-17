@@ -117,7 +117,7 @@
       el.querySelector('#signedDocVisible').checked = def === undefined ? state.docType !== 'other' : Boolean(def)
     }))
     el.querySelector('[data-signed-cancel]').addEventListener('click', () => el.remove())
-    el.addEventListener('click', (e) => { if (e.target === el) el.remove() })
+    // Close only through the explicit dialog action.
     el.querySelector('#signedSave').addEventListener('click', () => {
       const title = (el.querySelector('#signedDocTitle').value || '').trim()
       if (state.docType === 'other' && !title) { say('「其他」要自己写个名字。'); return }
@@ -165,7 +165,7 @@
         </div>`
       document.body.appendChild(el)
       el.querySelector('[data-signed-cancel]').addEventListener('click', () => el.remove())
-      el.addEventListener('click', (e) => { if (e.target === el) el.remove() })
+      // Close only through the explicit dialog action.
       const vb = el.querySelector('[data-signed-void]')
       if (vb) vb.addEventListener('click', async () => {
         /* 🔴 原因必填 —— 前端问一句只是体验,后端才是最终闸(判据五)。

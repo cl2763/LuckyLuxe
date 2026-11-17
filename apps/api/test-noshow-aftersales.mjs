@@ -2357,10 +2357,10 @@ const main = async () => {
       check('㊶ D50 会员与营销页原生弹窗=0(全部页内表单弹层)', memberHits === 0, `hits=${memberHits}`)
       const formModalJs = readFileSync(join(ROOT41, 'apps/web/form-modal.js'), 'utf8')
       const adminHtml = readFileSync(join(ROOT41, 'apps/web/admin.html'), 'utf8')
-      check('㊶ D50 弹层组件接通且先于 admin 加载(Esc/遮罩/保存取消)',
+      check('㊶ D50 弹层组件接通且先于 admin 加载(背景/Esc不丢输入，按钮明确关闭)',
         adminJs.includes('function openFormModal') && adminJs.includes('window.FormModal.open')
         && adminHtml.indexOf('/web/form-modal.js') >= 0 && adminHtml.indexOf('/web/form-modal.js') < adminHtml.indexOf('/web/admin.js?')
-        && formModalJs.includes("e.key === 'Escape'") && formModalJs.includes('e.target === overlay')
+        && formModalJs.includes("if (e.key === 'Escape') e.preventDefault()") && !formModalJs.includes('e.target === overlay') && formModalJs.includes('data-fm-close')
         && formModalJs.includes('data-fm-save') && formModalJs.includes('data-fm-cancel'))
       const PROMPT_BASELINE = 19 // 服务与价目页 5 处提前修(店主 08-21 亲撞拍板:新增/改名/删大类+删项目全换弹层)24→19;此前 A5 退役 27→24;其余存量按 Cowork 归批清单分批收敛,只减不增
       const total = (adminJs.match(/window\.(prompt|confirm|alert)\(/g) || []).length

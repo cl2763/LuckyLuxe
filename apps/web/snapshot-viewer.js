@@ -1,6 +1,6 @@
 /* D68③(店主 08-23 裁):网页端签署原件悬浮查看器 —— **admin 与 customer 共用这一份**。
    与小程序 components/snapshot-viewer 同构:整组逐份、页码 n/N、左右半透明箭头
-   (首份隐左/末份隐右)、触摸滑动、方向键、Esc 关闭。数据来自后端唯一出口,
+   (首份隐左/末份隐右)、触摸滑动、方向键、明确点击关闭。数据来自后端唯一出口,
    本模块不拼句子也不数份数(items 由调用方从接口取好)。 */
 (function (global) {
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
@@ -34,12 +34,12 @@
     const go = (d) => { i = (i + d + items.length) % items.length; paint() }
     const close = () => { box.remove(); document.removeEventListener('keydown', onKey) }
     const onKey = (e) => {
-      if (e.key === 'Escape') close()
+      if (e.key === 'Escape') e.preventDefault()
       if (e.key === 'ArrowRight') go(1)
       if (e.key === 'ArrowLeft') go(-1)
     }
     box.addEventListener('click', (e) => {
-      if (e.target === box || e.target.closest('[data-snap-close]')) { close(); return }
+      if (e.target.closest('[data-snap-close]')) { close(); return }
       if (e.target.closest('[data-snap-next]')) go(1)
       if (e.target.closest('[data-snap-prev]')) go(-1)
     })
