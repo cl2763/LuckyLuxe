@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 import {configFingerprint} from './config-fingerprint.mjs'
 export const businessHoursRevision=(db,storeId,tenantId)=>configFingerprint([db.prepare('SELECT * FROM business_hours WHERE store_id=? ORDER BY weekday').all(storeId),db.prepare('SELECT * FROM store_special_dates WHERE store_id=? ORDER BY date').all(storeId),readBookingAcceptance(db,storeId,tenantId)])
 import {readBookingAcceptance,validateAcceptance,writeAcceptance} from './booking-window.mjs'
@@ -23,7 +24,7 @@ export function writeBusinessHours(db, storeId, entries, updatedBy, now, accepta
   const stmt = db.prepare(`INSERT INTO business_hours (store_id, weekday, open_time, close_time, is_closed, updated_at, updated_by)
     VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(store_id, weekday) DO UPDATE SET open_time = excluded.open_time, close_time = excluded.close_time, is_closed = excluded.is_closed, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
-  db.exec('SAVEPOINT business_hours_write')
+  beginWriteSavepoint(db, 'business_hours_write', 'stores')
   try {
     for (const e of entries) stmt.run(storeId, Number(e.weekday), e.isClosed ? '00:00' : e.openTime, e.isClosed ? '00:00' : e.closeTime, e.isClosed ? 1 : 0, now, updatedBy)
     if(acceptance!==undefined)writeAcceptance(db,storeId,next,now,tenantId)

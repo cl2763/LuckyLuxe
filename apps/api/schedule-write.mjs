@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 import {bookingWindow,acceptanceForDate} from './booking-window.mjs'
 import { isTime, dateValue as checkedDate } from './schedule-input.mjs'
 /* Shared write boundary for single/batch shifts and employee requests. No financial writes. */
@@ -36,7 +37,7 @@ export function createScheduleWrite({ db, currentTenantId, defaultStoreId, speci
     }).map(b=>({date,technicianId:tech,bookingId:b.id,code:b.public_code,startTime:localParts(b.appointment_start,tz).time,endTime:localParts(b.appointment_end,tz).time,customerName:db.prepare('SELECT display_name FROM users WHERE id=? AND tenant_id=?').get(b.user_id,tid)?.display_name||'散客',serviceName:db.prepare('SELECT name_zh FROM services WHERE id=? AND tenant_id=?').get(b.service_id,tid)?.name_zh||'服务'}))
   }
   const put=db.prepare('INSERT INTO technician_schedules (technician_id,date,start_time,end_time,is_working) VALUES (?,?,?,?,?) ON CONFLICT(technician_id,date) DO UPDATE SET start_time=excluded.start_time,end_time=excluded.end_time,is_working=excluded.is_working')
-  function transaction(fn) {db.exec('SAVEPOINT schedule_write');try{const out=fn();db.exec('RELEASE schedule_write');return out}catch(e){db.exec('ROLLBACK TO schedule_write; RELEASE schedule_write');throw e}}
+  function transaction(fn) {beginWriteSavepoint(db, 'schedule_write', 'technician_schedules');try{const out=fn();db.exec('RELEASE schedule_write');return out}catch(e){db.exec('ROLLBACK TO schedule_write; RELEASE schedule_write');throw e}}
   function techExists(id,tid) { if(!db.prepare('SELECT id FROM technicians WHERE id=? AND tenant_id=?').get(id,tid))throw apiError(404,'NOT_FOUND','找不到本店技师。') }
   function apply(entries,tid) {return transaction(()=>{const conflicts=[],warnings=[]; for(const a of entries){conflicts.push(...conflictsFor(a.tech,a.date,a,tid));warnings.push(...warningsFor(a.date,a,tid));put.run(a.tech,a.date,a.startTime,a.endTime,a.isWorking?1:0)}return {conflicts,warnings}})}
   async function route(req,res,{path,adminSession}) {

@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 import {readBookingAcceptance,validateAcceptance,writeAcceptance} from './booking-window.mjs'
 import {businessHoursRevision} from './business-hours-write.mjs'
 // Configuration-only writes shared by merchants and platform drafts.
@@ -28,7 +29,7 @@ export function createStoreSetupDefinitions({db,apiError,readBody,json,currentTe
     const isClosed = specialDateInput(body,apiError)
     const storeId = body.storeId || defaultStoreId()
     if (!db.prepare('SELECT id FROM stores WHERE id = ? AND tenant_id = ?').get(storeId, currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Store not found.')
-    db.exec('SAVEPOINT special_date_write')
+    beginWriteSavepoint(db, 'special_date_write', 'stores')
     try {
       if(body.expectedConfigRevision!==undefined&&body.expectedConfigRevision!==businessHoursRevision(db,storeId,currentTenantId()))throw apiError(409,'CONFIG_CHANGED','营业规则已在其他设备更新，请核对后再保存。')
       const acceptance=readBookingAcceptance(db,storeId,currentTenantId())
@@ -49,7 +50,7 @@ export function createStoreSetupDefinitions({db,apiError,readBody,json,currentTe
     if(adminSession.role!=='owner')throw apiError(403,'FORBIDDEN','Owner permission is required.')
     const date=path.split('/')[3],storeId=input.storeId||defaultStoreId()
     if(!db.prepare('SELECT id FROM stores WHERE id=? AND tenant_id=?').get(storeId,currentTenantId()))throw apiError(404,'NOT_FOUND','Store not found.')
-    db.exec('SAVEPOINT special_date_delete')
+    beginWriteSavepoint(db, 'special_date_delete', 'stores')
     try{
       if(input.expectedConfigRevision!==undefined&&input.expectedConfigRevision!==businessHoursRevision(db,storeId,currentTenantId()))throw apiError(409,'CONFIG_CHANGED','营业规则已更新，请重新核对。')
       const result=db.prepare('DELETE FROM store_special_dates WHERE store_id=? AND date=?').run(storeId,date)

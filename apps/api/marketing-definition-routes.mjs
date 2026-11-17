@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 import {assertRecordActive,activeRecords} from './record-lifecycle.mjs'
 // Merchant and platform configuration share these definition-only operations.
 // Issuing, redeeming and reversing rewards remain in their transaction routes.
@@ -102,7 +103,7 @@ export function createMarketingDefinitions({db,apiError,readBody,json,currentTen
    }
   }
   if(method==='PATCH')assertRecordActive(db,apiError,currentTenantId(),path.split('/')[2],path.split('/')[3])
-  if(method!=='GET')db.exec('SAVEPOINT marketing_definition')
+  if(method!=='GET')beginWriteSavepoint(db, 'marketing_definition', 'membership_packages')
   try{
    handle({method},null,{path,adminSession},body,reply)
    if(scope){db.prepare('UPDATE coupons SET scope_categories_json=? WHERE id=? AND tenant_id=?').run(JSON.stringify(scope),output.data.coupon.id,currentTenantId());output.data.coupon=serializeCoupon(db.prepare('SELECT * FROM coupons WHERE id=? AND tenant_id=?').get(output.data.coupon.id,currentTenantId()))}

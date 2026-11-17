@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 // Rule configuration is separate from generation of recurring ledger entries.
 export function createRecurringSetup({db,json,apiError,readBody,currentTenantId,tenantTimezone,localParts,randomId,actorOf,iso,insertFinanceTransaction}){
  try{db.exec('ALTER TABLE finance_recurring_rules ADD COLUMN effective_from TEXT')}catch(e){if(!/duplicate column/i.test(e.message))throw e}
@@ -96,7 +97,7 @@ function materialize() {
     const date=String(body.effectiveFrom||''),today=localParts(new Date(),tenantTimezone(currentTenantId())).date
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T12:00:00Z'))||new Date(date+'T12:00:00Z').toISOString().slice(0,10)!==date||date<=today)throw apiError(400,'FUTURE_DATE_REQUIRED','请选择今天之后的生效日期，初始配置不补记过去账目。')
   }
-  db.exec('SAVEPOINT recurring_config')
+  beginWriteSavepoint(db, 'recurring_config', 'finance_recurring_rules')
   try{handle({method},null,{path,adminSession},body,(_r,status,data)=>out={status,data});if(platform&&method==='POST'){db.prepare('UPDATE finance_recurring_rules SET effective_from=? WHERE id=? AND tenant_id=?').run(body.effectiveFrom,out.data.rule.id,currentTenantId());out.data.rule.effectiveFrom=body.effectiveFrom}db.exec('RELEASE recurring_config');return out}catch(e){db.exec('ROLLBACK TO recurring_config; RELEASE recurring_config');throw e}
  }
  async function route(req,res,ctx){if(!matches(req.method,ctx.path))return false;const r=configure({...ctx,method:req.method,body:req.method==='GET'?{}:await readBody(req)});if(req.method==='POST')r.data.generated=materialize();json(res,r.status,r.data);return true}

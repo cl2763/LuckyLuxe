@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 // Shared configuration-only boundaries. No payroll closing, payouts or ledger writes.
 export function createOperationalSetupRules({db,json,apiError,readBody,currentTenantId,quoteState,iso,staffVisibilityOf,STAFF_VISIBILITY_MODES,monthKeyOf,randomId,actorOf,parseJson2,serializeSalaryPlan,effectiveSalaryPlan}){
  function handle(req,res,{path,query={},adminSession},input,json){
@@ -188,7 +189,7 @@ export function createOperationalSetupRules({db,json,apiError,readBody,currentTe
  function configure({path,method='GET',body={},query={},adminSession}){
   if(!paths.has(path)||!['GET','PUT'].includes(method)||path.endsWith('/effective')&&method!=='GET')throw apiError(405,'METHOD_NOT_ALLOWED','配置操作不受支持。')
   let out
-  db.exec('SAVEPOINT operational_setup')
+  beginWriteSavepoint(db, 'operational_setup', 'tenant_settings')
   try{handle({method},null,{path,query,adminSession},body,(_r,status,data)=>{out={status,data}});if(!out)throw apiError(405,'METHOD_NOT_ALLOWED','配置操作不受支持。');db.exec('RELEASE operational_setup');return out}
   catch(e){db.exec('ROLLBACK TO operational_setup; RELEASE operational_setup');throw e}
  }
