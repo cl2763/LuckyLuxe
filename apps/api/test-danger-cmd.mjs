@@ -46,8 +46,6 @@ for (const e of readdirSync(join(ROOT, 'apps/api'))) if (e.endsWith('.sh')) file
 
 /* 白名单:**逐条写理由**,条数上棘轮。file 用后缀匹配,pat 是那条命令里的模式串。 */
 const OK_KILLS = [
-  { file: 'apps/api/run-all-tests.sh', pat: 'local-server.mjs',
-    why: '回归自己起的那批服务;打完立刻 restore_local/restore_sandbox 拉回 4128 与 4310' },
   { file: 'apps/api/start-sandbox.sh', pat: 'PORT=4310',
     why: '起沙箱前先清同端口的旧进程;模式串具体到端口,且本脚本随后就把 4310 起回来' },
   { file: 'tools/sim/baseline_chain.sh', pat: 'wechatwebdevtools',
@@ -110,7 +108,7 @@ const devBad = devKills.filter((h) => {
 check(`④ 杀开发者工具的 ${devKills.length} 条,同一脚本里都**当场拉回来并验了端口**(杀了不还正是那次事故的形状)`,
   devBad.length === 0, devBad.map((h) => `${h.f}:${h.line} 杀了却没看到 cli auto --auto-port + lsof 验端口`).join(' || '))
 
-check(`⑤ 白名单只许 ${OK_KILLS.length} 条(棘轮:只减不增;要增先报店主)`, OK_KILLS.length <= 3, String(OK_KILLS.length))
+check(`⑤ 白名单只许 ${OK_KILLS.length} 条(棘轮:只减不增;要增先报店主)`, OK_KILLS.length <= 2, String(OK_KILLS.length))
 /* ⑥ 反向守:白名单不许有**死条目** —— 那条命令都不在了,白名单还留着,说明它在替不存在的东西背书 */
 const dead = OK_KILLS.filter((w) => !hits.some((h) => h.f.endsWith(w.file) && h.code.includes(w.pat)))
 check('⑥ 反向守:白名单里没有死条目(命令已经不在了就该把条目删掉,不许替不存在的东西背书)',

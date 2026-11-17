@@ -1,3 +1,4 @@
+<setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
 <include src="../../../templates/media-privacy.wxml" />
 <view class="page guide-editor {{themeClass}}">
  <view wx:if="{{loading}}">正在读取到店指引…</view>

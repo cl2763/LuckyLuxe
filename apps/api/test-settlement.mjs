@@ -1,3 +1,4 @@
+import {ensurePricingCategory} from './pricing-category-fixture.mjs'
 // P1 结算闭环回归(2026-08-08):
 // 金额红线 —— 前端不算钱,后端每次计算都强制校验两条恒等式:
 //   共优惠 ≡ 原价合计 − 档位小计     应收 ≡ 档位小计 − 定金抵扣
@@ -40,12 +41,7 @@ async function request(path, options = {}, token = PLATFORM, extraHeaders = {}) 
 
 /* 分类唯一真相律(店主 2026-08-25):建店即落平台三大类(美甲/美睫/护理·其他),
    所以夹具再建同 key 的大类会撞 409 —— 改成「有就用,没有才建」。判据跟着口径走。 */
-async function ensureCategory(token, body) {
-  const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
-  if (made.data && made.data.category) return made.data.category
-  const list = (await request('/admin/pricing/categories', {}, token)).data.categories || []
-  return list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
-}
+async function ensureCategory(token,body){return ensurePricingCategory({base:BASE_URL,platformToken:PLATFORM,merchantToken:token,body})}
 
 // 每一处金额都用这两条恒等式验一遍——手会算错,减法不会
 function assertMoney(label, s) {

@@ -1,3 +1,4 @@
+import {ensurePricingCategory} from './pricing-category-fixture.mjs'
 /* R2 金额压测(店主 2026-08-10 开检拍板:「按一万次也不能错的标准做」)。
 
    开检现象:开单时先选一个项目算出价,再选别的项目,合计不变。
@@ -42,12 +43,7 @@ async function request(path, options = {}, token = PLATFORM) {
 
 /* 分类唯一真相律(店主 2026-08-25):建店即落平台三大类(美甲/美睫/护理·其他),
    所以夹具再建同 key 的大类会撞 409 —— 改成「有就用,没有才建」。判据跟着口径走。 */
-async function ensureCategory(token, body) {
-  const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
-  if (made.data && made.data.category) return made.data.category
-  const list = (await request('/admin/pricing/categories', {}, token)).data.categories || []
-  return list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
-}
+async function ensureCategory(token,body){return ensurePricingCategory({base:BASE_URL,platformToken:PLATFORM,merchantToken:token,body})}
 
 async function newShop() {
   const id = `r2s-${RUN}`

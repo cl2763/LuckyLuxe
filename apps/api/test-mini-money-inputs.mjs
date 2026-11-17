@@ -38,7 +38,7 @@ const walk = (dir, re, out = []) => {
 }
 
 function bodyOf(src, name) {
-  const m = new RegExp(`(?:^|\\n)\\s*(?:async\\s+)?${name}\\s*\\(`, 'm').exec(src)
+  const m = new RegExp(`(?:^|\\n|,)\\s*(?:async\\s+)?${name}\\s*\\(`, 'm').exec(src)
   if (!m) return ''
   const open = src.indexOf('{', m.index + m[0].length - 1)
   if (open < 0) return ''
@@ -76,6 +76,8 @@ for (const file of walk(ROOT, /\.wxml$/)) {
 /* 覆盖面的判据(判据律推论):value 绑表达式的框我这条扫描读不出字段名 ——
    它们必须逐个在这张表里,附理由;新出现一个而没登记,当场红。 */
 const COMPLEX_ALLOW = {
+  'pages/merchant/schedule-day/index.wxml:shiftDuration || 120': '排班预览的服务分钟数，不是金额；shift-preview.js 原样保存输入，仅提交时转数字',
+  'pages/merchant/staff/index.wxml:shiftDuration || 120': '同一排班预览 mixin；分钟数不是金额',
   "pages/merchant/orders/index.wxml:shares[p.id + '|' + t.id]": '分成百分比,按「单号|技师」拼 key —— 不是金额;写回原样(onShare 里 setData 的就是 e.detail.value)',
   "pages/merchant/daily-close/index.wxml:shares[p.id + '|' + t.id]": '同上,日结页是同一份 mixin 的第二个落点(一处改两处生效)'
 }
@@ -159,6 +161,18 @@ check('反向守:handler 都找得到(找不到就等于没验,不许当成通�
    小程序 `type="digit"` = 带小数点的数字键盘(金额用);`type="number"` = 整数键盘(计数/百分比用)。
    凡 `type="number"` 必须落进「不是金额」白名单,每项一行理由;条目数上棘轮,只许减。 */
 const NOT_MONEY_NUMBER = {
+  "pages/merchant/booking-addons/index.wxml:edit.duration": "已确认 F05 附加服务增加分钟数，整数时长，不是金额。",
+  "pages/merchant/booking-addons/index.wxml:edit.sort": "已确认 F05 排序序号，不是金额。",
+  "pages/merchant/schedule-day/index.wxml:shiftDuration || 120": "已确认 F06 服务时长预览，整数分钟。",
+  "pages/merchant/staff/index.wxml:shiftDuration || 120": "已确认 F06 同一排班预览另一入口，整数分钟。",
+  "pages/merchant/components/deposit-form/index.wxml:hours": "已确认 F04 免费取消提前小时，整数计量，不是金额。",
+  "pages/merchant/components/deposit-form/index.wxml:late": "已确认 F04 临近取消没收百分比，整数计量，不是金额。",
+  "pages/merchant/components/deposit-form/index.wxml:noShow": "已确认 F04 爽约没收百分比，整数计量，不是金额。",
+  "pages/merchant/components/deposit-form/index.wxml:grace": "已确认 F04 迟到宽限分钟，整数计量，不是金额。",
+  "pages/merchant/components/deposit-form/index.wxml:reschedule": "已确认 F04 改期提前小时，整数计量，不是金额。",
+  "pages/merchant/components/deposit-form/index.wxml:retainTimes": "已确认 F04 保留定金改期次数，整数计量，不是金额。",
+  "pages/merchant/components/deposit-form/index.wxml:retainDays": "已确认 F04 留存定金有效天数，整数计量，不是金额。",
+
   'pages/merchant/migration-gift/index.wxml:quantity': '合同迁移赠品核销数量，整数；不是金额。',
   'pages/merchant/migration-service/index.wxml:quantity': '合同迁移赠送服务次数，整数；不是金额。',
   'pages/merchant/migration-reconciliation/index.wxml:item.times': '合同迁入付费卡剩余次数，整数；本金与赠送金另用digit。',
@@ -168,6 +182,7 @@ const NOT_MONEY_NUMBER = {
   'pages/merchant/coupon-edit/index.wxml:totalQty': '发放总量 —— 计数',
   'pages/merchant/service-edit/index.wxml:duration': '服务时长(分钟)—— 计数',
   'pages/merchant/package-edit/index.wxml:item.quantity': '2026-09-26 已确认赠品数量字段，整数计件；单件价值另用 digit，白名单 13→14。',
+  'pages/merchant/package-edit/index.wxml:validDays': '平台代配置已确认双端次卡有效天数，整数计数；金额仍用 digit。',
   'pages/merchant/package-edit/index.wxml:times': '次卡包含次数 —— 计数',
   'pages/merchant/staff/index.wxml:sheet.orders': '单数目标 —— 计数',
   'pages/merchant/orders/index.wxml:shares[p.id + \'|\' + t.id]': '分成百分比 —— 百分数不是金额',
@@ -177,7 +192,7 @@ const NOT_MONEY_NUMBER = {
   'pages/merchant/notify-settings/index.wxml:r.revisitDays': '回访间隔(天)—— 计数;P3 件3 新增',
   'pages/merchant/notify-settings/index.wxml:r.advanceDays': '临期提醒提前天数 —— 计数;P3 件3 新增'
 }
-const NUMBER_CAP = 17 // 已批准迁移合同新增三个整数计数字段，14→17
+const NUMBER_CAP = 29 // 本批已确认 F04/F05/F06 的 11 个非金额整数控件逐项登记；金额仍须 digit。
 const numberInputs = allTags.filter((t) => t.type === 'number').map((t) => `${t.page}:${t.valueExpr}`)
 const notWhitelisted = numberInputs.filter((k) => !(k in NOT_MONEY_NUMBER))
 check(`③ 白名单式:全仓 ${numberInputs.length} 个 type="number" 逐个落在「不是金额」白名单里(新来的自动红)`,

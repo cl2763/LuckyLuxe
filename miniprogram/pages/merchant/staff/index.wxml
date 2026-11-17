@@ -1,4 +1,6 @@
+<setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
 <view class="page {{themeClass}}">
+<navigator wx:if="{{!setupPreviewActive}}" url="/pages/merchant/record-management/index?kind=technicians" style="padding:24rpx;margin-bottom:20rpx;">删除 / 归档管理 ›</navigator>
   <view class="topbar">
     <text class="h1">员工管理</text>
     <view class="addbtn" bindtap="addTech">＋ 新增员工</view>
@@ -31,6 +33,7 @@
                 data-date="{{d.date}}" data-tech="{{c.techId}}" data-name="{{c.name}}" data-kind="{{c.kind}}" bindtap="openSheet">
             <text class="cn">{{c.name}}</text>
             <text class="cl">{{c.label}}</text>
+            <text class="cc" wx:if="{{c.carryLabel}}">{{c.carryLabel}}</text>
             <text class="cc" wx:if="{{c.count}}">{{c.count}} 单</text>
           </view>
         </scroll-view>
@@ -40,11 +43,11 @@
     </block>
 
     <!-- 屏 4a-2 时段编辑弹层 -->
-    <view wx:if="{{shiftSheet}}" class="mask" bindtap="closeSheet"></view>
+    <view wx:if="{{shiftSheet}}" class="mask"></view>
     <view wx:if="{{shiftSheet}}" class="sheet">
-      <view class="sh">{{shiftSheet.name}} · {{shiftSheet.date}}（周{{shiftSheet.weekday}}）</view>
+      <button bindtap="closeShiftSheet" disabled="{{saving}}">关闭 ×</button><view class="tip">{{shiftSheet.latestMode ? "班次结束为停止接客时间；服务可延长至次日。" : "服务须在营业与班次结束前完成。"}}</view><view class="sh">{{shiftSheet.name}} · {{shiftSheet.date}}（周{{shiftSheet.weekday}}）</view>
       <view class="shs">选择当天出勤方式</view>
-      <view class="kinds">
+      <view class="tip">门店营业：{{shiftSheet.isClosed ? '休息' : shiftSheet.businessOpen+'–'+shiftSheet.businessClose}}</view><view wx:if="{{shiftSheet.latestMode}}" class="tip">最晚开始：{{shiftSheet.cutoff}}</view><view class="tip">技师原班次：{{shiftSheet.originalRange}}。已保存班次不会随营业时间延长自动延长。</view><button bindtap="fillBusinessHours" disabled="{{saving || shiftReviewLoading || shiftSheet.isClosed}}">按当天营业／接客时间填入</button><view class="tip">填入后仍需保存，不会同时改动其他日期。</view><view class="kinds">
         <view class="k {{shiftSheet.kind === 'full' ? 'on' : ''}}" data-k="full" bindtap="pickKind">全天班</view>
         <view class="k {{shiftSheet.kind === 'am' ? 'on' : ''}}" data-k="am" bindtap="pickKind">上午班</view>
         <view class="k {{shiftSheet.kind === 'pm' ? 'on' : ''}}" data-k="pm" bindtap="pickKind">下午班</view>
@@ -64,13 +67,18 @@
         <view class="ct">这么排会有 {{scConflicts.length}} 单落在时段外(已保存,自己决定要不要改预约):</view>
         <view class="cr" wx:for="{{scConflicts}}" wx:key="bookingId">{{item.startTime}}–{{item.endTime}} {{item.customerName}} · {{item.serviceName}}</view>
       </view>
-      <view class="savebtn" bindtap="saveShift">保存 · 时段外不可被预约</view>
+      <view class="tip">顾客时段预览（门店与班次交集）</view>
+    <view class="times"><text>示例总时长（分钟）</text><input type="number" value="{{shiftDuration || 120}}" bindinput="shiftDuration" style="padding:16rpx;min-width:100rpx"/></view>
+    <button bindtap="previewShift" loading="{{shiftReviewLoading}}" disabled="{{shiftReviewLoading}}">核对接客范围与冲突</button>
+    <view wx:if="{{shiftReviewError}}" class="tip">{{shiftReviewError}}</view>
+    <view wx:if="{{shiftPreview}}"><view class="tip">{{shiftPreview.note}}</view><view wx:for="{{shiftPreview.previews}}" wx:key="date" class="tip">{{item.date}} · 班次 {{item.startTime}}–{{item.endTime}} · {{item.earliestStart ? '可开始 '+item.earliestStart+'–'+item.latestStart : '没有完整可约时段'}} · 时段外预约 {{item.conflicts.length}} 单<view wx:for="{{item.warnings}}" wx:for-item="w" wx:key="date">{{w.message}}</view><view wx:for="{{item.conflicts}}" wx:for-item="c" wx:key="bookingId">{{c.code}} {{c.startTime}}–{{c.endTime}} {{c.customerName}}</view></view></view>
+    <button class="savebtn" bindtap="saveShift" loading="{{saving}}" disabled="{{saving || shiftReviewLoading}}">{{shiftPreview ? "确认保存排班" : "核对后保存排班"}}</button>
     </view>
   </block>
 
   <!-- 业绩目标板块:上=新增的本月排行卡,下=原有的逐人设置区(位置交互不变) -->
   <block wx:if="{{tab === 'targets'}}">
-    <view class="card">
+    <view class="card" wx:if="{{!setupPreviewActive}}">
       <view class="cardhd">
         <text class="ct">业绩排行</text>
         <view class="seg">
@@ -128,7 +136,7 @@
         </view>
         <view class="tag {{item.active ? 's' : 'n'}}">{{item.active ? '在职' : '已停用'}}</view>
       </view>
-      <view class="btns">
+      <navigator wx:if="{{!setupPreviewActive}}" url="/pages/merchant/record-management/index?kind=technicians&id={{item.id}}" class="b">删除 / 办理离职 ›</navigator><view class="btns">
         <block wx:if="{{item.acct}}">
           <view class="b" data-acctid="{{item.acct.id}}" bindtap="resetPwd">重置密码</view>
           <view class="b {{item.acct.disabled ? 'p' : 'd'}}" data-acctid="{{item.acct.id}}" bindtap="toggleAcct">{{item.acct.disabled ? '启用账号' : '停用账号'}}</view>

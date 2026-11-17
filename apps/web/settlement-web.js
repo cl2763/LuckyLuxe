@@ -127,11 +127,12 @@ window.SettlementWeb = (function () {
       state.pricingConfig=(await request('/admin/member-pricing/config')).config
       state.memberPricing=state.userId?await request('/admin/member-pricing/members/'+encodeURIComponent(state.userId)):null
       state.createRetry={};state.documentGroupId=null;state.deliveryStatus='';state.deliveryOperation=null
-      const [cats, items, techs, dep] = await Promise.all([
+      const [cats, items, techs, dep, bookingContext] = await Promise.all([
         request('/admin/pricing/categories'),
         request('/admin/pricing/items'),
         request('/admin/technicians?roster=1'),
-        request('/admin/deposit-config').catch(function () { return null })
+        request('/admin/deposit-config').catch(function () { return null }),
+        state.bookingId?request(`/admin/settlements?bookingId=${encodeURIComponent(state.bookingId)}`):null
       ])
       state.cats = (cats.categories || []).filter(function (c) { return c.isBookable !== false })
       state.items = (items.items || []).filter(function (i) { return i.isActive !== false })
@@ -159,13 +160,15 @@ window.SettlementWeb = (function () {
         const svc = state.items.find(function (i) { return i.id === ctx.serviceId })
         if (svc && svc.categoryId) g0.catId = svc.categoryId
       }
+      for(const a of bookingContext?.bookingItems||[])if(state.items.some(i=>i.id===a.serviceId))g0.addonIds[a.serviceId]=(g0.addonIds[a.serviceId]||0)+a.qty
+      state.bookingItemWarnings=bookingContext?.bookingItemWarnings||[]
       state.groups = [g0]
       state.ready = true
       render()
       schedulePreview()
       /* D28「继续结算」同口径:该预约已有待签单 → 直接进送签态 */
       if (state.bookingId) {
-        const r = await request(`/admin/settlements?bookingId=${encodeURIComponent(state.bookingId)}`).catch(function () { return null })
+        const r = bookingContext
         const pending = ((r && r.settlements) || []).filter(function (x) { return x.status === 'pending_sign' })
         if (pending.length) { if(state.pricingConfig.active&&pending[0].serviceDocument){const d=await request('/admin/member-pricing/documents/'+encodeURIComponent(pending[0].serviceDocument.id));state.documentGroupId=d.visitGroupId||d.groupId;state.pendingSheets=(await request('/admin/member-pricing/groups/'+encodeURIComponent(state.documentGroupId))).documents}else state.pendingSheets = pending; render(); pollSignState() }
       }
@@ -228,6 +231,7 @@ window.SettlementWeb = (function () {
         ${/* ═══ 单级卡:定金 / 券 / 整单规则(小程序屏 3 上半)═══ */''}
         <div class="sw-card" id="swPayBlock">
           <div class="sw-ch">定金 <span class="sw-hint">按店配收取 · 有收取记录才出开关</span></div>
+          ${(state.bookingItemWarnings||[]).map(m=>`<p class="subtle">${escapeHtml(m)}</p>`).join('')}
           ${v.depositDetail ? window.DepositWorkflow.panel(v.depositDetail.w,state.bookingId,{merchant:true,compact:true}):''}
           ${state.bookingId && state.depositDeductible && (v.depositReceiptCents || 0) > 0 ? `
             <div class="sw-radios">

@@ -12,7 +12,7 @@ export function createStaticServe({ existsSync, statSync, readFileSync, join, no
     const ext = extname(filePath)
     if (ext === '.html') return 'text/html; charset=utf-8'
     if (ext === '.css') return 'text/css; charset=utf-8'
-    if (ext === '.js') return 'application/javascript; charset=utf-8'
+    if (ext === '.js' || ext === '.mjs') return 'application/javascript; charset=utf-8'
     if (ext === '.png') return 'image/png'
     if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
     if (ext === '.svg') return 'image/svg+xml'

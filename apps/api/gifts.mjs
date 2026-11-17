@@ -1,3 +1,4 @@
+import {isRechargePackage} from './package-kind.mjs'
 /* Physical gifts are descriptive snapshots, never money, inventory fulfilment or points. */
 export function normalizeGiftItems(value, apiError = (status, code, message) => Object.assign(new Error(message), { status, code })) {
   if (value === undefined) return []
@@ -23,4 +24,4 @@ export function ensureGiftSchema(db) {
   }
 }
 /* Caller must select the active package inside the current tenant. */
-export function giftSnapshotOfPackage(row) { return row && row.kind === 'recharge' ? readGiftItems(row) : [] }
+export function giftSnapshotOfPackage(row) { return isRechargePackage(row) ? readGiftItems(row) : [] }

@@ -1,0 +1,20 @@
+{
+  "environment": "isolated mini, official automator 0.12.1, base library 3.15.2, local API 4396, synthetic data",
+  "results": [
+    {
+      "suite": "placeholder",
+      "checks": 3,
+      "status": "passed"
+    },
+    {
+      "suite": "overlap",
+      "checks": 4,
+      "status": "passed"
+    },
+    {
+      "suite": "home-sections",
+      "checks": 9,
+      "status": "passed"
+    }
+  ]
+}

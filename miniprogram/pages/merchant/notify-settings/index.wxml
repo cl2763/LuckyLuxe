@@ -1,3 +1,4 @@
+<setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
 <view class="page {{themeClass}}">
   <view wx:if="{{loading}}" class="empty">加载中…</view>
   <block wx:else>

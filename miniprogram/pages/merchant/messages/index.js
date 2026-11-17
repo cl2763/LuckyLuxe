@@ -25,6 +25,7 @@ Page({
   }catch(e){if(generation===this._load)this.setData({error:e.message||'读取消息失败，请重试。'})}
   finally{this._opening=false}
  },
+ setupReview(){if(this.data.detail?.action==='setup_review')require('../../../utils/nav').to('/pages/merchant/setup-review/index')},
  booking(){const id=this.data.detail?.bookingId;if(id)require('../../../utils/nav').to('/pages/merchant/orders/index?bookingId='+encodeURIComponent(id))},
  close(){this.setData({detail:null})}
 })

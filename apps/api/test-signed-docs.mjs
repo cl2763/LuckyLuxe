@@ -456,11 +456,11 @@ check(`J-105d 🔴 乙档「涉钱落角色词」剩 ${j105.length} 处 ≤ 棘�
    (同族:J-105d 那把「剩余只许降」——一个盯剩余、一个盯已修,两头夹住。) */
 const LS_ACTOR_FLOOR = 34   /* 4 → +10 → +10 → +10 ⇒ 34。**只许涨** */
 // Standalone recharge was extracted verbatim; keep its original actor call in this coverage floor.
-const lsActor = ['local-server.mjs','stored-value-recharge-routes.mjs'].reduce((n,file)=>n+(codeOnly(readFileSync(join(ROOT,'apps/api',file),'utf8')).match(/actorOf\(adminSession\)/g)||[]).length,0)
-check(`J-105e 🔴 第一批两个小文件精确:退款 3 · 冲销 1;主服务及拆出的充值模块现 ${lsActor} 处 ≥ 下限 ${LS_ACTOR_FLOOR}(**只许涨**)`,
+const lsActor = ['local-server.mjs','stored-value-recharge-routes.mjs','operational-setup-routes.mjs','recurring-setup-routes.mjs'].reduce((n,file)=>n+(codeOnly(readFileSync(join(ROOT,'apps/api',file),'utf8')).match(/actorOf\(adminSession\)/g)||[]).length,0)
+check(`J-105e 🔴 第一批两个小文件精确:退款 3 · 冲销 1;主服务及拆出的充值、配置模块现 ${lsActor} 处 ≥ 下限 ${LS_ACTOR_FLOOR}(**只许涨**)`,
   (codeOnly(readFileSync(join(ROOT, 'apps/api/refund-routes.mjs'), 'utf8')).match(/actorOf\(adminSession\)/g) || []).length === 3
   && /makeActorOf\(\{ apiError \}\)\(adminSession\)/.test(codeOnly(readFileSync(join(ROOT, 'apps/api/finance-reverse.mjs'), 'utf8')))
-  && lsActor >= LS_ACTOR_FLOOR, `主服务及充值模块 ${lsActor} < ${LS_ACTOR_FLOOR}`)
+  && lsActor >= LS_ACTOR_FLOOR, `主服务及充值、配置模块 ${lsActor} < ${LS_ACTOR_FLOOR}`)
 check('J-105f 🔴 反向守:这把尺子咬得动 —— 喂它一行「涉钱 + 角色词兜底」必须中',
   (() => { const probe = "      createdBy: adminSession.email || 'owner'   // INSERT INTO finance_transactions"
     return (probe.match(ACTOR_EXPR) || []).length === 1 && MONEY_CTX.test(probe) })())

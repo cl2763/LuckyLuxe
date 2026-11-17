@@ -1,0 +1,15 @@
+{
+  "scope": "isolated synthetic owner; actual element.input and element.tap; no production connection",
+  "checks": [
+    "原生输入账号密码并点击登录成功",
+    "次卡实际点击进入第1次保留期限",
+    "次卡实际点击进入第2次保留期限",
+    "次卡实际点击进入第3次保留期限",
+    "次卡实际点击进入第4次保留期限",
+    "次卡实际点击进入第5次保留期限",
+    "原生修改有效天数并保存后接口回读一致",
+    "重新打开次卡显示保存值",
+    "无原生脚本异常"
+  ],
+  "errors": []
+}

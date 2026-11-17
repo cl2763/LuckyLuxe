@@ -5,15 +5,20 @@ const theme = require('./utils/theme')
 const rawPage = Page
 Page = function (options) {
   const opts = options || {}
+  const userOnLoad = opts.onLoad
+  opts.onLoad = function(...args){if(!require('./utils/setup-preview').beforeShow(this))return;return userOnLoad ? userOnLoad.apply(this,args) : undefined}
+  for(const key of ['onHide','onUnload']){const original=opts[key];opts[key]=function(...args){require('./utils/config-sync').stop(this);return original?.apply(this,args)}}
   const userOnShow = opts.onShow
   opts.data = Object.assign({ themeClass: theme.themeClass() }, opts.data || {})
   opts.onShow = function pageOnShowWithTheme(...args) {
+    if(!require('./utils/setup-preview').beforeShow(this))return
     try {
       const cls = theme.themeClass()
       if (this.data.themeClass !== cls) this.setData({ themeClass: cls })
       theme.applyChrome()
       if (opts.onShareAppMessage && wx.showShareMenu) wx.showShareMenu({ menus: opts.onShareTimeline ? ['shareAppMessage', 'shareTimeline'] : ['shareAppMessage'] })
     } catch (e) { console.warn('[theme] 套档位失败', e && e.message) }
+    require('./utils/config-sync').start(this)
     return userOnShow ? userOnShow.apply(this, args) : undefined
   }
   return rawPage(opts)

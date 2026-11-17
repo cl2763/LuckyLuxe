@@ -1,0 +1,146 @@
+{
+  "verifiedAt": "2026-11-15T16:10:53.789717+00:00",
+  "commit": "e351397a5daeb3fa07b1c7374346dfbfe5eb7e6a",
+  "deploymentId": "3fbdb38a-0ecc-4b39-a841-529608ccfc80",
+  "deploymentStatus": "SUCCESS",
+  "node": "22.11.0",
+  "health": {
+    "ok": true,
+    "commit": "e351397",
+    "adminBuild": "97eb60a4",
+    "dataScope": "live",
+    "demoLoginAllowed": false,
+    "guestIdUnsigned": false
+  },
+  "dataComparison": {
+    "preBackupSha256": "7580449f87d69ed292b6dd3aa5dd47a517e3aa78bad041e90e212103571901de",
+    "postBackupSha256": "4df9371ee975b60cf82383c7a85dff9a60501a5d5a8bb5b16343b7731f271249",
+    "oldTables": 130,
+    "oldRows": 12146,
+    "changedOrRemoved": [],
+    "addedRowsInOldTables": {},
+    "changedTriggers": [],
+    "oldTriggers": 47,
+    "changedIndexes": [],
+    "oldIndexes": 220,
+    "newTables": [
+      "deposit_settlement_snapshots",
+      "deposit_workflow_operations"
+    ],
+    "integrity": "ok"
+  },
+  "readOnlyQueries": {
+    "newSchema": [
+      {
+        "name": "deposit_settlement_snapshots",
+        "type": "table"
+      },
+      {
+        "name": "deposit_workflow_operations",
+        "type": "table"
+      }
+    ],
+    "counts": [
+      {
+        "users": 674,
+        "bookings": 1246,
+        "settlements": 13,
+        "stored_transactions": 27
+      }
+    ],
+    "newRows": [
+      {
+        "deposit_operations": 0,
+        "deposit_snapshots": 0
+      }
+    ],
+    "pricingActivation": [
+      {
+        "tenant_id": "demo-ai",
+        "active": 1,
+        "revision": 1
+      }
+    ]
+  },
+  "webSmoke": [
+    {
+      "file": "apps/web/admin.js",
+      "url": "https://api.jingshengyouji.com/web/admin.js",
+      "sha256": "9e397acf21ed5c88417961cab1656a0c08c0b349e46d70bafc5ea3d276fac3ea",
+      "matches": true
+    },
+    {
+      "file": "apps/web/customer.js",
+      "url": "https://api.jingshengyouji.com/web/customer.js",
+      "sha256": "f03a5cd26177df9a7390f393045f2df7c456aed33d8393981ca49be958793e7b",
+      "matches": true
+    },
+    {
+      "file": "apps/web/booking-checkout.js",
+      "url": "https://api.jingshengyouji.com/web/booking-checkout.js",
+      "sha256": "105c490821c7e6638eeaf9546a3a9281213abc0c9f8c32ead227a71b37ca1efa",
+      "matches": true
+    },
+    {
+      "file": "apps/web/deposit-workflow.js",
+      "url": "https://api.jingshengyouji.com/web/deposit-workflow.js",
+      "sha256": "4b2fed150aa787b783c8cdaa6a68cd1e24c01d64d0991cd69c084a4d1fa2b0f1",
+      "matches": true
+    },
+    {
+      "file": "apps/web/deposit-workflow.css",
+      "url": "https://api.jingshengyouji.com/web/deposit-workflow.css",
+      "sha256": "0e2fba5a364fe79a8cbf86962f325e92e7d9bcfc0b6bb5acaa99df70fce97c95",
+      "matches": true
+    },
+    {
+      "file": "apps/web/settlement-web.js",
+      "url": "https://api.jingshengyouji.com/web/settlement-web.js",
+      "sha256": "c71f6b848be11c8f9935c2cf8687bab02d1688aedcc64ce75004b698d72cae7d",
+      "matches": true
+    },
+    {
+      "file": "apps/web/today-board.js",
+      "url": "https://api.jingshengyouji.com/web/today-board.js",
+      "sha256": "27d9411c18478e7096ea358d01f05bcb80040c67d38aeef7c4a46c8fac51a809",
+      "matches": true
+    },
+    {
+      "route": "/health",
+      "tenant": "demo-ai",
+      "status": 200,
+      "json": true
+    },
+    {
+      "route": "/stores",
+      "tenant": "demo-ai",
+      "status": 200,
+      "json": true
+    },
+    {
+      "route": "/services?type=nail",
+      "tenant": "demo-ai",
+      "status": 200,
+      "json": true
+    },
+    {
+      "route": "/store/deposit-policy",
+      "tenant": "demo-ai",
+      "status": 200,
+      "json": true
+    },
+    {
+      "publicWebDomain": "www.luckyluxeatelier.com",
+      "adminSourceMatches": true
+    }
+  ],
+  "miniProgram": {
+    "version": "1.4.1",
+    "bundle": "a83439eaace31e4c",
+    "uploaded": true,
+    "submittedForReview": false,
+    "released": false,
+    "mainPackageBytes": 1432894,
+    "totalPackageBytes": 4338498
+  }
+}

@@ -7903,6 +7903,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .dh-delta-none { background: var(--flatbg); color: var(--flat); }
 .dh-locked { color: var(--herosub); }
 .dh-truth { color: var(--herosub); margin: 8px 0; }
+.dh-bottom .dh-truth { color: var(--sub); }
 .dh-skeleton .dh-sk-line { height: 18px; margin: 10px 0; background: var(--herogrid); }
 
 /* 折线:描边金色 + 渐变填充(.35 → 0)+ 末点圆环 —— 三件缺一件都不是图上那条线 */
@@ -8094,3 +8095,25 @@ input[type="checkbox"], input[type="radio"] {
 .guide-photo-button{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.guide-web-fields button{border:1px solid var(--line);border-radius:999px;padding:8px 14px;background:var(--card);color:var(--ink);cursor:pointer}.guide-web-fields button.primary{background:var(--brandd);color:var(--hero)}.guide-web-fields button:disabled{opacity:.5;cursor:default}.guide-web-fields textarea{box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--card);color:var(--ink)}
 
 .guide-web-row>.guide-photo-button{width:120px;flex:0 0 120px;padding:0;border:0}.guide-web-row.is-preview>.guide-photo-button{width:100%}.guide-dialog-image{display:block;max-width:85vw;max-height:80vh}
+
+/* Member shopping shortcuts reuse the existing public catalog and points page. */
+.member-shopping-web { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0; }
+.shopping-entry-web { display:flex;flex-direction:column;gap:8px;padding:20px;text-align:left;min-width:0;color:var(--ink);background:var(--card);border:1px solid var(--line); }
+.shopping-entry-web strong { color:var(--ink); }
+.shopping-entry-web span { color:var(--sub);font-size:14px; }
+.web-member-card .member-assets strong,.web-member-card .member-assets .asset-hint,.web-member-card .web-member-extra { color:var(--herogold); }
+.web-member-card .member-assets span,
+.web-member-card .web-level-pill,
+.web-member-card .web-level-pill small,
+.web-member-card .member-code-chip { color:var(--heroink); }
+.web-member-card .member-provider,
+.web-member-card .img-placeholder { color:var(--herosub); }
+.web-member-card .img-placeholder { border-color:var(--herogrid); }
+.web-member-card .img-placeholder span { color:inherit; opacity:1; }
+.web-member-card .img-placeholder svg { opacity:1; }
+
+/* 保留原有背景，仅保留深色会员卡上的文字配色。 */
+.web-member-card .web-level-pill small { color:var(--herogold); }
+
+/* Approved feedback U01: comparable package fields; preserve existing theme tokens. */
+.package-table-wrap{overflow:auto;padding-bottom:12px}.package-table{width:100%;border-collapse:collapse;text-align:left;min-width:850px}.package-table th,.package-table td{padding:18px 14px;border-bottom:1px solid var(--line);vertical-align:top}.package-table th{font-weight:600;white-space:nowrap}.package-table td:first-child{min-width:150px;max-width:240px;overflow-wrap:anywhere}.package-table td:nth-child(4){max-width:220px;overflow-wrap:anywhere}.package-table .subtle{margin-top:6px}.package-actions{display:flex;align-items:flex-start;gap:10px;min-width:120px}.package-actions summary{cursor:pointer;padding:8px 10px;white-space:nowrap}.package-more{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:8px}.package-more button{white-space:nowrap}

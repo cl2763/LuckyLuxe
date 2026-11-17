@@ -91,6 +91,7 @@ Page({
         const rr = await api.adminGet('/admin/segment-rules')
         if (rr && rr.rules) this.setData({ rules: rr.rules })
       } catch (e) { /* 默认规则 */ }
+      if(require('../../../utils/setup-preview').active()){this.setData({scopeNote:'本次只预览分层规则，顾客名单与人数未加载。'});this.openRules();return}
       const TH = this.data.rules
       const r = await api.adminGet('/admin/customers')
       /* 员工受限视图:后端明确回了 scope='mine' —— 只按**它给的字段**渲染。

@@ -1,3 +1,4 @@
+import {assertRecordActive,activeRecords} from './record-lifecycle.mjs'
 import {makeActorOf} from './actor-name.mjs'
 import {createHash} from 'node:crypto'
 import {PRICING_CONTEXT} from './member-pricing-policy.mjs'
@@ -5,6 +6,7 @@ export const pricingDigest = value => createHash('sha256').update(JSON.stringify
 export function createMemberPricingCalculation({db,policy,apiError,balanceOf}) {
   const actorOf=makeActorOf({apiError})
   function prepare(tid,uid,body,admin) {
+    assertRecordActive(db,apiError,tid,'customers',uid)
     const config=policy.config(tid)
     if(!config.active) throw apiError(409,'PRICING_NOT_ENABLED','新版结算尚未启用。')
     const current=policy.discount(tid,uid),membership=policy.getMembershipConfig(tid)
@@ -34,7 +36,7 @@ export function createMemberPricingCalculation({db,policy,apiError,balanceOf}) {
     let recharge=null,rateBps=current.rateBps,reason='',suggestedRateBps=current.rateBps,suggestionSource=current.rateBps===null?'store-default':'member',manuallySelected=false
     if(rs) {
       if(!['owner','staff'].includes(admin?.role)) throw apiError(403,'FORBIDDEN','需要员工充值权限。')
-      const pkg=rs.rechargePackageId?db.prepare("SELECT * FROM membership_packages WHERE tenant_id=? AND id=? AND kind='recharge' AND is_active=1").get(tid,String(rs.rechargePackageId)):null
+      const pkg=rs.rechargePackageId?db.prepare("SELECT * FROM membership_packages WHERE tenant_id=? AND id=? AND kind IN ('recharge','stored_value') AND is_active=1").get(tid,String(rs.rechargePackageId)):null
       if(rs.rechargePackageId&&!pkg) throw apiError(404,'PACKAGE_NOT_FOUND','充值套餐不存在或已下架。')
       const amount=pkg?pkg.price_cents:rs.rechargeAmountCents
       if(!Number.isSafeInteger(amount)||amount<=0||amount>100000000) throw apiError(400,'INVALID_RECHARGE','充值金额无效。')

@@ -1,5 +1,5 @@
 // A merchant inbox reads existing event sources; reading never rewrites notification history.
-export function createMerchantMessages({db, apiError, json, localParts, tenantTimezone}) {
+export function createMerchantMessages({db, apiError, json, localParts, tenantTimezone,setupSource=()=>[]}) {
   function ensureSchema() {
     db.exec(`CREATE TABLE IF NOT EXISTS merchant_message_reads (
       tenant_id TEXT NOT NULL, account_id TEXT NOT NULL, message_id TEXT NOT NULL,
@@ -18,12 +18,13 @@ export function createMerchantMessages({db, apiError, json, localParts, tenantTi
       return db.prepare('SELECT id,type,message,created_at,read_at FROM staff_nudges WHERE tenant_id=? AND technician_id=? ORDER BY created_at DESC,id DESC LIMIT 100')
         .all(tid,admin.technicianId).map(r=>({id:'nudge:'+r.id,title:r.type.startsWith('duty:')?'值日提醒':'工作提醒',text:r.message,at:r.created_at,readAt:r.read_at}))
     }
-    return db.prepare(`SELECT id,type,payload_json,created_at,booking_id FROM reminder_tasks
+    const bookings=db.prepare(`SELECT id,type,payload_json,created_at,booking_id FROM reminder_tasks
       WHERE tenant_id=? AND type IN ('booking_created','booking_rescheduled','booking_cancelled')
       ORDER BY created_at DESC,id DESC LIMIT 100`).all(tid).map(r=>{
         let payload;try{payload=JSON.parse(r.payload_json)}catch{payload={}}
         return {id:'booking:'+r.id,title:({booking_created:'新预约',booking_rescheduled:'预约改期',booking_cancelled:'预约取消'})[r.type],text:typeof payload?.text==='string'?payload.text:'该预约事件的消息内容暂不可用。',at:r.created_at,bookingId:r.booking_id}
       })
+    return [...bookings,...setupSource(tid,admin)].sort((a,b)=>b.at.localeCompare(a.at)||b.id.localeCompare(a.id)).slice(0,100)
   }
   function list(tid,admin) {
     const key=identity(admin)

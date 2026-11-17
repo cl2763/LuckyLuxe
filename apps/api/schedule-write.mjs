@@ -1,3 +1,4 @@
+import {bookingWindow,acceptanceForDate} from './booking-window.mjs'
 import { isTime, dateValue as checkedDate } from './schedule-input.mjs'
 /* Shared write boundary for single/batch shifts and employee requests. No financial writes. */
 export function createScheduleWrite({ db, currentTenantId, defaultStoreId, specialDateFor, tenantTimezone, localParts, readBody, json, apiError, randomId, actorOf }) {
@@ -8,7 +9,8 @@ export function createScheduleWrite({ db, currentTenantId, defaultStoreId, speci
     const store=db.prepare('SELECT id FROM stores WHERE tenant_id=? AND is_active=1 LIMIT 1').get(tid)?.id || defaultStoreId()
     const special=specialDateFor(store,date)
     const row=special || db.prepare('SELECT * FROM business_hours WHERE store_id=? AND weekday=?').get(store,new Date(`${date}T12:00:00Z`).getUTCDay())
-    return { isClosed: !row || !!row.is_closed, openTime: row&&!row.is_closed?row.open_time:null, closeTime: row&&!row.is_closed?row.close_time:null }
+    const acceptance=acceptanceForDate(db,store,date,Boolean(special),tid)
+    return { bookingMode:acceptance.mode,isClosed: !row || !!row.is_closed, openTime: row&&!row.is_closed?row.open_time:null, closeTime: row&&!row.is_closed?(acceptance.mode==='latest_start'?acceptance.latestStartTime||row.close_time:row.close_time):null }
   }
   function resolve(input,date,tid) {
     dateValue(date)
@@ -27,21 +29,35 @@ export function createScheduleWrite({ db, currentTenantId, defaultStoreId, speci
   }
   function warningsFor(date,r,tid) { const h=hours(date,tid); if(!r.isWorking)return []; if(h.isClosed)return [{date,message:'当天店休，排班不会自动开放顾客预约。请核对营业设置。'}]; if(r.startTime<h.openTime||r.endTime>h.closeTime)return [{date,message:`排班超出营业时间 ${h.openTime}–${h.closeTime}，顾客预约仍受营业时间限制。`}];return [] }
   function conflictsFor(tech,date,r,tid) {
-    const tz=tenantTimezone(tid)
+    const tz=tenantTimezone(tid),h=hours(date,tid)
     return db.prepare("SELECT id,public_code,appointment_start,appointment_end,user_id,service_id FROM bookings WHERE tenant_id=? AND technician_id=? AND status IN ('PENDING_PAYMENT','CONFIRMED','IN_PROGRESS')").all(tid,tech).filter(b=>{
       const start=localParts(b.appointment_start,tz), end=localParts(b.appointment_end,tz)
-      return start.date===date&&(!r.isWorking||start.time<r.startTime||end.time>r.endTime||end.date!==date)
+      return start.date===date&&(!r.isWorking||start.time<r.startTime||(h.bookingMode==='latest_start'?start.time>r.endTime:end.time>r.endTime||end.date!==date))
     }).map(b=>({date,technicianId:tech,bookingId:b.id,code:b.public_code,startTime:localParts(b.appointment_start,tz).time,endTime:localParts(b.appointment_end,tz).time,customerName:db.prepare('SELECT display_name FROM users WHERE id=? AND tenant_id=?').get(b.user_id,tid)?.display_name||'散客',serviceName:db.prepare('SELECT name_zh FROM services WHERE id=? AND tenant_id=?').get(b.service_id,tid)?.name_zh||'服务'}))
   }
   const put=db.prepare('INSERT INTO technician_schedules (technician_id,date,start_time,end_time,is_working) VALUES (?,?,?,?,?) ON CONFLICT(technician_id,date) DO UPDATE SET start_time=excluded.start_time,end_time=excluded.end_time,is_working=excluded.is_working')
-  function transaction(fn) {db.exec('BEGIN IMMEDIATE');try{const out=fn();db.exec('COMMIT');return out}catch(e){db.exec('ROLLBACK');throw e}}
+  function transaction(fn) {db.exec('SAVEPOINT schedule_write');try{const out=fn();db.exec('RELEASE schedule_write');return out}catch(e){db.exec('ROLLBACK TO schedule_write; RELEASE schedule_write');throw e}}
   function techExists(id,tid) { if(!db.prepare('SELECT id FROM technicians WHERE id=? AND tenant_id=?').get(id,tid))throw apiError(404,'NOT_FOUND','找不到本店技师。') }
   function apply(entries,tid) {return transaction(()=>{const conflicts=[],warnings=[]; for(const a of entries){conflicts.push(...conflictsFor(a.tech,a.date,a,tid));warnings.push(...warningsFor(a.date,a,tid));put.run(a.tech,a.date,a.startTime,a.endTime,a.isWorking?1:0)}return {conflicts,warnings}})}
   async function route(req,res,{path,adminSession}) {
     const single=path.match(/^\/admin\/technicians\/([^/]+)\/schedule$/), resolution=path.match(/^\/admin\/schedule-requests\/([^/]+)\/(set-off|handled|reject)$/)
-    if(!(single&&req.method==='PATCH')&&path!=='/admin/schedule-settings'&&path!=='/admin/schedule-batch'&&path!=='/admin/schedule-requests'&&!(resolution&&req.method==='POST'))return false
+    if(!(single&&req.method==='PATCH')&&path!=='/admin/schedule-preview'&&path!=='/admin/schedule-settings'&&path!=='/admin/schedule-batch'&&path!=='/admin/schedule-requests'&&!(resolution&&req.method==='POST'))return false
     const tid=currentTenantId(), owner=()=>{if(adminSession.role!=='owner')throw apiError(403,'FORBIDDEN','Owner permission is required.')}
     const send=(status,data)=>{json(res,status,data);return true}
+    if(path==='/admin/schedule-preview'&&req.method==='POST'){
+      const body=await readBody(req),tech=String(body.technicianId||'');techExists(tech,tid)
+      if(adminSession.role!=='owner'&&tech!==adminSession.technicianId)throw apiError(403,'FORBIDDEN','只能查看本人班次。')
+      const duration=Number(body.durationMin??120);if(!Number.isInteger(duration)||duration<1||duration>2880)throw apiError(400,'BAD_REQUEST','示例时长须为1–2880分钟。')
+      const weeks=Number(body.applyToFollowingWeeks||0);if(!Number.isInteger(weeks)||weeks<0||weeks>26)throw apiError(400,'BAD_REQUEST','重复周数须为0–26。')
+      dateValue(body.date)
+      const previews=[]
+      for(let i=0;i<=weeks;i++){
+        const next=new Date(body.date+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+i*7);const date=next.toISOString().slice(0,10),r=resolve(body,date,tid),h=hours(date,tid)
+        const w=bookingWindow({dayOpen:h.openTime,dayClose:h.closeTime,mode:h.bookingMode,durationMin:duration,schedule:{is_working:r.isWorking,start_time:r.startTime,end_time:r.endTime}}),fmt=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')
+        previews.push({date,startTime:r.startTime,endTime:r.endTime,mode:h.bookingMode,earliestStart:w&&w.lastStartMin>=w.startMin?fmt(w.startMin):null,latestStart:w&&w.lastStartMin>=w.startMin?fmt(w.lastStartMin):null,conflicts:conflictsFor(tech,date,r,tid),warnings:warningsFor(date,r,tid)})
+      }
+      return send(200,{durationMin:duration,previews,note:'这是门店与班次交集的理论范围；实际预约还须扣除已有占位。预览不会保存排班。'})
+    }
     if(single&&req.method==='PATCH') {
       owner();const tech=single[1];techExists(tech,tid);const body=await readBody(req);dateValue(body.date)
       const weeks=body.applyToFollowingWeeks===undefined?0:Number(body.applyToFollowingWeeks)
@@ -54,12 +70,7 @@ export function createScheduleWrite({ db, currentTenantId, defaultStoreId, speci
       if(req.method==='GET')return send(200,{afternoonStart:splitOf(tid)})
       if(req.method==='PUT'){owner();const body=await readBody(req);if(!isTime(body.afternoonStart))throw apiError(400,'BAD_REQUEST','上下午分界格式应为有效 HH:MM。');db.prepare("INSERT INTO tenant_settings(tenant_id,key,value,updated_at) VALUES (?,'afternoon_start',?,?) ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(tid,body.afternoonStart,now());return send(200,{afternoonStart:body.afternoonStart})}
     }
-    if(path==='/admin/schedule-batch'&&req.method==='POST') {
-      owner();const body=await readBody(req)
-      if(!Array.isArray(body.entries)||!body.entries.length||body.entries.length>400)throw apiError(400,'BAD_REQUEST','一次需要 1–400 条排班。')
-      const entries=body.entries.map(e=>{techExists(e.technicianId,tid);return {tech:e.technicianId,date:dateValue(e.date),...resolve(e,e.date,tid)}})
-      return send(200,{applied:entries.length,...apply(entries,tid)})
-    }
+    if(path==='/admin/schedule-batch'&&req.method==='POST'){owner();return send(200,configureBatch(tid,await readBody(req)))}
     if(path==='/admin/schedule-requests') {
       if(req.method==='POST') {
         const body=await readBody(req);dateValue(body.date)
@@ -81,5 +92,20 @@ export function createScheduleWrite({ db, currentTenantId, defaultStoreId, speci
     }
     return false
   }
-  return {route}
+  function configureBatch(tid,body,{initialOnly=false}={}){
+    if(!Array.isArray(body.entries)||!body.entries.length||body.entries.length>400)throw apiError(400,'BAD_REQUEST','一次需要 1–400 条排班。')
+    const seen=new Set(),entries=body.entries.map(e=>{techExists(e.technicianId,tid);const k=e.technicianId+'|'+e.date;if(seen.has(k))throw apiError(400,'DUPLICATE_SHIFT','同一天同一技师只能安排一个班次。');seen.add(k);return {tech:e.technicianId,date:dateValue(e.date),...resolve(e,e.date,tid)}})
+    return transaction(()=>{
+      if(initialOnly){const today=localParts(new Date().toISOString(),tenantTimezone(tid)).date
+        for(const e of entries){
+          if(e.date<today)throw apiError(400,'PAST_SCHEDULE','初始配置不能改历史班表。')
+          if(db.prepare('SELECT 1 FROM technician_schedules WHERE technician_id=? AND date=?').get(e.tech,e.date))throw apiError(409,'EXISTING_SCHEDULE','这一天已有排班，请由老板在正常排班页核对，不覆盖已有班表。')
+          if(conflictsFor(e.tech,e.date,e,tid).length)throw apiError(409,'BOOKING_CONFLICT','班次会影响已有预约，请先由老板核对。')
+          if(warningsFor(e.date,e,tid).length)throw apiError(400,'HOURS_CONFLICT','初始班次必须在营业时间内。')
+        }
+      }
+      return {applied:entries.length,...apply(entries,tid)}
+    })
+  }
+  return {route,configureBatch}
 }

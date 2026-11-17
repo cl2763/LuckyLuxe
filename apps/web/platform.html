@@ -12,6 +12,7 @@
          这一行连同本段注释一起删掉。欠账已登记在 handoff/P0-P2开检反馈总表.md 的 D188 条目下。
        · **不许再钉第三页**:店主 06h 裁 #36 原话 ——「钉浅色是躲深色最便宜的一条路,不上闸它会长」。 -->
 <link rel="stylesheet" href="/web/design-tokens.css?v=20260910f-gold">
+<link rel="stylesheet" href="/web/platform-setup-modals.css?v=20261117-feedback1">
 <style>
   /* 🔴 06i 裁 #41(店主现查):`--ink` / `--paper` / `--line` **是合同图令牌名**,
      而这段 <style> 排在 <link design-tokens.css> 之后 —— **页面自己的值赢了**。
@@ -83,6 +84,7 @@
   td.ops .sm{margin-right:4px}
   #page-config .card{max-width:900px!important}
   .ui-dialog-overlay{position:fixed;inset:0;background:#0005;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}.ui-dialog-panel{width:440px;max-width:100%;margin:0}.ui-dialog-panel .section-row{display:flex;gap:8px;justify-content:flex-end}.ui-dialog-panel h2{width:100%;white-space:pre-line}.ui-dialog-panel .primary{background:var(--brand);color:var(--hero)}.ui-dialog-panel input{margin-top:10px}
+  #page-config.setup-open > .tabs,#page-config.setup-open > #configSteps,#page-config.setup-open > [id^="tab-"]{display:none!important}
   .configSteps{max-width:900px;display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.configSteps button{flex:1;min-width:120px;text-align:left}
   .lamps{display:inline-flex;gap:3px}
   .lamp{width:9px;height:9px;border-radius:50%;display:inline-block;cursor:pointer}
@@ -110,7 +112,7 @@
 </style>
 <link rel="stylesheet" href="/web/hours-setup.css?v=20260924-hours-batch">
 <script src="/web/hours-setup.js?v=20260924-hours-batch"></script>
-</head>
+<script src="/web/booking-addons.js?v=20261117-feedback"></script><script src="/web/form-modal.js?v=20261117-modal-guard1"></script></head>
 <body>
 
 <div id="loginWrap">
@@ -231,8 +233,12 @@
       <div class="selbar">
         <span class="muted">当前商家:</span>
         <select id="cfgTenant" onchange="loadConfig()" style="min-width:230px"></select>
-        <span class="muted">改动即时生效到顾客端与 AI 客服</span>
+        <button type="button" onclick="openSetupIntake()">资料与待确认</button>
+        <button type="button" onclick="openSetupPreview()">预览商家端</button>
+        <button type="button" onclick="openSetupWorkbench()">配置草稿与核对</button>
+        <span class="muted">草稿核对后应用；其他入口按保存提示生效</span>
       </div>
+      <div id="setupWorkbenchMount"></div>
       <div id="configSteps" class="configSteps"></div>
       <div class="tabs">
         <button class="tab on" data-tab="store" onclick="tab('store')">门店信息</button>
@@ -949,6 +955,9 @@ createTenant=async function(){const lead=window._pendingLead;const created=await
 
 // ===== 商家配置 =====
 let CFG_T='', CFG_TAB='store', CFG_SEQ=0
+async function openSetupIntake(){if(!CFG_T)return;try{const {openPlatformIntake}=await import('/web/platform-setup-intake.mjs?v=20261117-modal-guard1');await openPlatformIntake({tenantId:CFG_T,headers:()=>TOKEN?{authorization:'Bearer '+TOKEN}:{},confirm:message=>UIDialog.confirm(message)})}catch(e){toast(e.message)}}
+async function openSetupPreview(){if(!CFG_T)return;try{const {openMerchantPreview}=await import('/web/platform-setup-preview.mjs?v=20261117-feedback1');await openMerchantPreview({tenantId:CFG_T,api,module:CFG_TAB==='member'?'membership':'pricing'})}catch(e){toast(e.message)}}
+async function openSetupWorkbench(){if(!CFG_T||$('setupWorkbenchMount').firstChild)return;const tid=CFG_T;try{const {openSetupWorkbench:open}=await import('/web/platform-setup-workbench.mjs?v=20261117-feedback1');if(tid!==CFG_T)return;$('page-config').classList.add('setup-open');await open({tenantId:tid,api,mount:$('setupWorkbenchMount'),confirm:message=>UIDialog.confirm(message),onClose:()=>$('page-config').classList.remove('setup-open'),openMaterials:openSetupIntake,openLegacy:target=>{if(target==='migration'){nav('import');$('impTenant').value=tid;invalidateCustomerImport();invalidateMigrationPackage();loadMigrationHistory()}else tab(target)}})}catch(e){toast(e.message)}}
 function renderConfigSteps(){$('configSteps').innerHTML=(TENANTS.find(t=>t.id===CFG_T)?.onboarding?.steps||[]).map(x=>`<button onclick="tab('${esc(({pricing:'services'}[x.key]||x.key))}')"><b>${esc(x.title)}</b><br><small>${esc(x.note)}</small></button>`).join('')}
 function goConfig(tid,target='store'){CFG_T=tid;CFG_TAB=({pricing:'services'}[target]||target);nav('config')}
 function initConfig(){
@@ -959,6 +968,7 @@ function initConfig(){
 }
 function tab(t){CFG_TAB=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['store','hours','services','techs','kb','member','cats','wecom','serviceImport','owner','launch'].forEach(x=>$('tab-'+x).classList.toggle('hidden',x!==t))}
 async function loadConfig(){
+  const prior=CFG_T;if($('setupWorkbenchMount')._close&&!await $('setupWorkbenchMount')._close()){$('cfgTenant').value=prior;return}
   CFG_T=$('cfgTenant').value||CFG_T
   if(!CFG_T)return
   const tid=CFG_T,seq=++CFG_SEQ
@@ -979,7 +989,8 @@ async function loadConfig(){
     renderConfigSteps()
     tab(CFG_TAB)
     $('stName').value=st.store?st.store.name:'';$('stAddr').value=st.store?st.store.address:'';$('stPhone').value=st.store?st.store.phone:''
-    renderHours(hr.hours||[],hr.hoursGateText);renderServices(sv.services||[]);renderTechs(tc.technicians||[]);renderKb(kb);renderMembership(mb);renderCats(ct)
+    renderHours(hr.hours||[],hr.hoursGateText,hr.bookingAcceptance,hr.configRevision);renderServices(sv.services||[]);renderTechs(tc.technicians||[]);renderKb(kb);renderMembership(mb);renderCats(ct)
+    await openSetupWorkbench()
   }catch(e){if(seq===CFG_SEQ)toast('配置读取失败：'+e.message)}
 }
 let SERVICE_IMPORT=null
@@ -1083,15 +1094,16 @@ async function delCat(id,name,used){
 }
 
 async function saveStore(){const tid=CFG_T;try{await api(`/platform/tenants/${tid}/store`,{method:'PUT',body:JSON.stringify({name:$('stName').value,address:$('stAddr').value,phone:$('stPhone').value})});await loadTenants();$('cfgTenant').querySelectorAll('option').forEach(o=>{const t=TENANTS.find(t=>t.id===o.value);if(t)o.textContent=t.name+'('+t.id+')'});toast('门店信息已保存并同步 AI')}catch(e){toast(e.message)}}
-function renderHours(hours,txt){
+function renderHours(hours,txt,bookingAcceptance,configRevision){
   const tid=CFG_T,seq=CFG_SEQ
   window.HoursSetup.mountSettings($('platformHoursEditor'),{
-    storeId:tid,rows:hours,txt:txt||{},reset:true,escapeHtml:esc,
-    saveHours:values=>api(`/platform/tenants/${tid}/business-hours`,{method:'PUT',body:JSON.stringify({hours:values})}),
+    storeId:tid,rows:hours,bookingAcceptance,configRevision,txt:txt||{},reset:true,escapeHtml:esc,
+    reviewHours:(hours,bookingAcceptance,expectedConfigRevision)=>api(`/platform/tenants/${tid}/business-hours/review`,{method:'POST',body:JSON.stringify({hours,bookingAcceptance,expectedConfigRevision})}),
+    saveHours:(hours,bookingAcceptance,expectedConfigRevision)=>api(`/platform/tenants/${tid}/business-hours`,{method:'PUT',body:JSON.stringify({hours,bookingAcceptance,expectedConfigRevision})}),
     afterSave:async()=>{
       const fresh=await api(`/platform/tenants/${tid}/business-hours`)
       if(tid!==CFG_T||seq!==CFG_SEQ)return
-      renderHours(fresh.hours||[],fresh.hoursGateText);toast('营业时间已保存')
+      renderHours(fresh.hours||[],fresh.hoursGateText,fresh.bookingAcceptance,fresh.configRevision);toast('营业时间已保存')
     }
   })
 }

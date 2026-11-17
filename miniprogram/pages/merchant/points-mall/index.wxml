@@ -1,3 +1,4 @@
+<setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
 <view class="page {{themeClass}}">
   <view class="pt">积分商城</view>
   <view class="ps">奖品=一张券:选券 → 定积分价 → 上架;顾客兑换自动扣分发券,到店照常核销</view>

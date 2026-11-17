@@ -9,7 +9,7 @@ Page({
   data: { tab: 'storefront', loading: true, isOwner: true, shelf: [], mains: [], addons: [], hasTimecards: false },
 
   async onShow() {
-    if (!api.guardMerchant()) return
+    if (!(await api.guardMerchant())) return
     this.setData({ isOwner: api.isOwner() })
     this.load()
   },

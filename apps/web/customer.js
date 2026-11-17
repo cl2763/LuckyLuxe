@@ -584,8 +584,8 @@ async function loadStores() {
   state.heroSlides = Array.isArray(data.heroSlides) ? data.heroSlides : []
 }
 
-async function loadAddOns() {
-  const data = await request('/add-ons')
+async function loadAddOns(serviceId) {
+  const data = await request('/add-ons'+(serviceId?'?serviceId='+encodeURIComponent(serviceId):''))
   state.addOns = data.addOns
 }
 
@@ -1102,7 +1102,7 @@ async function prepareBooking(mode, options = {}) {
   state.referenceAnalysis = null
   state.isAnalyzingReference = false
   state.remark = ''
-  await loadTechnicians()
+  await Promise.all([loadTechnicians(),loadAddOns(state.service.id)])
   await loadAvailability()
   state.view = 'booking'
   render()
@@ -1118,7 +1118,8 @@ async function loadAvailability() {
   const extraDuration = state.addOns
     .filter((item) => state.selectedAddOns.has(item.id))
     .reduce((total, item) => total + item.durationMin, 0)
-  const data = await request(`/availability?storeId=${storeId}&serviceId=${state.service.id}&date=${state.date}&extraDurationMin=${extraDuration}`)
+  const data = await request(`/availability?storeId=${storeId}&serviceId=${state.service.id}&date=${state.date}&extraDurationMin=${extraDuration}&addOnIds=${encodeURIComponent(JSON.stringify([...state.selectedAddOns]))}`)
+  state.availabilityInfo=data
   state.slotsByTech = data.slots
   const entry = state.slotsByTech.find((item) => partyId(item.technician) === state.selectedTechId)
   if (!entry?.slots.includes(state.selectedSlot)) state.selectedSlot = entry?.slots[0] || ''
@@ -1145,12 +1146,14 @@ function renderBookingForm() {
             <label><span>${t('artist')}</span><select data-field="tech">${state.technicians.map((tech) => `<option value="${tech.id}" ${tech.id === state.selectedTechId ? 'selected' : ''}>${tech.name} · ${tech.title}</option>`).join('')}</select></label>
             <label><span>${t('date')}</span><input data-field="date" type="date" value="${state.date}"></label>
           </div>
+          ${entry?.window?`<p class="subtle">营业 ${state.availabilityInfo.dayOpen}–${state.availabilityInfo.dayClose} · 接客 ${entry.window.startTime}–${entry.window.acceptUntil}。本次需 ${state.availabilityInfo.durationMin} 分钟${entry.window.latestStartTime?'，最晚可从 '+entry.window.latestStartTime+' 开始':''}。</p>`:''}
           <div class="slot-grid booking-slots">
             ${slots.length ? slots.map((slot) => `<button class="slot ${slot === state.selectedSlot ? 'active' : ''}" data-slot="${slot}" type="button">${slot}</button>`).join('') : `<div class="empty-state">${t('noSlots')}</div>`}
           </div>
         </div>
       </section>
-      <section class="section">
+      ${entry?.slotDetails?.find(x=>x.time===state.selectedSlot)?`<p class="subtle">预计服务结束：${entry.slotDetails.find(x=>x.time===state.selectedSlot).endLabel}</p>`:''}
+      ${state.addOns.length?`<section class="section">
         <div class="section-row"><h2>${t('addOns')}</h2><span class="subtle">${t('optional')}</span></div>
         <div class="addon-grid">${state.addOns.map((item) => `
           <button class="addon ${state.selectedAddOns.has(item.id) ? 'active' : ''}" data-addon="${item.id}" type="button">
@@ -1158,7 +1161,7 @@ function renderBookingForm() {
             <small>+${money(item.priceCents)} · +${item.durationMin}${t('minutes')}</small>
           </button>
         `).join('')}</div>
-      </section>
+      </section>`:''}
       <section class="section">
         <div class="section-row"><h2>${t('reference')}</h2><span class="subtle">${state.referenceImages.length}/3</span></div>
         <div class="reference-upload-grid">
@@ -1420,6 +1423,10 @@ function renderMe() {
           <div>${t('visits')} ${user.visits || 0} ${t('times')}</div>
         </div>
       </div>
+      <div class="member-shopping-web" aria-label="${state.lang === 'en' ? 'Store offers' : '商城入口'}">
+        <button class="shopping-entry-web card" data-me-target="mall" type="button"><strong>${state.lang === 'en' ? 'Package shop' : '套餐商城'} ›</strong><span>${state.lang === 'en' ? 'Top-ups · Service passes' : '充值套餐 · 次卡'}</span></button>
+        <button class="shopping-entry-web card" data-me-target="pointsMall" type="button"><strong>${state.lang === 'en' ? 'Points mall' : '积分商城'} ›</strong><span>${state.lang === 'en' ? 'Redeem with points' : '使用积分兑换礼遇'}</span></button>
+      </div>
       <section class="section">
         <div class="section-row"><h2>${t('orders')}</h2><button class="section-note-btn" data-order-filter="all" type="button">${t('all')}</button></div>
         <div class="order-entry card">
@@ -1454,7 +1461,6 @@ function renderMe() {
           ${/* 裁定(店主 08-24 二拍):积分商城=**同款小方格**排第一格,不做通栏块;
                 格子里的图片位本身就是配图位——将来换奖品缩略图只换图源不动版。 */''}
           ${[
-            [state.lang === 'zh' ? '积分商城' : 'Points mall', '/assets/icons/c-gift.png', 'pointsMall', 'points'],
             [state.lang === 'zh' ? '我的消息' : 'Messages', '/assets/icons/c-message.png', 'messages', true],
             [state.lang === 'zh' ? '卡包' : 'Card pack', '/assets/icons/c-ticket.png', 'cardPack', true],
             /* 🔴 店主 08-25:「占位功能」四个字生产上顾客看得到 —— 要么做要么藏。
@@ -1470,7 +1476,9 @@ function renderMe() {
               ? (user.redeemablePrizeText || (state.lang === 'zh' ? '用积分换券' : 'Redeem with points'))
               : live === 'store'
                 ? (state.lang === 'zh' ? '全部时间 · 到店指引' : 'Hours · Getting here')
-                : (state.lang === 'zh' ? '次卡 · 优惠券 · 储值' : 'Passes · Coupons · Balance')
+                : target === 'messages'
+                  ? (state.lang === 'zh' ? '预约通知 · 服务消息' : 'Booking updates · Service messages')
+                  : (state.lang === 'zh' ? '次卡 · 优惠券 · 储值' : 'Passes · Coupons · Balance')
             // 其它格是实拍照(铺满),积分格现在放的是线条图标(要留白居中);
             // 将来换成奖品缩略图时把 icon-art 去掉即可,版面不动。
             const imgCls = ' class="menu-img-art"'   // 三格现在都是线条图标(见上面那条注释)
@@ -2407,3 +2415,5 @@ function readCompressedImage(file) {
 }
 
 bootstrap().catch((error) => toast(error.message))
+
+window.ConfigSync.start({request,path:'/config-revision',context:()=>TENANT_ID+'|'+state.view,enabled:()=>!!TENANT_ID,canRefresh:()=>['home','services','mall'].includes(state.view),refresh:async force=>{if(state.view==='booking'){await loadAddOns(state.service.id);await loadAvailability();if(force)render();return}await Promise.all([loadServices(),loadStores()]);if(state.view==='mall')await loadMall();render()}})

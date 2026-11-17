@@ -64,7 +64,10 @@ const mini = (p) => stripJs(readFileSync(new URL(`../../miniprogram/${p}`, impor
   // Explicitly excluded development pages are not part of either upload project.
   const configs = ['../../project.config.json', '../../miniprogram/project.config.json'].map(p => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8')))
   const excluded = pg => configs.every(c => (c.packOptions?.ignore || []).some(x => x.type === 'folder' && pg.startsWith(x.value.replace(/\/$/, '') + '/')))
-  const shipped = onDisk.filter(pg => !excluded(pg))
+  const components=onDisk.filter(pg=>existsSync(new URL(pg+'.json',root))&&JSON.parse(readFileSync(new URL(pg+'.json',root),'utf8')).component===true)
+  const references=registered.flatMap(pg=>Object.values(JSON.parse(readFileSync(new URL(pg+'.json',root),'utf8')).usingComponents||{}))
+  check('子目录组件有明确 component 声明、真实组件实现、模板及页面引用',components.every(pg=>existsSync(new URL(pg+'.wxml',root))&&/Component\s*\(/.test(readFileSync(new URL(pg+'.js',root),'utf8'))&&references.includes('/'+pg)),components.join(' | '))
+  const shipped = onDisk.filter(pg => !excluded(pg)&&!components.includes(pg))
   const unregistered = shipped.filter((pg) => !registered.includes(pg))
   check(`⓪ 反向:上传包中 ${shipped.length} 个页面目录全部在 app.json 里(显式排除的开发页不上传)`,
     unregistered.length === 0, unregistered.join(' | '))

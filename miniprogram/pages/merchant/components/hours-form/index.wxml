@@ -1,0 +1,32 @@
+<view class="hf">
+  <view class="hf-bulk"><view class="hf-bulk-title">预约接客规则</view><picker range="{{modeNames}}" value="{{modeIndex}}" disabled="{{saving || reviewing}}" bindchange="pickMode"><view class="hf-tm">{{modeNames[modeIndex]}} ›</view></picker><view class="hf-bulk-hint">{{modeIndex===1?'最晚开始时刻包含在内。班次结束表示停止接客，服务可延长至次日；仍须避开已有预约。':'按项目和附加服务总时长倒推最晚开始；服务须在营业及技师班次结束前完成。'}} 已保存排班和预约不会自动改动。</view></view>
+  <view class="hf-bulk">
+    <view class="hf-bulk-title">{{txt.batchTitle}}</view>
+    <view class="hf-bulk-times">
+      <picker class="hf-bulk-time" mode="time" value="{{batchStart}}" disabled="{{saving || reviewing}}" bindchange="pickBatchStart">{{batchStart || txt.timePlaceholder}}</picker><text>–</text>
+      <picker class="hf-bulk-time" mode="time" value="{{batchEnd}}" disabled="{{saving || reviewing}}" bindchange="pickBatchEnd">{{batchEnd || txt.timePlaceholder}}</picker>
+    </view>
+    <view class="hf-bulk-actions"><picker class="hf-scope" range="{{scopeLabels}}" value="{{scopeIndex}}" disabled="{{saving || reviewing}}" bindchange="pickScope">{{scopeLabels[scopeIndex]}} ▾</picker><button class="hf-apply" disabled="{{saving || reviewing}}" bindtap="applyBatch">{{scopeIndex === 0 ? txt.applyAll : txt.applyOpen}}</button></view>
+    <view class="hf-bulk-hint">{{scopeIndex === 0 ? txt.hintAll : txt.hintOpen}}<view>{{txt.hintDraft}}</view></view>
+  </view>
+  <view class="hf-feedback {{error ? 'is-error' : ''}}"><text>{{saving ? txt.saving : (message || txt.untouched)}}</text><button wx:if="{{canUndo}}" class="hf-undo" disabled="{{saving || reviewing}}" bindtap="undoBatch">{{txt.undo}}</button></view>
+  <view class="hf-day" wx:for="{{days}}" wx:key="weekday" wx:for-item="d" wx:for-index="i">
+    <switch class="hf-sw" checked="{{d.open}}" disabled="{{saving || reviewing}}" data-i="{{i}}" bindchange="toggleDay" color="#0e6e62" />
+    <text class="hf-dn">{{d.name}}</text>
+    <block wx:if="{{d.open}}">
+      <picker class="hf-tm set" mode="time" value="{{d.openTime}}" disabled="{{saving || reviewing}}" data-i="{{i}}" bindchange="pickOpen">{{d.openTime || txt.timePlaceholder}}</picker><text class="hf-dash">–</text>
+      <picker class="hf-tm set" mode="time" value="{{d.closeTime}}" disabled="{{saving || reviewing}}" data-i="{{i}}" bindchange="pickClose">{{d.closeTime || txt.timePlaceholder}}</picker>
+    </block>
+    <text class="hf-tm ph" wx:else>{{txt.closed || txt.timePlaceholder}}</text>
+  </view>
+  <block wx:if="{{modeIndex===1}}"><view class="hf-bulk-title">每周最晚开始时间</view><view class="hf-day" wx:for="{{days}}" wx:key="weekday" wx:for-item="d" wx:for-index="i" wx:if="{{d.open}}"><text class="hf-dn">{{d.name}}</text><picker class="hf-tm" mode="time" value="{{d.latestStartTime || d.closeTime}}" data-i="{{i}}" disabled="{{saving || reviewing}}" bindchange="pickLatest">{{d.latestStartTime || ('跟随营业结束 '+d.closeTime)}}</picker><button class="hf-undo" data-i="{{i}}" bindtap="clearLatest" disabled="{{saving || reviewing}}">跟随</button></view></block>
+  <view wx:if="{{impact}}" class="hf-bulk">
+    <view class="hf-bulk-title">这次修改会影响什么</view><view class="hf-bulk-hint">{{impact.note}}</view>
+    <view>已保存班次 {{impact.savedShiftCount}} 个 · 结束较早 {{impact.earlierShifts.length}} 个</view>
+    <view wx:for="{{impact.earlierShifts}}" wx:key="index" class="hf-bulk-hint">{{item.date}} · {{item.name}} · {{item.startTime}}–{{item.endTime}}</view>
+    <view>已有预约落在新时段外 {{impact.bookings.length}} 单</view>
+    <view wx:for="{{impact.bookings}}" wx:key="id" class="hf-bulk-hint">{{item.code}} · {{item.date}} {{item.startTime}}–{{item.endDate !== item.date ? item.endDate+' ' : ''}}{{item.endTime}} · {{item.name}}</view>
+  </view>
+  <button class="hf-save {{canSave && !saving ? 'go' : 'dis'}}" disabled="{{!canSave || saving || reviewing}}" bindtap="save">{{reviewing ? '正在核对…' : saving ? txt.saving : storeId ? (impact ? '确认保存营业时间' : '核对修改影响') : (saveLabel || txt.saveButton)}}</button>
+  <view class="hf-note" wx:if="{{!anyOpen}}">{{txt.saveDisabledNote}}</view>
+</view>

@@ -1,0 +1,22 @@
+{
+  "scope": "94925bf synthetic isolated data only; not a production backup rehearsal",
+  "runtime": "Node22.11.0",
+  "checks": [
+    "旧版本真实业务接口生成存量样本：test-membership-config.mjs",
+    "旧版本真实业务接口生成存量样本：test-settlement.mjs",
+    "旧版本真实业务接口生成存量样本：test-schedule-v2.mjs",
+    "第1次升级启动全部旧表旧列逐值一致，原触发器保留",
+    "第2次升级启动全部旧表旧列逐值一致，原触发器保留",
+    "WAL一致副本可打开，原有132张表均保留"
+  ],
+  "originalTables": 132,
+  "originalRows": 267,
+  "newTables": [
+    "platform_setup_drafts",
+    "platform_setup_events",
+    "platform_setup_intake_files",
+    "platform_setup_intake_links",
+    "platform_setup_intakes",
+    "platform_setup_reviews"
+  ]
+}

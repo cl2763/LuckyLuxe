@@ -1,0 +1,13 @@
+{
+  "branchCommit": "94925bfba1053aea4d5467b3df7580b61f5cceff",
+  "mergedCommit": "e351397a5daeb3fa07b1c7374346dfbfe5eb7e6a",
+  "pullRequest": "https://github.com/cl2763/LuckyLuxe/pull/19",
+  "prCI": {
+    "url": "https://github.com/cl2763/LuckyLuxe/actions/runs/43732593537",
+    "conclusion": "success"
+  },
+  "mainCI": {
+    "url": "https://github.com/cl2763/LuckyLuxe/actions/runs/43733211187",
+    "conclusion": "success"
+  }
+}

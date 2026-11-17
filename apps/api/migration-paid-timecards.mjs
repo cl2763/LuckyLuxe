@@ -1,3 +1,4 @@
+import {assertRecordActive} from './record-lifecycle.mjs'
 import {makeActorOf} from './actor-name.mjs'
 import {reconcileMigrationCards} from './migration-card-reconciliation.mjs'
 export function createMigrationPaidTimecards({db,apiError,createHash,randomId,iso,currentTenantId,balanceSource}){
@@ -22,6 +23,7 @@ export function createMigrationPaidTimecards({db,apiError,createHash,randomId,is
   try{
    const old=db.prepare('SELECT request_hash,result_json FROM migration_balance_activations WHERE tenant_id=? AND request_id=?').get(tid,body.requestId)
    if(old){if(old.request_hash!==requestHash)fail(409,'REQUEST_CONFLICT','同一请求的内容已变化。');db.exec('COMMIT');return{...JSON.parse(old.result_json),replayed:true}}
+   assertRecordActive(db,apiError,tid,'customers',uid)
    const source=balanceSource(tid,uid,pid)
    if(source.pending.status!=='pending'||db.prepare('SELECT 1 FROM migration_balance_activations WHERE tenant_id=? AND pending_id=?').get(tid,pid))fail(409,'ALREADY_ACTIVATED','此来源已处理，不能重复分卡启用。')
    if(source.version!==body.confirmVersion)fail(409,'SOURCE_CHANGED','来源已经变化，请重新核对。')

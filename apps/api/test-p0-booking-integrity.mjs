@@ -92,10 +92,13 @@ try {
     check(`${tag}: 实收定金合规改期保留一次，不重复收取`,paidMove.status===200&&paidMove.data.booking.depositCents===10000&&db.prepare("SELECT COUNT(*) n FROM deposit_receipts WHERE booking_id=? AND kind='receipt'").get(movedBooking.id).n===1)
     check(`${tag}: 超定金保留次数明确拒绝，原单18:00不变`,policyMove.status===409&&policyMove.data.error.code==='DEPOSIT_POLICY_REQUIRED'&&db.prepare('SELECT appointment_start FROM bookings WHERE id=?').get(movedBooking.id).appointment_start===paidMove.data.booking.appointmentStart)
     const lash = (await req(`/platform/tenants/${tid}/services`, { method: 'POST', body: { type: 'LASH', nameZh: '45分钟美睫', nameEn: 'Lash', priceCents: 20000, baseDurationMin: 45 } })).data.service
-    const lashInput = { ...input, serviceId: lash.id, time: '14:00', addOns: [{ name: '加项', durationMin: 15, priceCents: 0 }] }
+    const addonCurrent=(await req('/admin/booking-addons',{token:admin})).data.config;
+    const configured=await req('/admin/booking-addons',{token:admin,method:'PUT',body:{enabled:true,expectedRevision:addonCurrent.revision,items:[{id:'lash15',name:'加项',durationMin:15,priceCents:0,isActive:true,serviceIds:[lash.id]}]}});
+    check(`${tag}: 商家配置真实可选15分钟加项`,configured.status===200);
+    const lashInput = { ...input, serviceId: lash.id, time: '14:00', addOns: [{ id:'lash15',name: '加项', durationMin: 15, priceCents: 0 }] }
     const lashBooking = await req('/bookings', { token: customer, tid, method: 'POST', body: lashInput })
     check(`${tag}: 美睫45分钟加15分钟，合计60分钟`, lashBooking.data.booking?.totalDurationMin === 60 && lashBooking.data.booking?.appointmentEndTime === '15:00', JSON.stringify(lashBooking.data).slice(0, 100))
-    const badDuration = await req('/bookings', { token: customer, tid, method: 'POST', body: { ...lashInput, time: '16:00', addOns: [{ durationMin: -30 }] } })
+    const badDuration = await req('/bookings', { token: customer, tid, method: 'POST', body: { ...lashInput, time: '16:00', addOns: [{ id:'lash15', durationMin: -30 }] } })
     check(`${tag}: 负数加项时长被拒绝`, badDuration.status === 400)
     const shortInput={...input,serviceId:lash.id,time:'20:00',addOns:[]}
     const short=await req('/bookings',{token:customer,tid,method:'POST',body:shortInput})

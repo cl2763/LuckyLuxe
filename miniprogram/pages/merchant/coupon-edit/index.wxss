@@ -9,3 +9,5 @@ page{background:var(--paper)}
 .pkv{font-size:25rpx;color:var(--brandd)}.btn {margin-top:26rpx;text-align:center;font-size:28rpx;color:var(--heroink);background:var(--hero);border-radius:999rpx;padding:26rpx 0;letter-spacing:2rpx}
 .btn.off{opacity:.5}
 .note{font-size:21rpx;color:var(--sub);line-height:1.6;margin-top:16rpx;text-align:center}
+
+.scope-section{padding:24rpx;font-size:25rpx;line-height:1.7;border-bottom:1rpx solid var(--line)}.scope-section label{display:flex;align-items:center;gap:16rpx;padding:14rpx 0}

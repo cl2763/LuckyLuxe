@@ -1,0 +1,24 @@
+{
+  "scope": "official automator; isolated local API; native pages, actual input/tap for read-only save rejection; QR delivery not verified",
+  "checks": [
+    "原生会员页面读到本店真实套餐",
+    "只读标记在实际页面显示",
+    "预览保存后留在原页面",
+    "真实接口确认预览保存未改套餐",
+    "原生门店页读取真实店名",
+    "实际小程序页面可读 schedule",
+    "实际小程序页面可读 accounts",
+    "实际小程序页面可读 targets",
+    "实际小程序页面可读 salary",
+    "实际小程序页面可读 customers",
+    "原生预览连续进入 1",
+    "原生预览连续进入 2",
+    "原生预览连续进入 3",
+    "原生预览连续进入 4",
+    "原生预览连续进入 5",
+    "预览期间原商家及顾客登录缓存不变",
+    "退出后原商家及顾客登录缓存不变",
+    "无小程序脚本异常"
+  ],
+  "errors": []
+}

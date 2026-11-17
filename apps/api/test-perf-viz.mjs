@@ -1,3 +1,4 @@
+import {ensurePricingCategory} from './pricing-category-fixture.mjs'
 // P2.5 技师业绩可视化回归(2026-08-08,设计图 V1/V2/V3):
 // ① 排行三维度(业绩/单数/冲卡)排序各自正确
 // ② 口径红线:排行数字与工资试算逐分一致(同一个 monthPerfFromCloses),未日结的天不计入
@@ -35,21 +36,7 @@ async function request(path, options = {}, token = PLATFORM, extraHeaders = {}) 
 
 /* 分类唯一真相律(店主 2026-08-25):建店即落平台三大类(美甲/美睫/护理·其他),
    所以夹具再建同 key 的大类会撞 409 —— 改成「有就用,没有才建」。判据跟着口径走。 */
-async function ensureCategory(token, body) {
-  const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
-  if (made.data && made.data.category) return made.data.category
-  const got = await request('/admin/pricing/categories', {}, token)
-  const list = (got.data && got.data.categories) || []
-  const hit = list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
-  /* 🔴 2026-09-09 全量里见过一次:这里回了个 undefined,后面一路 `Cannot read properties of undefined`,
-     **整套当场炸掉、连是哪一步都看不出来**(重跑两次都绿,是个偶发)。
-     静默失败器族的反面:取不到就**当场说清现场**,别把一个 TypeError 甩给下一个人。 */
-  if (!hit) {
-    throw new Error(`[夹具] 建分类没成、回读也没有:建=${made.status} ${JSON.stringify(made.data).slice(0, 120)}`
-      + ` · 回读=${got.status} 共 ${list.length} 条`)
-  }
-  return hit
-}
+async function ensureCategory(token,body){return ensurePricingCategory({base:BASE_URL,platformToken:PLATFORM,merchantToken:token,body})}
 
 async function newShop(label) {
   const id = `p25-${label}-${RUN_ID}`

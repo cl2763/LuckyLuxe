@@ -159,7 +159,7 @@ export function createMemberPricingPolicy({db, apiError, isMemberOf, getMembersh
     return {...discount(tid,uid),eventId}
   }
   function packageDiscount(tid,id) {
-    if(!db.prepare("SELECT id FROM membership_packages WHERE tenant_id=? AND id=? AND kind='recharge'").get(tid,id)) fail(404,'NOT_FOUND','充值套餐不属于本店。')
+    if(!db.prepare("SELECT id FROM membership_packages WHERE tenant_id=? AND id=? AND kind IN ('recharge','stored_value')").get(tid,id)) fail(404,'NOT_FOUND','充值套餐不属于本店。')
     const r=db.prepare('SELECT * FROM recharge_package_discounts WHERE tenant_id=? AND package_id=?').get(tid,id)
     return {packageId:id,rateBps:r?.rate_bps??null,revision:r?.revision||0}
   }

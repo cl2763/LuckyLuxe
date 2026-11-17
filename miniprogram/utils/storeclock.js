@@ -4,9 +4,11 @@
    CLAUDE.md 的纪律是「所有『今天』按门店时区算」,这里补上:
    /admin/store-clock 给的 today 就是门店时区的今天,拿到后缓存,页面同步读。 */
 const api = require('./api')
+const preview=require('./setup-preview')
 const KEY = 'lucky_store_clock'
 
 function cached() {
+  if(preview.active())return preview.clock()
   const v = wx.getStorageSync(KEY)
   return v && v.today ? v : null
 }
@@ -66,6 +68,7 @@ function storeMoney(cents, decimals) {
 
 async function refreshStoreClock() {
   const r = await api.adminGet('/admin/store-clock')
+  if(preview.active()){preview.setClock(r);return r}
   if (r && r.today) {
     wx.setStorageSync(KEY, {
       today: r.today, timezone: r.timezone || '', at: Date.now(),

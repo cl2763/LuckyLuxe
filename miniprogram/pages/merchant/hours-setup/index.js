@@ -21,7 +21,7 @@ Page({
     this.setData({ saving: true, saveError: '' })
     try {
       /* 七天整份提交;A2「至少一天营业」的最终闸在后端 PUT 里 */
-      await api.adminPut('/admin/business-hours', { hours: e.detail.hours })
+      await api.adminPut('/admin/business-hours', { hours: e.detail.hours,bookingAcceptance:e.detail.bookingAcceptance })
       await api.adminMe(true)   // 修改营业时间后强制刷新旗标缓存
       wx.setStorageSync('lucky_hours_unset', '')
       nav.relaunch('/pages/merchant/orders/index')

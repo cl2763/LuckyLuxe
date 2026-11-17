@@ -1,3 +1,4 @@
+<config-sync-banner changed="{{configSyncChanged}}" error="{{configSyncError}}" checked="{{configSyncChecked}}" bind:retry="configSyncRetry"/>
 <include src="../../templates/media-privacy.wxml" />
 <view class="page home-page {{themeClass}}">
   <text class="store-name-measure" aria-hidden="true">{{storeNameMeasure}}</text>

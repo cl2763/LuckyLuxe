@@ -16,6 +16,7 @@ function shift(d, n) {
 function wdOf(d) { return WK[new Date(`${d}T12:00:00Z`).getUTCDay()] }
 
 Page({
+  ...require('../../../utils/shift-preview').methods('sheet'),
   data: {
     from: '', days: [], techs: [], afternoonStart: '14:30', loading: true,
     isOwner: true, readOnly: false, myTechId: '', isThisWeek: true,
@@ -53,7 +54,7 @@ Page({
         this.data.readOnly ? api.adminGet('/admin/schedule-requests') : Promise.resolve({ requests: [] })
       ])
       if (seq !== this._loadSeq) return
-      let techs = (week.technicians || []).filter((t) => t.isActive !== false)
+      let techs = (week.technicians || []).filter((t) => t.isActive !== false || (week.carryovers||[]).some(c=>c.technicianId===t.id))
       // D11:员工只看自己那一列(看不到同事的班表)
       if (this.data.readOnly) techs = techs.filter((t) => t.id === this.data.myTechId)
       const byKey = {}
@@ -63,14 +64,15 @@ Page({
       const split = settings.afternoonStart || '14:30'
       const today = storeToday()
       const days = (week.days || []).map((d) => {
+        const dayEnd=d.bookingAcceptance?.mode==='latest_start'?(d.bookingAcceptance.latestStartTime||d.closeTime):d.closeTime
         const caps = techs.map((t) => {
           const s = byKey[`${d.date}|${t.id}`]
           // 没排过班 = 跟随门店营业时间(视作全天),与后端 assertBookable 的兜底一致
-          if (!s) return { techId: t.id, name: t.name, kind: d.isClosed ? 'off' : 'full', label: d.isClosed ? '店休' : '全天', start: d.openTime || '', end: d.closeTime || '', working: !d.isClosed, count: counts[`${d.date}|${t.id}`] || 0 }
+          if (!s) return { techId: t.id, name: t.name, kind: d.isClosed ? 'off' : 'full', label: d.isClosed ? '店休' : '全天', start: d.openTime || '', end: dayEnd || '', working: !d.isClosed, count: counts[`${d.date}|${t.id}`] || 0 }
           if (!s.isWorking) return { techId: t.id, name: t.name, kind: 'off', label: '休息', start: s.startTime || '', end: s.endTime || '', working: false, count: counts[`${d.date}|${t.id}`] || 0 }
           const isAm = s.startTime === d.openTime && s.endTime === split
-          const isPm = s.startTime === split && s.endTime === d.closeTime
-          const isFull = s.startTime === d.openTime && s.endTime === d.closeTime
+          const isPm = s.startTime === split && s.endTime === dayEnd
+          const isFull = s.startTime === d.openTime && s.endTime === dayEnd
           return {
             techId: t.id, name: t.name, working: true, start: s.startTime, end: s.endTime,
             kind: isFull ? 'full' : (isAm ? 'am' : (isPm ? 'pm' : 'custom')),
@@ -78,8 +80,9 @@ Page({
             count: counts[`${d.date}|${t.id}`] || 0
           }
         })
+        caps.forEach(c=>{const carry=(week.carryovers||[]).filter(x=>x.date===d.date&&x.technicianId===c.techId);c.carryLabel=carry.length?'前日延续至 '+carry.map(x=>x.endTime).sort().slice(-1)[0]:''})
         return {
-          date: d.date,
+          bookingAcceptance:d.bookingAcceptance,shiftEnd:dayEnd,date: d.date,
           // D5:日期条上直接标出今天,翻页时一眼定位
           isToday: d.date === today,
           title: `${Number(d.date.slice(5, 7))}月${Number(d.date.slice(8))}日 周${wdOf(d.date)}`,
@@ -118,12 +121,14 @@ Page({
       return
     }
     this.setData({
-      conflicts: [], warnings: [],
+      conflicts: [], warnings: [],shiftPreview:null,
       sheet: {
         date, tech, name, kind,
         weekday: wdOf(date),
         start: cap.start || day.openTime || '',
-        end: cap.end || day.closeTime || '',
+        end: cap.end || day.shiftEnd || '',
+        latestMode:day.bookingAcceptance?.mode==='latest_start',
+        businessOpen:day.openTime,businessClose:day.closeTime,cutoff:day.bookingAcceptance?.latestStartTime||day.closeTime,isClosed:day.isClosed,originalRange:cap.working?cap.start+'–'+cap.end:'休息',
         isClosed: day.isClosed,
         repeat: false
       }
@@ -136,6 +141,7 @@ Page({
   toggleRepeat() { this.setData({ 'sheet.repeat': !this.data.sheet.repeat }) },
 
   async saveShift() {
+    if(this.data.saving||this.data.shiftReviewLoading||!await this.ensureShiftReviewed())return
     if (this.data.readOnly || this.data.saving || !this.data.sheet) return
     const s = this.data.sheet
     const body = { date: s.date, applyToFollowingWeeks: s.repeat ? 8 : 0 }

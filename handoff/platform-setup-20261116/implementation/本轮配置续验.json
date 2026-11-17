@@ -1,0 +1,45 @@
+{
+  "scope": "isolated synthetic stores only; no deployment",
+  "suites": [
+    {
+      "suite": "test-platform-setup-workflow.mjs",
+      "status": 0,
+      "checks": 52
+    },
+    {
+      "suite": "test-platform-setup-presentation.mjs",
+      "status": 0,
+      "checks": 9
+    },
+    {
+      "suite": "test-platform-preview-code.mjs",
+      "status": 0,
+      "checks": 20
+    },
+    {
+      "suite": "test-ui-spec.mjs",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "test-file-ratchet.mjs",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "test-credential-scan.mjs",
+      "status": 0,
+      "checks": 27
+    },
+    {
+      "suite": "test-color-usage.mjs",
+      "status": 0,
+      "checks": 37
+    }
+  ],
+  "editorChecks": 72,
+  "workbenchChecks": 23,
+  "webPreviewChecks": 42,
+  "productionDatabaseTouched": false,
+  "originalLocalDatabaseTouched": false
+}

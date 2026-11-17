@@ -25,11 +25,12 @@
               data-date="{{d.date}}" data-tech="{{c.techId}}" data-name="{{c.name}}" data-kind="{{c.kind}}" bindtap="openSheet">
           <text class="cn">{{c.name}}</text>
           <text class="cl">{{c.label}}</text>
+          <text class="cc" wx:if="{{c.carryLabel}}">{{c.carryLabel}}</text>
           <text class="cc" wx:if="{{c.count}}">{{c.count}} 单</text>
         </view>
       </scroll-view>
     </view>
-    <view class="tip">{{readOnly ? '点自己的排班申请休假或调整时段，老板处理后生效。' : '点任意胶囊改这一天该技师的时段。半天胶囊半填色；排班时段直接决定顾客能约的时间。'}}</view>
+    <view class="tip">{{readOnly ? '点自己的排班申请休假或调整时段，老板处理后生效。' : '点任意胶囊改这一天该技师的时段。半天胶囊半填色；可预约范围同时受门店规则限制；最晚开始模式下，班次结束表示停止接客，服务可延长。'}}</view>
   </block>
 
   <view wx:if="{{readOnly && !loading}}" class="request-list">
@@ -38,7 +39,7 @@
     <view wx:elif="{{!requests.length}}" class="tip">暂无申请记录。</view>
     <view wx:for="{{requests}}" wx:key="id" class="request-row"><view>{{item.date}} · {{item.statusLabel}}</view><view class="tip">{{item.note}}</view></view>
   </view>
-  <view wx:if="{{requestSheet}}" class="mask" bindtap="closeRequest"></view>
+  <view wx:if="{{requestSheet}}" class="mask"></view>
   <view wx:if="{{requestSheet}}" class="sheet">
     <view class="sh">申请调整我的排班 · {{requestSheet.date}}</view>
     <view class="tip">写明希望调整的时段或休假原因。这里只提交申请，不直接改变排班。</view>
@@ -48,10 +49,11 @@
     <button class="cancel" bindtap="closeRequest" disabled="{{requestSaving}}">取消</button>
   </view>
   <!-- 屏 4a-2 时段编辑弹层 -->
-  <view wx:if="{{sheet}}" class="mask" bindtap="closeSheet"></view>
+  <view wx:if="{{sheet}}" class="mask"></view>
   <view wx:if="{{sheet}}" class="sheet">
-    <view class="sh">{{sheet.name}} · {{sheet.date}} 周{{sheet.weekday}}</view>
-    <view class="kinds">
+    <button class="cancel" bindtap="closeSheet" disabled="{{saving}}">关闭 ×</button><view class="sh">{{sheet.name}} · {{sheet.date}} 周{{sheet.weekday}}</view>
+    <view class="tip">{{sheet.latestMode ? "班次结束为停止接客时间；服务可延长至次日。" : "服务须在营业与班次结束前完成。"}}</view>
+    <view class="tip">门店营业：{{sheet.isClosed ? '休息' : sheet.businessOpen+'–'+sheet.businessClose}}</view><view wx:if="{{sheet.latestMode}}" class="tip">最晚开始：{{sheet.cutoff}}</view><view class="tip">技师原班次：{{sheet.originalRange}}。已保存班次不会随营业时间延长自动延长。</view><button bindtap="fillBusinessHours" disabled="{{saving || shiftReviewLoading || sheet.isClosed}}">按当天营业／接客时间填入</button><view class="tip">填入后仍需保存，不会同时改动其他日期。</view><view class="kinds">
       <view class="k {{sheet.kind === 'full' ? 'on' : ''}}" data-k="full" bindtap="pickKind">全天</view>
       <view class="k {{sheet.kind === 'am' ? 'on' : ''}}" data-k="am" bindtap="pickKind">上午</view>
       <view class="k {{sheet.kind === 'pm' ? 'on' : ''}}" data-k="pm" bindtap="pickKind">下午</view>
@@ -74,6 +76,11 @@
       <view class="cr" wx:for="{{conflicts}}" wx:key="bookingId">{{item.date}} {{item.startTime}}–{{item.endTime}} {{item.customerName}} · {{item.serviceName}}</view>
     </view>
     <view wx:for="{{warnings}}" wx:key="date" class="request-error">{{item.date}} {{item.message}}</view>
+    <view class="tip">顾客时段预览（门店与班次交集）</view>
+    <view class="times"><text>示例总时长（分钟）</text><input type="number" value="{{shiftDuration || 120}}" bindinput="shiftDuration" style="padding:16rpx;min-width:100rpx"/></view>
+    <button bindtap="previewShift" loading="{{shiftReviewLoading}}" disabled="{{shiftReviewLoading}}">核对接客范围与冲突</button>
+    <view wx:if="{{shiftReviewError}}" class="tip">{{shiftReviewError}}</view>
+    <view wx:if="{{shiftPreview}}"><view class="tip">{{shiftPreview.note}}</view><view wx:for="{{shiftPreview.previews}}" wx:key="date" class="tip">{{item.date}} · 班次 {{item.startTime}}–{{item.endTime}} · {{item.earliestStart ? '可开始 '+item.earliestStart+'–'+item.latestStart : '没有完整可约时段'}} · 时段外预约 {{item.conflicts.length}} 单<view wx:for="{{item.warnings}}" wx:for-item="w" wx:key="date">{{w.message}}</view><view wx:for="{{item.conflicts}}" wx:for-item="c" wx:key="bookingId">{{c.code}} {{c.startTime}}–{{c.endTime}} {{c.customerName}}</view></view></view>
     <button class="save" bindtap="saveShift" loading="{{saving}}" disabled="{{saving}}">保存</button>
   </view>
 </view>

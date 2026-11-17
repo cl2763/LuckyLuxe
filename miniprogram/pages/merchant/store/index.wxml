@@ -1,7 +1,10 @@
+<config-sync-banner changed="{{configSyncChanged}}" error="{{configSyncError}}" checked="{{configSyncChecked}}" bind:retry="configSyncRetry"/>
+<setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
 <view class="page {{themeClass}}">
   <view wx:if="{{loading}}" class="empty">加载中…</view>
 
   <block wx:else>
+    <button wx:if="{{!setupPreviewActive}}" bindtap="goSetupReview">平台配置核对</button>
     <view class="gtitle">门店信息</view>
     <view class="card">
       <view class="row" data-key="name" bindtap="editField"><text class="k">名称</text><text class="v">{{name || '未设置'}}</text><text class="arr">›</text></view>
@@ -22,7 +25,7 @@
     <view class="gtitle">营业时间</view>
     <view class="card">
       <!-- 裁定2 收敛:与强制页同一份组件(改口=常驻入口,合同六) -->
-      <hours-form initial="{{hours}}" txt="{{hoursTxt}}" saving="{{hoursSaving}}" save-label="{{hoursTxt.settingsSave}}" save-error="{{hoursSaveError}}" bind:save="onHoursSave" />
+      <hours-form config-revision="{{configRevision}}" store-id="{{storeId}}" acceptance="{{bookingAcceptance}}" initial="{{hours}}" txt="{{hoursTxt}}" saving="{{hoursSaving}}" save-label="{{hoursTxt.settingsSave}}" save-error="{{hoursSaveError}}" bind:save="onHoursSave" />
     </view>
 
     <view class="gtitle">特殊日期(节假日/临时)</view>
@@ -32,7 +35,7 @@
         <text class="del" data-date="{{item.date}}" bindtap="delSpecial">删除</text>
       </view>
       <view wx:if="{{!specials.length}}" class="none">暂无,按每周固定营业</view>
-      <view class="add" bindtap="addSpecial">＋ 新增休息日</view>
+      <view class="add" bindtap="addSpecial">＋ 新增特殊日期</view>
     </view>
 
     <view class="gtitle">值日表</view>
@@ -48,18 +51,25 @@
 
     <view class="gtitle">预约规则</view>
     <view class="card">
-      <!-- 旧的「线上定金」开关已删(2026-08-09):定金统一由「定金与取消规则」这一处管,
-           两个开关并存会互相打架 —— 设计图屏 4 也是把定金收在定金规则卡里 -->
-      <!-- 批④ S7 摘要件(店主 08-24):小程序不做编辑器,但**摘要要做全** ——
-           7 项关键值逐行显示(全部来自后端 summaryRows,与顾客端同一份 config 推导),
-           下面给一句明确的「去哪改」引导,而不是只写一句话让人猜。 -->
       <view class="rulename">定金与取消规则</view>
-      <view wx:if="{{!depositRows.length}}" class="ruledesc">读取中…</view>
-      <view class="drow" wx:for="{{depositRows}}" wx:key="key">
-        <text class="dk">{{item.label}}</text>
-        <text class="dv">{{item.value}}</text>
-      </view>
-      <view class="note">{{depositEditHint}}</view>
+      <deposit-form />
     </view>
   </block>
+</view>
+
+<view wx:if="{{specialDraft}}" class="special-mask {{themeClass}}">
+  <scroll-view scroll-y class="special-dialog">
+    <view class="srow"><text class="sinfo">特殊日期</text><button size="mini" disabled="{{specialSaving}}" bindtap="closeSpecial">关闭 ×</button></view>
+    <picker mode="date" value="{{specialDraft.date}}" data-key="date" bindchange="specialField" disabled="{{specialSaving}}"><view class="srow">日期：{{specialDraft.date || '请选择'}}</view></picker>
+    <view class="srow"><text class="sinfo">当天休息</text><switch checked="{{specialDraft.isClosed}}" data-key="isClosed" bindchange="specialField" disabled="{{specialSaving}}"/></view>
+    <block wx:if="{{!specialDraft.isClosed}}">
+      <picker mode="time" value="{{specialDraft.openTime}}" data-key="openTime" bindchange="specialField" disabled="{{specialSaving}}"><view class="srow">开始营业：{{specialDraft.openTime || '请选择'}}</view></picker>
+      <picker mode="time" value="{{specialDraft.closeTime}}" data-key="closeTime" bindchange="specialField" disabled="{{specialSaving}}"><view class="srow">结束营业：{{specialDraft.closeTime || '请选择'}}</view></picker>
+      <picker wx:if="{{bookingAcceptance.mode === 'latest_start'}}" mode="time" value="{{specialDraft.latestStartTime}}" data-key="latestStartTime" bindchange="specialField" disabled="{{specialSaving}}"><view class="srow">最晚开始：{{specialDraft.latestStartTime || '跟随当天结束营业'}}</view></picker>
+    </block>
+    <input class="special-note" value="{{specialDraft.note}}" data-key="note" bindinput="specialField" placeholder="备注（选填）" maxlength="100" disabled="{{specialSaving}}"/>
+    <view class="note">优先于每周安排。已保存排班和预约不会自动改动。</view>
+    <view wx:if="{{specialError}}" class="note special-error">{{specialError}}</view>
+    <button class="special-save" bindtap="saveSpecial" loading="{{specialSaving}}" disabled="{{specialSaving}}">保存特殊日期</button>
+  </scroll-view>
 </view>
