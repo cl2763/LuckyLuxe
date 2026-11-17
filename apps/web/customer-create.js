@@ -15,8 +15,7 @@ window.CustomerCreate = (() => {
     let busy=false, duplicate=false
     const close=()=>{if(busy)return;mask.remove();focus?.focus()}
     mask.querySelector('[data-cancel]').onclick=close
-    mask.onclick=e=>{if(e.target===mask)close()}
-    mask.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();close()}if(e.key==='Tab'){const all=[...mask.querySelectorAll('input,button')].filter(x=>!x.disabled);if(e.shiftKey&&document.activeElement===all[0]){e.preventDefault();all.at(-1).focus()}else if(!e.shiftKey&&document.activeElement===all.at(-1)){e.preventDefault();all[0].focus()}}}
+    mask.onkeydown=e=>{if(e.key==='Escape')e.preventDefault();if(e.key==='Tab'){const all=[...mask.querySelectorAll('input,button')].filter(x=>!x.disabled);if(e.shiftKey&&document.activeElement===all[0]){e.preventDefault();all.at(-1).focus()}else if(!e.shiftKey&&document.activeElement===all.at(-1)){e.preventDefault();all[0].focus()}}}
     form.oninput=()=>{duplicate=false;candidates.innerHTML='';error.textContent=''}
     form.onsubmit=async e=>{
       e.preventDefault();if(busy||!form.reportValidity())return

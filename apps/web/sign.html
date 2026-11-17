@@ -418,7 +418,6 @@ function openCouponSheet() {
     </div>`
   document.body.appendChild(box)
   const close = () => box.remove()
-  box.addEventListener('click', (e) => { if (e.target === box) close() })
   box.querySelector('#cpnClose').addEventListener('click', close)
   box.querySelectorAll('.cpn-opt').forEach((el) => {
     el.addEventListener('click', async () => {

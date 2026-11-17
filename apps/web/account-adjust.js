@@ -231,7 +231,7 @@ window.AccountAdjust = (function () {
   async function onClick(event) {
     const { request, toast, zh } = ctx
     if (stateA.busy) return
-    if (event.target.closest('[data-aa-close]') || event.target === el()) { close(); return }
+    if (event.target.closest('[data-aa-close]')) { close(); return }
     const tab = event.target.closest('[data-aa-tab]')
     if (tab) {
       stateA.tab = tab.dataset.aaTab

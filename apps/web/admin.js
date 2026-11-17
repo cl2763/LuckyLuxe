@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261115-deposit-flow1'
+const ADMIN_BUILD = '20261117-modal-guard1'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -1424,7 +1424,7 @@ function showFinanceGuide(section = 'all') {
     event.stopPropagation()
     if (event.target.closest('[data-guide-close]')) overlay.remove()
   })
-  overlay.addEventListener('click', () => overlay.remove())
+  // Backdrop clicks preserve the open dialog.
   overlay.appendChild(panel)
   document.body.appendChild(overlay)
 }
@@ -1853,7 +1853,7 @@ function showFinanceInsights() {
     event.stopPropagation()
     if (event.target.closest('[data-guide-close]')) overlay.remove()
   })
-  overlay.addEventListener('click', () => overlay.remove())
+  // Backdrop clicks preserve the open dialog.
   overlay.appendChild(panel)
   document.body.appendChild(overlay)
   request('/admin/finance/insights', { method: 'POST', body: '{}' })
@@ -1941,7 +1941,7 @@ async function openGoalSetupModal() {
       } catch (error) { toast(error.message) }
     }
   })
-  overlay.addEventListener('click', () => overlay.remove())
+  // Backdrop clicks preserve the open dialog.
   overlay.appendChild(panel)
   document.body.appendChild(overlay)
 }
@@ -2461,7 +2461,7 @@ function openSalaryPlanPanel(techId, name) {
     event.stopPropagation()
     if (event.target.closest('[data-sp-close]')) overlay.remove()
   })
-  overlay.addEventListener('click', () => overlay.remove())
+  // Backdrop clicks preserve the open dialog.
   overlay.appendChild(panel)
   document.body.appendChild(overlay)
   salaryPlanEditing = techId == null ? null : { techId, name: name || '' }
@@ -4894,8 +4894,9 @@ function openImageLightbox(src) {
   const image = document.createElement('img')
   image.src = src
   image.alt = 'preview'
+  const closeButton=document.createElement('button');closeButton.type='button';closeButton.textContent='×';closeButton.setAttribute('aria-label','关闭');closeButton.style.cssText='position:absolute;top:20px;right:20px;min-width:44px;min-height:44px';closeButton.onclick=()=>overlay.remove();overlay.appendChild(closeButton)
   overlay.appendChild(image)
-  overlay.addEventListener('click', () => overlay.remove())
+  // Backdrop clicks preserve the open dialog.
   document.body.appendChild(overlay)
 }
 
