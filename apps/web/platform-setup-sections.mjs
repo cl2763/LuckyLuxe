@@ -3,7 +3,7 @@ import {setupImpactHtml} from './platform-setup-impact.mjs'
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
 export const sectionGroups={store:['store','hours','specialDates','hero','guide'],settlement:['settlement','pricingRules'],staff:['staff','accounts','visibility','schedule'],compensation:['salary','targets','recurring'],knowledge:['knowledge','quote'],membershipRules:['priceTypes','membership']}
 const listModules=new Set(['specialDates','settlement','staff','accounts','salary','recurring','knowledge'])
-const records=s=>s.entries||s.items||s.technicians||s.accounts||s.plans||s.rules||[]
+const records=(s,key)=>key==='salary'?[s.defaultPlan,...(s.plans||[])].filter(Boolean):key==='specialDates'?(s.stores||[]).flatMap(store=>store.specialDates||[]):s.entries||s.items||s.technicians||s.accounts||s.rules||[]
 // Each section owns its snapshot and input state. Saving one section must never use
 // the selected module's fingerprint or discard another section's unsaved values.
 export async function mountSetupSections({host,keys,overview,load,save,field,fields,win,changed,edit,preview,legacy,onSaved}){
@@ -17,7 +17,7 @@ export async function mountSetupSections({host,keys,overview,load,save,field,fie
   section.innerHTML=`<div class="intake-title"><h2>${esc(key==='priceTypes'?'会员制度':descriptor.title)}</h2><button type="button" data-section-preview>预览商家端</button></div>`
   section.querySelector('[data-section-preview]').onclick=()=>preview(key)
   if(listModules.has(key)){
-   const rows=records(current);section.insertAdjacentHTML('beforeend','<div class="tablewrap"><table><thead><tr><th>名称／日期</th><th>状态</th><th>操作</th></tr></thead><tbody>'+rows.map((r,i)=>`<tr><td>${esc(r.name||r.nameZh||r.username||r.question||r.date||overview.technicians.find(t=>t.id===r.technicianId)?.name||'全店默认')}</td><td>${r.isActive===false||r.is_active===0||r.enabled===false?'停用':'已配置'}</td><td>${['accounts','recurring','specialDates'].includes(key)?'已有配置保持原样':`<button type="button" data-section-edit="${i}">编辑草稿</button>`}</td></tr>`).join('')+'</tbody></table></div>'+(!rows.length?'<p class="subtle">尚无配置，可根据商家资料新增。</p>':'')+'<button type="button" data-section-new>新增'+esc(descriptor.title)+'</button>')
+   const rows=records(current,key);section.insertAdjacentHTML('beforeend','<div class="tablewrap"><table><thead><tr><th>名称／日期</th><th>状态</th><th>操作</th></tr></thead><tbody>'+rows.map((r,i)=>`<tr><td>${esc(r.name||r.nameZh||r.username||r.question||r.date||overview.technicians.find(t=>t.id===r.technicianId)?.name||'全店默认')}</td><td>${r.isActive===false||r.is_active===0||r.enabled===false?'停用':'已配置'}</td><td>${['accounts','recurring','specialDates'].includes(key)?'已有配置保持原样':`<button type="button" data-section-edit="${i}">编辑草稿</button>`}</td></tr>`).join('')+'</tbody></table></div>'+(!rows.length?'<p class="subtle">尚无配置，可根据商家资料新增。</p>':'')+'<button type="button" data-section-new>新增'+esc(descriptor.title)+'</button>')
    section.querySelector('[data-section-new]').onclick=()=>edit(key,null);section.querySelectorAll('[data-section-edit]').forEach(b=>b.onclick=()=>edit(key,rows[Number(b.dataset.sectionEdit)]?.id));continue
   }
   const state={key,snapshot,dirty:false,section},touch=()=>{state.dirty=true;changed()};states.push(state)
