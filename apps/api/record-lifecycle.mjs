@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 import {randomUUID} from 'node:crypto'
 import {configFingerprint} from './config-fingerprint.mjs'
 const TYPES={customers:{table:'users',name:'display_name',label:'顾客'},technicians:{table:'technicians',name:'name',label:'员工'},packages:{table:'membership_packages',name:'name',label:'套餐'},coupons:{table:'coupons',name:'name',label:'优惠券模板'},'points-prizes':{table:'points_prizes',name:'id',label:'积分奖品'},services:{table:'services',name:'name_zh',label:'服务项目'},categories:{table:'service_categories',name:'name',label:'服务分类'}}
@@ -71,7 +72,7 @@ export function createRecordLifecycle({db,apiError,json,readBody,currentTenantId
   return {...result,summary:summary(tid,kind,id),reviewHash:configFingerprint([row,refs,blockers,status])}
  }
  function perform(tid,kind,id,body,actor){const action=body.action;if(!['delete','archive','restore'].includes(action))throw apiError(400,'BAD_ACTION','操作无效。');const reason=String(body.reason||'').trim();if(!reason||reason.length>200)throw apiError(400,'REASON_REQUIRED','请填写200字以内的操作原因。')
-  db.exec('SAVEPOINT record_lifecycle_change')
+  beginWriteSavepoint(db, 'record_lifecycle_change', 'record_lifecycle')
   try{const info=inspect(tid,kind,id);if(body.reviewHash!==info.reviewHash)throw apiError(409,'REVIEW_CHANGED','关联记录已变化，请重新核对。');if(!info.actions.includes(action))throw apiError(409,'RECORD_IN_USE','请先处理关联事项，历史资料可以归档，不能直接删除。',{review:info});if(action==='archive'&&info.requiresSalaryReview&&body.salaryReviewed!==true)throw apiError(400,'SALARY_REVIEW_REQUIRED','请核对离职薪酬后勾选确认。')
    const {spec}=record(tid,kind,id),now=new Date().toISOString()
    if(action==='delete'){if(kind==='services'){for(const table of ['service_prices','service_price_systems','technician_services'])db.prepare(`DELETE FROM ${table} WHERE service_id=?`).run(id)}if(kind==='technicians')db.prepare('DELETE FROM technician_services WHERE technician_id=?').run(id);if(kind==='packages')db.prepare('DELETE FROM recharge_package_discounts WHERE package_id=? AND tenant_id=?').run(id,tid);db.prepare(`DELETE FROM ${spec.table} WHERE id=? AND tenant_id=?`).run(id,tid)}

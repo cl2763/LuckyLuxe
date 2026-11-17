@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 // Compatibility is derived on reads. Existing merchant settings are never backfilled at startup.
 export function legacyDepositEnabled(db,tid) {
   const row=db.prepare("SELECT value FROM tenant_settings WHERE tenant_id=? AND key='booking_rules'").get(tid)
@@ -5,7 +6,7 @@ export function legacyDepositEnabled(db,tid) {
   try{return JSON.parse(row.value||'{}').onlineDeposit!==false}catch{return true}
 }
 export function writeDepositConfig(db,tid,next,now) {
-  db.exec('SAVEPOINT unified_deposit_switch')
+  beginWriteSavepoint(db, 'unified_deposit_switch', 'tenant_settings')
   try {
     const row=db.prepare("SELECT value FROM tenant_settings WHERE tenant_id=? AND key='booking_rules'").get(tid)
     let previous={};try{previous=JSON.parse(row?.value||'{}')}catch{}

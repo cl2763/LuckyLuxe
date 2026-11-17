@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 import {assertRecordActive,activeRecords} from './record-lifecycle.mjs'
 /** Existing service/catalog writes extracted as one atomic metadata + independent-price operation. */
 export function createServiceEditRoutes({db,apiError,recordLifecycle,currentTenantId,servicePayload,assertServicePriceOk,assertCategoryOk,serviceIdFrom,upsertServicePrice,serializeService,getService,pricingItemShape,writePricingItemPrices,serializePricingItem,memberPricing,json,readBody}) {
@@ -121,7 +122,7 @@ export function createServiceEditRoutes({db,apiError,recordLifecycle,currentTena
   if(update&&!['display','settlement'].includes(update.system))throw apiError(400,'INVALID_PRICE_SYSTEM','价格体系无效。');
   let output;
   const reply=(_r,status,data,headers)=>{output={status,data,headers}};
-  if(write)db.exec('SAVEPOINT service_edit');
+  if(write)beginWriteSavepoint(db, 'service_edit', 'services');
   try{
    const id=ctx.path.split('/')[ctx.path.startsWith('/admin/pricing/items')?4:3];
    if(update&&id)memberPricing.setPrices(currentTenantId(),id,update.system,update);

@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 import {assertRecordActive,activeRecords} from './record-lifecycle.mjs'
 export function createStaffSetupDefinitions({db,apiError,readBody,json,currentTenantId,defaultStoreId,randomId}){
  function handle(req,res,{path,adminSession},input,json){
@@ -34,7 +35,7 @@ export function createStaffSetupDefinitions({db,apiError,readBody,json,currentTe
   const tid=currentTenantId();let output
   if(body.storeId&&!db.prepare('SELECT id FROM stores WHERE id=? AND tenant_id=?').get(body.storeId,tid))throw apiError(404,'NOT_FOUND','门店不存在。')
   if(body.serviceIds!==undefined&&(!Array.isArray(body.serviceIds)||body.serviceIds.length>500||body.serviceIds.some(id=>typeof id!=='string'||!db.prepare('SELECT id FROM services WHERE id=? AND tenant_id=?').get(id,tid))))throw apiError(400,'BAD_SERVICES','请选择本店有效的服务项目。')
-  db.exec('SAVEPOINT technician_config')
+  beginWriteSavepoint(db, 'technician_config', 'technicians')
   try{handle({method},null,{path,adminSession},body,(_res,status,data)=>{output={status,data}})
    if(method==='POST'&&body.isActive===false){db.prepare('UPDATE technicians SET is_active=0 WHERE id=? AND tenant_id=?').run(output.data.technician.id,tid);output.data.technician.is_active=0}
    if(body.serviceIds!==undefined){const id=output.data.technician.id;db.prepare('DELETE FROM technician_services WHERE technician_id=?').run(id);for(const sid of new Set(body.serviceIds))db.prepare('INSERT INTO technician_services(technician_id,service_id) VALUES(?,?)').run(id,sid)}

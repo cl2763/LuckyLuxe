@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 import {randomBytes,createHash} from 'node:crypto'
 import {allowedSections,validateAnswers,intakeProgress,FILE_MAX,TOTAL_MAX,INTAKE_VERSION} from '../web/setup-intake-schema.mjs'
 
@@ -51,7 +52,7 @@ export function createSetupIntake({db,apiError,json,getEntitlements}){
     if(action==='link'){
       if(req.method==='POST'){
         const token=randomBytes(32).toString('hex'),time=now(),expires=new Date(Date.now()+14*86400000).toISOString()
-        db.exec('SAVEPOINT setup_link')
+        beginWriteSavepoint(db, 'setup_link', 'platform_setup_intakes')
         try{db.prepare('UPDATE platform_setup_intake_links SET revoked=1 WHERE tenant_id=?').run(tid)
           db.prepare('INSERT INTO platform_setup_intake_links(token_hash,tenant_id,expires_at,created_at) VALUES(?,?,?,?)').run(hash(token),tid,expires,time)
           db.exec('RELEASE setup_link')
@@ -94,7 +95,7 @@ export function createSetupIntake({db,apiError,json,getEntitlements}){
       if(!Number.isSafeInteger(b.revision)||b.revision<0)throw apiError(400,'BAD_REQUEST','缺少资料版本，请刷新。')
       if(b.submit&&intakeProgress(sections,answers,files(tid)).some(s=>s.missing.length))throw apiError(400,'MISSING_FIELDS','请填写门店名称、城市、联系方式及币种。')
       // One synchronous transaction after await: no stale overwrite, including the first save.
-      db.exec('SAVEPOINT setup_intake_save')
+      beginWriteSavepoint(db, 'setup_intake_save', 'platform_setup_intakes')
       try{
         const current=db.prepare('SELECT * FROM platform_setup_intakes WHERE tenant_id=?').get(tid)
         if((current?.revision||0)!==b.revision)throw apiError(409,'REVISION_CONFLICT','资料已在另一处更新，请重新读取后核对。')

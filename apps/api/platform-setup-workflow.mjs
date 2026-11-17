@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 import {createSetupReviewStatus} from './platform-setup-review-status.mjs'
 import {setupDeliveryInfo} from './setup-delivery-info.mjs'
 import {setupReviewRows} from './setup-review-presentation.mjs'
@@ -68,13 +69,13 @@ export function createSetupWorkflow({db,apiError,json,getSetupAdapters,getEntitl
       const sources=[...new Set(sourceIds)].map(fileId=>{const f=db.prepare('SELECT id,name,section,sha256 FROM platform_setup_intake_files WHERE id=? AND tenant_id=?').get(fileId,tid);if(!f)throw apiError(404,'SOURCE_NOT_FOUND','资料已移除或不属于本店，请重新选择。');return f})
       const draftId=id(),time=now();let original,proposed
       // Synchronous shared domain methods only: never hold a SQLite transaction across await.
-      db.exec('SAVEPOINT setup_validate')
+      beginWriteSavepoint(db, 'setup_validate', 'platform_setup_drafts')
       try{
         original=snapshot(tid,a)
         if(b.fingerprint!==configFingerprint(a,original))throw apiError(409,'CONFIG_CONFLICT','正式配置已变化，请重新读取后核对。')
         run(tid,()=>a.write(tid,b.body,b.targetId||null));proposed=snapshot(tid,a)
       }finally{db.exec('ROLLBACK TO setup_validate; RELEASE setup_validate')}
-      db.exec('SAVEPOINT setup_save')
+      beginWriteSavepoint(db, 'setup_save', 'platform_setup_drafts')
       try{
         db.prepare('INSERT INTO platform_setup_drafts(id,tenant_id,module,target_id,revision,base_hash,base_json,body_json,proposed_json,source_json,source_note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')
           .run(draftId,tid,b.module,b.targetId||null,1,configFingerprint(a,original),JSON.stringify(original),JSON.stringify(b.body),JSON.stringify(proposed),JSON.stringify(sources),sourceNote.trim(),time,time)
@@ -85,13 +86,13 @@ export function createSetupWorkflow({db,apiError,json,getSetupAdapters,getEntitl
     }
     if(req.method==='POST'&&section==='drafts'&&item&&action==='discard'){
       const b=await input(req),r=row(tid,item);if(b.revision!==r.revision)throw apiError(409,'REVISION_CONFLICT','草稿版本已变化。');if(r.status==='applied')throw apiError(409,'ALREADY_APPLIED','已生效配置不能撤回为草稿，请新建变更。')
-      if(r.status!=='discarded'){db.exec('SAVEPOINT setup_discard');try{db.prepare("UPDATE platform_setup_drafts SET status='discarded',updated_at=? WHERE id=? AND tenant_id=?").run(now(),item,tid);event(tid,item,'discarded',operator,r.revision);db.exec('RELEASE setup_discard')}catch(e){db.exec('ROLLBACK TO setup_discard; RELEASE setup_discard');throw e}}
+      if(r.status!=='discarded'){beginWriteSavepoint(db, 'setup_discard', 'platform_setup_drafts');try{db.prepare("UPDATE platform_setup_drafts SET status='discarded',updated_at=? WHERE id=? AND tenant_id=?").run(now(),item,tid);event(tid,item,'discarded',operator,r.revision);db.exec('RELEASE setup_discard')}catch(e){db.exec('ROLLBACK TO setup_discard; RELEASE setup_discard');throw e}}
       return reply({draft:serialize(row(tid,item))})
     }
     if(req.method==='POST'&&section==='drafts'&&item&&action==='apply'){
       const b=await input(req);let handoff=null
       if(b.confirm!==true)throw apiError(400,'CONFIRM_REQUIRED','请先核对这份草稿的变更。')
-      db.exec('SAVEPOINT setup_apply')
+      beginWriteSavepoint(db, 'setup_apply', 'platform_setup_drafts')
       try{
         const r=row(tid,item),a=adapter(tid,r.module)
         if(b.revision!==r.revision)throw apiError(409,'REVISION_CONFLICT','草稿版本已变化。')
@@ -138,7 +139,7 @@ export function createSetupWorkflow({db,apiError,json,getSetupAdapters,getEntitl
     const tid=adminSession.tenantId
     if(req.method==='GET'&&!match[1]){const drafts=db.prepare("SELECT * FROM platform_setup_drafts WHERE tenant_id=? AND status='draft' ORDER BY updated_at DESC").all(tid).map(presentDraft);json(res,200,{drafts,delivery:delivery(tid)},{'cache-control':'private, no-store'});return true}
     if(req.method==='POST'&&match[1]){
-      const b=await input(req);db.exec('SAVEPOINT setup_owner_review')
+      const b=await input(req);beginWriteSavepoint(db, 'setup_owner_review', 'platform_setup_drafts')
       try{const r=row(tid,match[1]);adapter(tid,r.module);if(r.status!=='draft'||r.revision!==b.revision)throw apiError(409,'REVISION_CONFLICT','配置已经变化，请重新读取。');preview(tid,r.id)
         if(b.confirm!==true)throw apiError(400,'CONFIRM_REQUIRED','请核对后确认。')
         const action=match[2]==='confirm'?'owner_confirmed':'owner_rejected'

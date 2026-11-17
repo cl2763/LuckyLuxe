@@ -72,7 +72,8 @@ check('🔴 ② 门店封面:同一组数据的首图 → store-location 的 sto
 /* ===== ③ 项目图/项目价:网页编辑 → 小程序顾客端服务页跟着变 ===== */
 const catId = ((await request('/admin/pricing/categories', {}, PLATFORM, H)).data.categories || [])[0].id
 const svc = (await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `跨端项目${RUN}`, nameEn: 'x', priceCents: 18800, baseDurationMin: 60, categoryId: catId, storefront: 1 }) }, PLATFORM, H)).data.service
-await request(`/admin/services/${svc.id}`, { method: 'PATCH', body: JSON.stringify({ imageUrl: PNG, priceCents: 20800 }) }, PLATFORM, H)
+const serviceUpdate = await request(`/admin/services/${svc.id}`, { method: 'PATCH', body: JSON.stringify({ imageUrl: PNG, priceCents: 20800 }) }, PLATFORM, H)
+if (serviceUpdate.status !== 200) throw new Error('Service update failed: '+JSON.stringify(serviceUpdate))
 const pubSvc = ((await request('/services', {}, null, PUB)).data.services || []).find((x) => x.id === svc.id)
 check('🔴 ③ 项目图与价:网页改一次 → 小程序真调的公开 /services 跟着变',
   pubSvc && pubSvc.imageUrl === PNG && pubSvc.priceCents === 20800, JSON.stringify({ img: (pubSvc?.imageUrl || '').slice(0, 30), price: pubSvc?.priceCents }))

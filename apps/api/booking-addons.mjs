@@ -1,3 +1,4 @@
+import {beginWriteSavepoint} from './write-savepoint.mjs'
 export const LEGACY_BOOKING_ADDONS=[
  {id:'remove',name:'卸甲/卸睫',priceCents:3000,durationMin:30},
  {id:'reinforce',name:'甲面加固',priceCents:4000,durationMin:15},
@@ -39,7 +40,7 @@ export function createBookingAddons({db,apiError}) {
    if(x.settlementItemId&&!db.prepare("SELECT id FROM services WHERE id=? AND tenant_id=? AND item_kind='addon'").get(x.settlementItemId,tid))invalid('请选择本店的结算收费加项。')
    return {id:x.id,name,priceCents:x.priceCents,durationMin:x.durationMin,isActive:x.isActive,serviceIds:[...new Set(x.serviceIds)],sortOrder:Number.isInteger(x.sortOrder)?x.sortOrder:i,settlementItemId:x.settlementItemId||null}
   })
-  db.exec('SAVEPOINT booking_addon_config')
+  beginWriteSavepoint(db, 'booking_addon_config', 'tenant_settings')
   try{
    if(read(tid).revision!==input.expectedRevision)throw apiError(409,'CONFIG_CHANGED','配置已更新，请刷新。')
    for(const old of current.items.filter(x=>!seen.has(x.id))){
