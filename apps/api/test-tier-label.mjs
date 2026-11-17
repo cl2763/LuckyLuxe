@@ -60,14 +60,12 @@ check('③ 同族:`ai-desk.js` 的 `qsLabel` 不再自存一份 none 态文案 �
   + '取不到就不呈现(不可用即不呈现),不自己补句',
 !/quoteLabel \|\| '本会话暂无报价'/.test(desk) && /card\.quoteLabel \|\| ''/.test(desk), '')
 
-/* ④ 行为层:空 label 必 400;有 label 必须放行(只打沙箱 4310,店主 03e 结构闸) */
-const { ensureSandbox } = await import('./test-need-sandbox.mjs')
-const sb = await ensureSandbox({ label: '[tier-label]' })
-if (!sb.ok) {
-  check('行为层测试环境必须可用',sb.ok,JSON.stringify(sb))
-} else {
-  const {SANDBOX_URL:SANDBOX}=await import('./test-need-sandbox.mjs')
-  /* 只对 ensureSandbox 核过的本机沙箱做现测,且造完当场还原配置。 */
+/* ④ 行为层使用本轮主回归临时库。原先在 CI 写4310、在本机写4128，
+   导致后续开店核对少一份样本；统一目标，保留全部正反断言。 */
+const SANDBOX=process.env.TEST_BASE_URL||process.env.BASE_URL||'http://127.0.0.1:4128'
+const {assertTestTarget}=await import('./test-guard.mjs')
+await assertTestTarget(SANDBOX)
+{
   const {requireOwnerToken}=await import('./owner-token.mjs');const fixtureAuth='Bearer '+requireOwnerToken()
   const TID='tier-label-'+Date.now().toString(36)
   const made=await fetch(SANDBOX+'/platform/tenants',{method:'POST',headers:{authorization:fixtureAuth,'content-type':'application/json'},body:JSON.stringify({id:TID,name:'梯子名称隔离测试店',plan:'single'})});if(made.status!==201)throw Error('Tier fixture could not create isolated tenant')
