@@ -1,4 +1,6 @@
-<view class="page {{themeClass}}">
+<config-sync-banner changed="{{configSyncChanged}}" error="{{configSyncError}}" checked="{{configSyncChecked}}" bind:retry="configSyncRetry"/>
+<setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
+<view class="page {{themeClass}}"><view class="note" wx:if="{{loadError}}">{{loadError}}<button bindtap="retryLoad" wx:if="{{!loaded}}">重新读取</button></view><button wx:if="{{configSyncChanged && !isNew}}" bindtap="reviewChanges">查看差异</button>
   <view class="form">
     <view class="frow"><text class="lb">套餐名称</text><input class="in" value="{{name}}" placeholder="{{kind==='times'?'如 纯色×5次卡':'如 充1000送50'}}" bindinput="onName" /></view>
     <view class="frow"><text class="lb">售价 ({{currency}})</text><input class="in" type="digit" value="{{price}}" placeholder="顾客支付" bindinput="onPrice" /></view>
@@ -24,11 +26,16 @@
       <view class="gift-hint">价值用于展示，不计入储值余额、营业收入或技师业绩。物品领取请联系门店，此清单不代表已领取。</view>
     </view>
     <view wx:if="{{kind==='recharge'}}" class="gifts"><view class="gift-title">充值后默认个人折扣</view><discount-wheel value="{{rateBps}}" bindchange="onRate"/><view class="gift-hint">作为充值时的默认选项，店员可在确认充值时调整。</view></view>
+    <view wx:if="{{kind==='times'}}" class="frow"><text class="lb">适用项目组</text><picker class="in" range="{{groupNames}}" value="{{groupIndex}}" bindchange="onGroup"><view>{{groupNames[groupIndex]}}</view></picker></view>
+    <view wx:if="{{kind==='times'}}" class="frow"><text class="lb">有效期方式</text><picker class="in" range="{{validityModes}}" value="{{validityIndex}}" bindchange="onValidity"><view>{{validityModes[validityIndex]}}</view></picker></view>
+    <view wx:if="{{kind!=='times'||validityIndex===1}}" class="frow"><text class="lb">有效天数</text><input class="in" type="number" value="{{validDays}}" placeholder="{{kind==='times'?'填写有效天数':'留空长期有效'}}" data-key="validDays" bindinput="onConfig" /></view>
+    <view class="frow"><text class="lb">顾客端展示</text><switch checked="{{mallVisible}}" data-key="mallVisible" color="#c8a47e" bindchange="onConfig" /></view>
     <view class="frow"><text class="lb">权益说明</text><input class="in" value="{{benefits}}" placeholder="选填,如 赠免费卸甲" bindinput="onBenefits" /></view>
-    <view class="frow"><text class="lb">上架(顾客可见)</text><switch checked="{{active}}" color="#c8a47e" bindchange="onActive" /></view>
+    <view class="frow"><text class="lb">启用套餐</text><switch checked="{{active}}" color="#c8a47e" bindchange="onActive" /></view>
   </view>
 
-  <view class="btn {{saving?'off':''}}" bindtap="save">{{saving?'保存中…':'保存套餐'}}</view>
+  <view wx:if="{{conflict}}" class="gifts"><view class="gift-title">套餐已在其他设备修改</view><view class="gift-hint">服务器最新：{{conflictText}}</view><view class="gift-hint">本页输入已保留。保留我的修改将以本页填写内容保存，请先核对。</view><button bindtap="useServer">采用已保存内容</button><button bindtap="keepMine">保留我的修改并复核</button></view>
+  <button class="btn" disabled="{{saving || conflict || configSyncError || !loaded}}" bindtap="save">{{saving?'保存中…':configSyncError?'等待核对后保存':'保存套餐'}}</button>
   <view class="btn cancel" bindtap="cancel">取消</view>
   <view class="note">顾客可查看套餐权益；实际充值由门店确认办理。</view>
 </view>

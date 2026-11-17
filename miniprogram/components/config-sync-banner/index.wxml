@@ -1,0 +1,1 @@
+<view wx:if="{{changed || error}}" class="notice"><text>{{error || '配置已在其他设备修改。当前输入已保留，请核对最新内容后保存。'}}</text><button wx:if="{{error}}" bindtap="retry">重新核对</button></view><view wx:if="{{checked}}" class="checked">上次核对 {{checked}}（本机时间）</view>

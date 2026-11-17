@@ -1,0 +1,29 @@
+<view class="deposit-form">
+ <view wx:if="{{loading}}" class="note">正在读取定金规则…</view>
+ <view wx:if="{{error}}" class="error">{{error}}<button wx:if="{{!config}}" bindtap="load">重新加载</button></view>
+ <block wx:if="{{config}}">
+  <view class="row"><text>本店收取预约定金</text><switch checked="{{config.enabled}}" disabled="{{saving}}" bindchange="enabled"/></view>
+  <view class="note">关闭后新预约不要求定金。旧的收取、抵扣及退款记录保留。</view>
+  <block wx:if="{{config.enabled}}">
+   <view class="row"><text>计收方式</text><picker range="{{modes}}" value="{{mode}}" data-key="mode" bindchange="select"><view>{{modes[mode]}} ›</view></picker></view>
+   <view wx:if="{{mode===0}}" class="row"><text>项目未设置时兜底金额</text><input value="{{fallback}}" type="digit" data-key="fallback" bindinput="input" disabled="{{saving}}"/></view>
+   <view wx:if="{{mode===1}}" class="row"><text>固定定金金额</text><input value="{{fixed}}" type="digit" data-key="fixed" bindinput="input" disabled="{{saving}}"/></view>
+   <view wx:if="{{mode===2}}" class="row"><text>定金比例（%）</text><input value="{{pct}}" type="digit" data-key="pct" bindinput="input" disabled="{{saving}}"/></view>
+   <view class="note">金额使用本店币种（示例：{{currencyHint}}）。</view>
+   <view class="row"><text>会员免定金</text><picker range="{{waivers}}" value="{{waiver}}" data-key="waiver" bindchange="select"><view>{{waivers[waiver]}} ›</view></picker></view>
+   <view class="note">可用已有储值余额抵扣，或由商家登记线下已收。不在线上收款。</view>
+  </block>
+  <view class="row"><text>定金抵扣尾款</text><switch checked="{{config.deductible}}" data-key="deductible" bindchange="flag" disabled="{{saving}}"/></view>
+  <view class="row"><text>允许退还定金</text><switch checked="{{config.cancelPolicy.refundable}}" data-key="cancelPolicy.refundable" bindchange="flag" disabled="{{saving}}"/></view>
+  <view class="row"><text>免费取消时限（小时前）</text><input value="{{hours}}" type="number" placeholder="留空不限" data-key="hours" bindinput="input" disabled="{{saving}}"/></view>
+  <view class="row"><text>临时取消扣定金（%）</text><input value="{{late}}" type="number" data-key="late" bindinput="input" disabled="{{saving}}"/></view>
+  <view class="row"><text>爽约扣定金（%）</text><input value="{{noShow}}" type="number" data-key="noShow" bindinput="input" disabled="{{saving}}"/></view>
+  <view class="row"><text>迟到宽限（分钟，留空不限）</text><input value="{{grace}}" type="number" data-key="grace" bindinput="input" disabled="{{saving}}"/></view>
+  <view class="row"><text>改期须提前（小时，留空不限）</text><input value="{{reschedule}}" type="number" data-key="reschedule" bindinput="input" disabled="{{saving}}"/></view>
+  <view class="row"><text>改期可留存定金次数</text><input value="{{retainTimes}}" type="number" data-key="retainTimes" bindinput="input" disabled="{{saving}}"/></view>
+  <view class="row"><text>留存定金有效天数（留空长期）</text><input value="{{retainDays}}" type="number" data-key="retainDays" bindinput="input" disabled="{{saving}}"/></view>
+  <button class="save" bindtap="save" loading="{{saving}}" disabled="{{saving || loading}}">保存规则</button>
+  <view class="note">当前已保存规则</view>
+  <view class="row summary" wx:for="{{summary}}" wx:key="key"><text>{{item.label}}</text><text>{{item.value}}</text></view>
+ </block>
+</view>

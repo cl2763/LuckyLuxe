@@ -1,3 +1,4 @@
+<config-sync-banner changed="{{configSyncChanged}}" error="{{configSyncError}}" checked="{{configSyncChecked}}" bind:retry="configSyncRetry"/>
 <!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图)。
      ⚠️ 必须排在 wx:if="{{service}}" 这道闸门**外面** —— 2026-08-11 停服实测就是栽在这:
      service 本身取不到时闸门为假,失败态跟着一起不渲染,顾客看到的是一整片白屏。 -->
@@ -52,18 +53,20 @@
           </view>
         </view>
       </picker>
+      <view class="section-note" wx:if="{{bookingWindow}}">营业 {{dayOpen}}–{{dayClose}} · 接客 {{bookingWindow.startTime}}–{{bookingWindow.acceptUntil}}<view wx:if="{{bookingWindow.latestStartTime}}">本次需 {{service.duration}} 分钟，最晚可从 {{bookingWindow.latestStartTime}} 开始。</view></view>
       <view class="slot-grid">
         <block wx:for="{{timeSlots}}" wx:key="*this">
           <button class="slot {{appointmentTime === item ? 'active' : ''}}" bindtap="chooseTime" data-time="{{item}}">{{item}}</button>
         </block>
       </view>
+      <view class="section-note" wx:if="{{endLabel}}">预计服务结束：{{endLabel}}</view>
       <!-- 空态(⬜ 无设计图,按最合理方式做,已记入假设清单):当天没有真空档时如实说,
            不再拿写死时间段填满 —— 以前这里约满也会列出一排假时段供顾客选 -->
-      <view wx:if="{{!timeSlots.length}}" class="slot-empty">{{lang === 'en' ? 'No openings for this date' : '当天已约满，请换个日期'}}</view>
+      <view wx:if="{{availabilityLoading}}" class="slot-empty">{{lang==='en'?'Loading availability…':'正在读取可预约时间…'}}</view><view wx:elif="{{availabilityError}}" class="slot-empty">{{availabilityError}}<button bindtap="refreshAvailability">{{lang==='en'?'Retry':'重新加载'}}</button></view><view wx:elif="{{!timeSlots.length}}" class="slot-empty">{{lang==='en'?'No available time for this service. Please try another date or technician.':availabilityNote}}</view><view wx:if="{{bookingMode==='latest_start'}}" class="slot-empty">{{lang==='en'?'The cutoff is the latest start; service may finish the next day.':'所选时间为服务开始时间，服务可能延长至次日。'}}</view>
     </view>
   </view>
 
-  <view class="section">
+  <view class="section" wx:if="{{addOns.length}}">
     <view class="section-head">
       <view class="section-title">{{t.addOns}}</view>
       <view class="section-note">{{t.optional}}</view>

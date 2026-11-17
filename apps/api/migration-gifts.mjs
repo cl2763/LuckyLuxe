@@ -1,3 +1,4 @@
+import {assertRecordActive} from './record-lifecycle.mjs'
 import { makeActorOf } from './actor-name.mjs'
 // Physical goods are quantity rights, never a cash balance or a service payment.
 export function createMigrationGifts({db,apiError,randomId,iso,createHash,currentTenantId,todayOf}) {
@@ -61,6 +62,7 @@ export function createMigrationGifts({db,apiError,randomId,iso,createHash,curren
   try{
    const prior=db.prepare('SELECT request_hash,result_json FROM migration_gift_events WHERE tenant_id=? AND request_id=?').get(tid,rid)
    if(prior){if(prior.request_hash!==requestHash)fail(409,'REQUEST_CONFLICT','同一请求的内容发生变化，请重新核对。');db.exec('COMMIT');return {...JSON.parse(prior.result_json),replayed:true}}
+   if(kind==='activate'||kind==='activate-service'||kind==='claim')assertRecordActive(db,apiError,tid,'customers',uid)
    const s=source(tid,uid,aid);let grant=grantOf(tid,uid,aid);const now=iso(new Date());let delta=0,parent=null
    if(kind==='activate'||kind==='activate-service'){
     if(grant)fail(409,'ALREADY_ACTIVATED','这项旧赠品已启用，不能重复发放。')

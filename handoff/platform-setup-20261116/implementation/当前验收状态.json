@@ -1,0 +1,44 @@
+{
+  "published": false,
+  "productionDatabaseTouched": false,
+  "originalLocalDatabaseTouched": false,
+  "configuredModules": 27,
+  "webOwnerClicks": 12,
+  "webWorkbenchChecks": 23,
+  "webPreviewChecks": 42,
+  "intakeUiChecks": 13,
+  "nativePreviewChecks": 18,
+  "nativeHandlerChecks": 13,
+  "nativeActualControlChecks": {
+    "ownerReview": 10,
+    "timesCard": 9,
+    "status": "passed in two separate suites; actual element.input/tap"
+  },
+  "nativeLayouts": {
+    "placeholder": 3,
+    "overlap": 4,
+    "homeSections": 9,
+    "status": "passed"
+  },
+  "trialQr": "pending upload and scan",
+  "productionRetainedBackupRehearsal": "not performed for this feature; required before release",
+  "notes": "214 main suites plus 44 demo-gate suites and 4 extra suites passed earlier. Default list now contains 216 suites; later targeted runs are separately recorded and do not constitute a new uninterrupted full run.",
+  "userConfirmedMini141Released": true,
+  "userApprovedRealMiniQrPreview": true,
+  "verifiedLiveVersion": {
+    "commit": "e351397",
+    "adminBuild": "97eb60a4"
+  },
+  "pricingFlagsReadOnly": {
+    "realInactive": 5,
+    "realActive": 1,
+    "demoInactive": 2
+  },
+  "nativePreviewActualSaveRejection": true,
+  "designFinalReview": "fail: comparison completed for P01–P24; navigation/card grouping and receipt/selector presentation differ from approved contract; physical trial QR remains unverified",
+  "webEditorChecks": 72,
+  "workflowChecks": 52,
+  "presentationChecks": 9,
+  "previewCodeBoundaryChecks": 20,
+  "localAdminBuild": "20261116-platform-setup2"
+}

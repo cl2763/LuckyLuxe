@@ -79,7 +79,7 @@ Page({
     // 🔴 D17:加项/技师接口挂了如实报,不回写死的 Mia Chen 那套假技师
     let addOns, technicians
     try {
-      ;[addOns, technicians] = await Promise.all([api.getAddOns(), api.getTechnicians(service._id)])
+      ;[addOns, technicians] = await Promise.all([api.getAddOns(service._id), api.getTechnicians(service._id)])
     } catch (e) {
       this.setData({ loadFailed: true })
       return
@@ -147,7 +147,7 @@ Page({
   },
 
   chooseTime(event) {
-    this.setData({ appointmentTime: event.currentTarget.dataset.time })
+    this.setData({ appointmentTime: event.currentTarget.dataset.time,endLabel:(this.data.slotDetails||[]).find(x=>x.time===event.currentTarget.dataset.time)?.endLabel||'' })
   },
 
   toggleAddon(event) {
@@ -167,15 +167,19 @@ Page({
 
   async refreshAvailability() {
     if (!this.data.service || !this.data.appointmentDate) return
+    const requestVersion=this._availabilityVersion=(this._availabilityVersion||0)+1
+    this.setData({availabilityLoading:true,availabilityError:''})
+    try {
     const availability = await api.getAvailability(
       this.data.service._id,
       this.data.appointmentDate,
       this.data.selectedAddOns,
       this.data.technician ? this.data.technician.id : ''
     )
+    if(requestVersion!==this._availabilityVersion)return
     const tech = this.data.technician || availability.technician
     const techEntry = availability.slotsByTech
-      ? availability.slotsByTech.find((item) => item.technician.id === tech.id)
+      ? availability.slotsByTech.find((item) => item.technician.id === tech?.id)
       : null
     const slots = (techEntry && techEntry.slots && techEntry.slots.length)
       ? techEntry.slots
@@ -185,11 +189,15 @@ Page({
       : (availability.slots && availability.slots.length ? availability.slots : [])
     const nextTime = slots.indexOf(this.data.appointmentTime) >= 0 ? this.data.appointmentTime : slots[0]
     this.setData({
-      timeSlots: slots,
+      timeSlots: slots,slotDetails:techEntry?.slotDetails||[],endLabel:techEntry?.slotDetails?.find(x=>x.time===nextTime)?.endLabel||'',bookingWindow:techEntry?.window||null,dayOpen:availability.dayOpen,dayClose:availability.dayClose,
+      availabilityNote:availability.reason==='HOURS_UNSET'?'门店尚未设置营业时间，请联系门店':availability.closed?'该日期门店休息，请换个日期':availability.reason==='NO_TECHNICIAN'?'没有可提供此项目的技师':availability.reason==='TECHNICIAN_OFF'?'该技师当天休息，请更换技师或日期':'没有可容纳本次服务的空档，请更换日期或技师',
+      bookingMode:availability.bookingMode,
       appointmentTime: nextTime,
       service: Object.assign({}, this.data.service, { duration: availability.durationMin || this.data.service.duration }),
       technician: tech || availability.technician
     })
+    } catch(e){if(requestVersion===this._availabilityVersion)this.setData({timeSlots:[],appointmentTime:'',availabilityError:e.message||'时段读取失败，请重试'})}
+    finally{if(requestVersion===this._availabilityVersion)this.setData({availabilityLoading:false})}
   },
 
   chooseImage() { this.withMediaPrivacy(() => this.chooseImageAuthorized()) },

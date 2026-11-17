@@ -1,3 +1,11 @@
+import {nextSettlementCode} from './settlement-code.mjs'
+import {createRecordLifecycle,activeRecords,assertRecordActive,recordIsArchived} from './record-lifecycle.mjs'
+import {createConfigRevision,configFingerprint} from './config-fingerprint.mjs'
+import {createBookingAddons} from './booking-addons.mjs'
+import {readBookingAcceptance} from './booking-window.mjs'
+import {legacyDepositEnabled,writeDepositConfig} from './deposit-switch.mjs'
+import {isRechargePackage,canonicalPackageKind} from './package-kind.mjs'
+import {configurePricingRules} from './setup-pricing-rules.mjs'
 import {createDepositWorkflow} from './deposit-workflow.mjs'
 import {ensureFinanceLockColumn} from './finance-lock-schema.mjs'
 import {createBookingDepositFunding} from './booking-deposit-funding.mjs'
@@ -40,7 +48,8 @@ import { ensureCustomerCreateSchema, createCustomerCreator } from './customer-cr
 import { bindingIdentity, createVerifiedPhoneCompletion } from './archive-binding.mjs'; import { requireBoundCustomer } from './customer-phone-gate.mjs'
 import { createScanIdentity } from './scan-identity.mjs'
 import { ensureServiceImageViewSchema, storedImageView, serviceImageFields } from './image-view.mjs'
-import { validateBusinessHours, writeBusinessHours } from './business-hours-write.mjs'
+import {reviewBusinessHours} from './business-hours-review.mjs'
+import { businessHoursRevision, validateBusinessHours, writeBusinessHours } from './business-hours-write.mjs'
 import { writeHttpBody } from './http-body.mjs'
 import {writeServiceNote} from './service-note-write.mjs'
 import { createSettlementReadAccess } from './settlement-read-access.mjs'
@@ -98,6 +107,14 @@ import { createAiReviewRoutes } from './ai-review-routes.mjs'
 import { createWecomRecord } from './wecom-record.mjs'
 import { createAiRetouchGate } from './ai-retouch-gate.mjs'
 import { createPlatformTenantConfig } from './platform-tenant-config.mjs'
+import {createStoreSetupDefinitions} from './store-setup-routes.mjs'
+import {createSetupRulePresentation} from './setup-rule-presentation.mjs'
+import {createOperationalSetupRules} from './operational-setup-routes.mjs'
+import {createStaffAccountSetup} from './staff-account-setup-routes.mjs'
+import {createRecurringSetup} from './recurring-setup-routes.mjs'
+import {createStaffSetupDefinitions} from './staff-setup-routes.mjs'
+import {createSetupAdapters} from './platform-setup-adapters.mjs'
+import {createMarketingDefinitions} from './marketing-definition-routes.mjs'
 import { createTenantPublicUrl } from './tenant-public-url.mjs'
 import { createOnboardingSteps } from './onboarding-steps.mjs'
 import { createBookingGuards } from './booking-guards.mjs'
@@ -480,12 +497,7 @@ const WECOM_AGENT_ID = process.env.WECOM_AGENT_ID || ''
 // 转人工提醒推给谁(企微成员账号);默认 @all = 应用可见范围内全体
 const WECOM_NOTIFY_USERID = process.env.WECOM_NOTIFY_USERID || '@all'
 
-const addOns = [
-  { id: 'remove', name: '卸甲/卸睫', priceCents: 3000, durationMin: 30 },
-  { id: 'reinforce', name: '甲面加固', priceCents: 4000, durationMin: 15 },
-  { id: 'senior', name: '指定资深技师', priceCents: 6000, durationMin: 0 },
-  { id: 'extend', name: '延长加项时间', priceCents: 5000, durationMin: 30 }
-]
+
 
 /* 演示种子数据已搬出到 ./seed-services.mjs(公约②,2026-08-25) */
 
@@ -1416,6 +1428,7 @@ function requireOwner(req) {
 }
 
 function requireAdmin(req) {
+  const preview = platformTenantConfig.preview.actor(req); if (preview) return preview
   const auth = req.headers.authorization || ''
   if (auth === `Bearer ${OWNER_TOKEN}`) {
     // 平台主钥匙可显式指定要操作哪个租户(平台侧运维脚本用:体验店种子注入、代商家配价目表)。
@@ -5175,7 +5188,7 @@ const { pricingCategories, serializePricingCategory, serializePricingItem, prici
   servicePriceMap: (id) => servicePriceMap(id), startingPriceCentsOf: (id, base) => startingPriceCentsOf(id, base)
 })
 const serviceImportApi = createServiceImport({ db, apiError, randomId, iso, categoryList: (tid) => pricingCategories(tid), json, readBody })
-const pricingCategoryApi = createPricingCategories({ db, apiError, randomId, iso, serialize: (r) => serializePricingCategory(r), listOf: (tid) => pricingCategories(tid) })
+const pricingCategoryApi = createPricingCategories({ db, apiError, randomId, iso, lifecycle:()=>recordLifecycle, serialize: (r) => serializePricingCategory(r), listOf: (tid) => pricingCategories(tid) })
 
 function membershipForSpend(totalSpentCents = 0, tenantId = currentTenantId()) {
   const spend = Number(totalSpentCents || 0)
@@ -5956,6 +5969,7 @@ function validateBookingInput(body) {
      顾客端曾写死旗舰店 store id —— 非旗舰店顾客的预约会写到旗舰店名下(租户串味,
      纪律 #7 的顾客端方向)。前端修掉之后,这里再锁一道:传错店直接 400,串味单进不了库。 */
   const bookingTenant = body.tenantId || DEFAULT_TENANT_ID
+  assertRecordActive(db,apiError,bookingTenant,'customers',body.userId)
   if (!db.prepare('SELECT id FROM stores WHERE id = ? AND tenant_id = ?').get(body.storeId, bookingTenant)) {
     throw apiError(400, 'STORE_TENANT_MISMATCH', '门店与当前商家不符,请退出小程序重新进店后再试。')
   }
@@ -5967,7 +5981,7 @@ function validateBookingInput(body) {
     technicianId: body.technicianId,
     date: body.date,
     time: body.time,
-    addOns: Array.isArray(body.addOns) ? body.addOns : [],
+    addOns: bookingAddons.resolve(bookingTenant,body.serviceId,body.addOns||[]),
     referenceImages: normalizeReferenceImages(body.referenceImages),
     sourceChannel: body.sourceChannel || body.source || body.channel || null,
     notes: body.notes || null,
@@ -6278,17 +6292,10 @@ function createBooking(body, opts = {}) {
   const serializedUser = serializeUser(user, input.tenantId || DEFAULT_TENANT_ID)
   // 线上定金开关(租户级,默认开):关闭=顾客自约免定金直接确认、到店收款——给没有/不想办支付商户号的商家用
   const bookingTenantId = input.tenantId || DEFAULT_TENANT_ID
-  const onlineDeposit = (() => {
-    try {
-      const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'booking_rules'").get(bookingTenantId)
-      const rules = row ? parseJson2(row.value) : {}
-      return rules.onlineDeposit !== false
-    } catch (e) { return true }
-  })()
   /* P1.2:定金金额与减免改为按本店 deposit_config 算。默认配置 = per_service,
      旗舰店所有项目的 deposit_cents 都是 5000,所以算出来与改造前写死的 5000 完全一致。 */
   const depositConfig = getDepositConfig(bookingTenantId)
-  const depositRequiredCents = onlineDeposit ? depositAmountForService(service, depositConfig, bookingTenantId) : 0
+  const depositRequiredCents = depositAmountForService(service, depositConfig, bookingTenantId)
   const memberWaives = depositConfig.memberWaive === 'all'
     ? isMemberOf(input.userId, bookingTenantId)
     : (depositConfig.memberWaive === 'by_tier' ? Boolean(serializedUser?.depositWaived) : false)
@@ -6419,7 +6426,7 @@ function cancelBooking(id, body) {
   }
 }
 
-function getAdminCustomers() {
+function getAdminCustomers(includeArchived=false) {
   const tid = currentTenantId()
   /* 🔴 D35(2026-08-12 核查二抓获):原来默认店(旗舰)不加任何过滤=全库所有租户用户大杂烩,
      lucky-luxe 客户库能看到 jics 沙盒店手测建的「666/899」——单租户时代遗产,租户红线违例。
@@ -6428,7 +6435,7 @@ function getAdminCustomers() {
   /* 口径与结算卡主门一致:严格 users.tenant_id = 本店(单一规则,三处同源:客户列表/排单校验/卡主校验)。
      「本店有活动但档案挂别店」不再放行 —— 那正是串味的形状,该修档案归属而不是放行显示。 */
   const activityFilter = `
-    WHERE u.tenant_id = '${esc}'`
+    WHERE u.tenant_id = '${esc}' ${includeArchived?'':"AND NOT EXISTS(SELECT 1 FROM record_lifecycle a WHERE a.tenant_id=u.tenant_id AND a.kind='customers' AND a.record_id=u.id AND a.status='archived')"}`
   return db.prepare(`
     SELECT
       u.id,
@@ -6502,12 +6509,10 @@ function buildCustomerServiceContext(req, lang = 'zh') {
   // 默认开=不注入任何内容,已训练的 matrix 行为零变化。
   let depositMode = null
   try {
-    const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'booking_rules'").get(currentTenantId())
-    const rules = row ? parseJson2(row.value) : {}
-    if (rules.onlineDeposit === false) {
+    if (!getDepositConfig(currentTenantId()).enabled) {
       depositMode = lang === 'zh'
-        ? '本店预约无需线上支付定金:顾客确认时段后立即锁位,费用到店支付即可。不要引导顾客付定金或发送付款链接。'
-        : 'No online deposit required: the slot is locked upon confirmation; payment is collected in store. Do not ask customers to pay a deposit online.'
+        ? '本店预约无需定金:顾客确认时段后立即锁位,费用到店支付即可。不要引导顾客付定金或发送付款链接。'
+        : 'No deposit required: the slot is locked upon confirmation; payment is collected in store. Do not ask customers to pay a deposit online.'
     }
   } catch (e) { /* 忽略 */ }
   return depositMode ? { customer, bookings, services, stores, depositMode } : { customer, bookings, services, stores }
@@ -6527,42 +6532,7 @@ const { reverseBookingIncome } = createBookingIncome({ db, getService, insertFin
 
 
 // 固定支出规则：把到期未生成的支出补齐（幂等，可反复调用）
-function materializeRecurringTransactions() {
-  const today = localParts(new Date()).date
-  const rules = db.prepare('SELECT * FROM finance_recurring_rules WHERE tenant_id = ? AND active = 1').all(currentTenantId())
-  let generated = 0
-  for (const rule of rules) {
-    const startFrom = rule.last_run_on || String(rule.created_at || today).slice(0, 10)
-    let cursor = new Date(`${startFrom.slice(0, 7)}-01T12:00:00`)
-    for (let i = 0; i < 24; i += 1) {
-      const year = cursor.getFullYear()
-      const month = cursor.getMonth()
-      const lastDay = new Date(year, month + 1, 0).getDate()
-      const day = Math.min(rule.day_of_month, lastDay)
-      const occurrence = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-      if (occurrence > today) break
-      if (!rule.last_run_on || occurrence > rule.last_run_on) {
-        insertFinanceTransaction({
-          type: 'expense',
-          source: 'recurring',
-          category: rule.category,
-          tags: rule.tags,
-          amountCents: rule.amount_cents,
-          payChannel: 'unknown',
-          occurredOn: occurrence,
-          note: `固定支出自动入账：${rule.name}`,
-          recurringRuleId: rule.id,
-          createdBy: 'recurring-engine'
-        })
-        rule.last_run_on = occurrence
-        db.prepare('UPDATE finance_recurring_rules SET last_run_on = ?, updated_at = ? WHERE id = ?').run(occurrence, iso(new Date()), rule.id)
-        generated += 1
-      }
-      cursor = new Date(year, month + 1, 1, 12)
-    }
-  }
-  return generated
-}
+
 
 // ===== 目标进度与工资月结（阶段3C）=====
 function cadFromCentsText(cents) {
@@ -6712,7 +6682,7 @@ const { MEMBER_QUALIFY_MODES, DEFAULT_MEMBERSHIP_CONFIG, getMembershipConfig, se
   db, iso, currentTenantId, storedValueBalanceDetail: (u, t) => storedValueBalanceDetail(u, t)
 , apiError })
 const onboardingSteps = createOnboardingSteps({ db, json, apiError, localParts, localDateTime, iso })   // D197 第一段:五步灯(灯与句子都在后端出)
-const platformTenantConfig = createPlatformTenantConfig({ db, json, apiError, readBody, wecomRouting, aiRetouchGate, getMembershipConfig, setMembershipConfig, MEMBER_QUALIFY_MODES })
+const platformTenantConfig = createPlatformTenantConfig({ currencyOf:tenantCurrencyCodeOrNull,previewWechat:{appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET},db, json, apiError, readBody, wecomRouting, aiRetouchGate, getMembershipConfig, setMembershipConfig, MEMBER_QUALIFY_MODES, getEntitlements,tenantContext,platformOperator:req=>platformAuth.fromSession(String(req.headers.authorization||'').replace(/^Bearer /,''))?.username||(req.headers.cookie?'platform-device:'+createHash('sha256').update(req.headers.cookie).digest('hex').slice(0,12):'platform-api'),getSetupAdapters:()=>createSetupAdapters({db,apiError,bookingAddons,pricingRules:{read:getPricingRules,write:(tid,b)=>configurePricingRules({db,apiError,getPricingRules,putPricingRule},tid,b)},currentTenantId,scheduleWrite,scheduleBoard,operationalSetupRules,recurringSetup,staffAccountSetup,staffSetupDefinitions,kbRoutes,setupRulePresentation,storeSetupDefinitions,businessHoursRoutes,storeGuideApi,heroSlidesApi,notifyScheduler,marketingDefinitions,packageWrite,serviceEditRoutes,serializeMembershipPackage,memberPricing,getDepositConfig,setDepositConfig,getMembershipConfig,setMembershipConfig}) })
 const staffScope = createStaffScope({
   db, apiError, currentTenantId, bookingStatusText,
   memberCodeForUserId: (id) => memberCodeForUserId(id),
@@ -6737,7 +6707,7 @@ const kbRoutes = createKbRoutes({
   hasAi: (t) => hasAi(t),
   extractKbEntriesFromDocument,
 })
-const businessHoursRoutes = createBusinessHoursRoutes({
+const businessHoursRoutes = createBusinessHoursRoutes({ localParts,tenantTimezone,
   apiError, json, readBody, db, currentTenantId, defaultStoreId,
   getBusinessHoursRows: (sid) => getBusinessHoursRows(sid),
   serializeBusinessHour: (r) => serializeBusinessHour(r),
@@ -6802,7 +6772,7 @@ const scheduleBoard = createScheduleBoard({
   backfillPlanFor,depositWorkflow:b=>depositWorkflow.summary(b)
 })
 const dashboardPulse = createDashboardPulse({ db, currentTenantId, tenantTimezone, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked: (tid) => financeLockEnabled(tid), todayBoardOf: (tid, date) => scheduleBoard.dayCounts(tid, date), storeClosedOn: (tid, date) => { try { return isClosedDay(defaultStoreId(), date) } catch { return false } }, storeClockText: (tid) => localParts(new Date(), tenantTimezone(tid)).time, aiRetouchCard: (tid) => aiRetouchGate.card(tid) })   /* 主页大屏三接口(图 v3.1 §四);口径两问答案在模块抬头;「此刻」与台面同一条规则 */
-const bookingSubscriptions=createBookingSubscriptions({db,apiError,json,readBody,requireCustomer,resolveTenant,localParts,tenantTimezone,...subscriptionScope(),send:createSubscribeSender({appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET,miniprogramState:process.env.WECHAT_SUBSCRIBE_STATE||'formal'})}); const bookingAcceptance=createBookingAcceptance({db,apiError,json,localParts,tenantTimezone,onConfirmed:(tid,b,at)=>bookingSubscriptions.confirmed(tid,b,at)}); bookingAcceptance.ensureSchema(); const merchantMessages = createMerchantMessages({db,apiError,json,localParts,tenantTimezone}); const notifyScheduler = createNotifyScheduler({
+const bookingSubscriptions=createBookingSubscriptions({db,apiError,json,readBody,requireCustomer,resolveTenant,localParts,tenantTimezone,...subscriptionScope(),send:createSubscribeSender({appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET,miniprogramState:process.env.WECHAT_SUBSCRIBE_STATE||'formal'})}); const bookingAcceptance=createBookingAcceptance({db,apiError,json,localParts,tenantTimezone,onConfirmed:(tid,b,at)=>bookingSubscriptions.confirmed(tid,b,at)}); bookingAcceptance.ensureSchema(); const merchantMessages = createMerchantMessages({db,apiError,json,localParts,tenantTimezone,setupSource:platformTenantConfig.merchantInbox}); const notifyScheduler = createNotifyScheduler({
   db, randomId, iso, apiError, json, readBody, parseJson: parseJson2, localParts, tenantTimezone,
   DEFAULT_TENANT_ID, dataScope: DATA_SCOPE
 })
@@ -6997,6 +6967,7 @@ function servicePriceMap(serviceId) {
    applyTipReuse, userId } → { lines, subtotalCents, rulesApplied, totalCents } */
 function quotePrice(input = {}) {
   const tenantId = input.tenantId || currentTenantId()
+  assertRecordActive(db,apiError,tenantId,'customers',input.userId||input.payerUserId)
   const tierKey = PRICE_TIERS.includes(input.tierKey) ? input.tierKey : 'list'
   const rules = getPricingRules(tenantId)
   const categoryById = {}
@@ -7174,13 +7145,16 @@ function getDepositConfig(tenantId = currentTenantId()) {
   if (!['per_service', 'fixed', 'pct'].includes(merged.mode)) merged.mode = 'per_service'
   if (!['by_tier', 'all', 'none'].includes(merged.memberWaive)) merged.memberWaive = 'by_tier'
   if (!['auto', 'custom'].includes(merged.displayMode)) merged.displayMode = 'auto'
-  merged.enabled = merged.enabled !== false
+  merged.enabled = merged.enabled !== false && legacyDepositEnabled(db,tenantId)
   merged.deductible = Boolean(merged.deductible)
+  merged.configRevision=configFingerprint([row?.value||null,legacyDepositEnabled(db,tenantId)])
   return merged
 }
 
 function setDepositConfig(tenantId, input = {}) {
+  if(input.enabled!==undefined&&typeof input.enabled!=='boolean')throw apiError(400,'BAD_REQUEST','定金开关须为开启或关闭。')
   const current = getDepositConfig(tenantId)
+  if(input.expectedConfigRevision!==undefined&&input.expectedConfigRevision!==current.configRevision)throw apiError(409,'CONFIG_CHANGED','定金规则已在其他设备修改，请核对后再保存。')
   const num = (value, fallback) => (value === undefined || value === null || value === '' ? fallback : Math.max(0, Math.round(Number(value) || 0)))
   const nullableNum = (value, fallback) => (value === undefined ? fallback : (value === null || value === '' ? null : Math.max(0, Math.round(Number(value) || 0))))
   const cp = input.cancelPolicy && typeof input.cancelPolicy === 'object' ? input.cancelPolicy : {}
@@ -7207,9 +7181,7 @@ function setDepositConfig(tenantId, input = {}) {
     // A①-2 留存定金有效时长(天);空=长期
     retainValidDays: nullableNum(input.retainValidDays, current.retainValidDays)
   }
-  db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'deposit_config', ?, ?)
-    ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
-    .run(tenantId, JSON.stringify(next), iso(new Date()))
+  writeDepositConfig(db,tenantId,next,iso(new Date()))
   return getDepositConfig(tenantId)
 }
 
@@ -7218,7 +7190,7 @@ function setDepositConfig(tenantId, input = {}) {
 const ONLINE_PAYMENT_READY = false
 
 function depositPolicyText(config, tenantId = currentTenantId(), lang = 'zh') {
-  if (config.displayMode === 'custom') {
+  if (config.enabled && config.displayMode === 'custom') {
     const text = lang === 'en' ? (config.customTextEn || config.customText) : config.customText
     if (String(text || '').trim()) return String(text).trim()
   }
@@ -8070,7 +8042,7 @@ function computeSettlement(input = {}) {
     let bonusCents = 0
     let rpkgName = '', giftItems = []
     if (input.rechargePackageId) {
-      const rpkg = db.prepare("SELECT * FROM membership_packages WHERE id = ? AND tenant_id = ? AND kind = 'recharge' AND is_active = 1").get(String(input.rechargePackageId), tenantId)
+      const rpkg = db.prepare("SELECT * FROM membership_packages WHERE id = ? AND tenant_id = ? AND kind IN ('recharge','stored_value') AND is_active = 1").get(String(input.rechargePackageId), tenantId)
       if (!rpkg) throw apiError(404, 'PACKAGE_NOT_FOUND', '没有这个充值套餐(或已下架)。')
       amountCents = rpkg.price_cents
       bonusCents = rpkg.bonus_cents || 0
@@ -9728,8 +9700,7 @@ ${rows.join('\n')}
 }
 
 function settlementCode(tenantId) {
-  const prefix = String(tenantId || '').replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase() || 'LL'
-  return `${prefix}-${todayOf(tenantId).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+  return nextSettlementCode({db,tenantId,date:todayOf(tenantId)})
 }
 
 /* ===== 扫码签闭环(2026-08-09 图 S1–S4 + 规则⓪–⑧)=====
@@ -10015,7 +9986,16 @@ const conversationRoutes = createConversationRoutes({
   conversationRow: wecomRouting.conversationRow, redactConversation,
 })
 
-const serializeMembershipPackage = createMembershipPackageSerializer(giftSnapshotOfPackage,row=>row.tenant_id&&row.kind==='recharge'&&memberPricing.config(row.tenant_id).active?memberPricing.packageDiscount(row.tenant_id,row.id):null)
+const serializeMembershipPackage = createMembershipPackageSerializer(giftSnapshotOfPackage,row=>row.tenant_id&&isRechargePackage(row)&&memberPricing.config(row.tenant_id).active?memberPricing.packageDiscount(row.tenant_id,row.id):null)
+const setupRulePresentation=createSetupRulePresentation({getDepositConfig,getMembershipConfig,ONLINE_PAYMENT_READY,depositKeyFacts,depositSummaryRows,depositPolicyText,MEMBER_QUALIFY_MODES,membershipSummaryRows})
+const operationalSetupRules=createOperationalSetupRules({db,json,apiError,readBody,currentTenantId,quoteState,iso,staffVisibilityOf,STAFF_VISIBILITY_MODES,monthKeyOf,randomId,actorOf,parseJson2,serializeSalaryPlan,effectiveSalaryPlan})
+const staffAccountSetup=createStaffAccountSetup({db,json,apiError,readBody,currentTenantId,requireAdmin,tenantContext,defaultTenantId:DEFAULT_TENANT_ID,nameToUsername,isValidUsername,randomPassword,randomId,adminPasswordHash,iso})
+const materializeRecurringTransactions=()=>recurringSetup.materialize()
+const staffSetupDefinitions=createStaffSetupDefinitions({db,apiError,readBody,json,currentTenantId,defaultStoreId,randomId})
+const storeSetupDefinitions=createStoreSetupDefinitions({db,apiError,readBody,json,currentTenantId,defaultStoreId,iso,parseJson2,specialDateInput,getDepositConfig,setDepositConfig})
+const marketingDefinitions=createMarketingDefinitions({db,apiError,readBody,json,currentTenantId,randomId,iso,serializeCoupon,serializePrize,assertCouponValueOk})
+const recordLifecycle=createRecordLifecycle({db,apiError,json,readBody,currentTenantId,actorOf:a=>actorOf(a),todayOf:tid=>localParts(new Date(),tenantTimezone(tid)).date})
+const bookingAddons=createBookingAddons({db,apiError});const configRevision=createConfigRevision(db)
 const packageWrite=createPackageWrite({db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage,memberPricing})
 const createCustomer = createCustomerCreator({db,apiError,randomId,maskPhone})
 const completeVerifiedPhone = createVerifiedPhoneCompletion({db,apiError,claim:claimUserByOpenId,serialize:serializeUser,auth:miniAuthFor,unboundSql:notBoundByLoginIdentitySql})
@@ -10030,12 +10010,13 @@ const memberDocuments=createMemberServiceDocuments({db,policy:memberPricing,prev
   validateDeposit:s=>depositWorkflow.validate(s),balanceOf:storedValueBalanceDetail,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,amendSettlement:(id,b,a,o={})=>amendSettlement(id,b,a,{...o,personDocument:true}),amendmentShape,formatMoneyCents,formatSignedAt:(v,t)=>{const p=localParts(v,tenantTimezone(t));return `${p.date} ${p.time}（${tenantTimezone(t)}）`},assertStaff:(a,r)=>settlementAccess.assertStaff(a,r)})
 const memberDocumentRoutes=createMemberDocumentRoutes({db,policy:memberPricing,documents:memberDocuments,json,readBody,currentTenantId,apiError,requireCustomer,isUserBound,serializeSettlement,formatMoneyCents})
 
-const serviceEditRoutes=createServiceEditRoutes({db,apiError,currentTenantId,servicePayload,assertServicePriceOk,assertCategoryOk,serviceIdFrom,upsertServicePrice,serializeService,getService,pricingItemShape,writePricingItemPrices,serializePricingItem,memberPricing,json,readBody})
+const serviceEditRoutes=createServiceEditRoutes({db,apiError,recordLifecycle,currentTenantId,servicePayload,assertServicePriceOk,assertCategoryOk,serviceIdFrom,upsertServicePrice,serializeService,getService,pricingItemShape,writePricingItemPrices,serializePricingItem,memberPricing,json,readBody})
 async function route(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {})
   const url = new URL(req.url, `http://${req.headers.host}`)
   const path = url.pathname
   const query = Object.fromEntries(url.searchParams.entries())
+  if(platformTenantConfig.preview.respond(req,res,path))return
   if(!path.startsWith('/admin/')&&await memberDocumentRoutes(req,res,{path,query}))return;
 
   if (req.method === 'GET' && path === '/') return serveFile(res, webRoot, 'index.html')
@@ -10501,58 +10482,7 @@ async function route(req, res) {
      🔴 2026-08-08 修:这三条路由排在租户上下文闸门之前,自己 requireAdmin 却没进上下文,
      currentTenantId() 一律回落旗舰店 —— 非旗舰商家看到的是旗舰店的员工账号列表,
      建账号则因为「技师不在旗舰店」直接 404。按登录账号自己的租户进上下文即可。 */
-  if (req.method === 'GET' && path === '/admin/staff-accounts') {
-    const admin = requireAdmin(req)
-    if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    tenantContext.enterWith({ tenantId: admin.tenantId || DEFAULT_TENANT_ID })
-    const rows = db.prepare("SELECT id, username, role, technician_id, status, must_change_password, last_login_at FROM admin_accounts WHERE role = 'staff' AND tenant_id = ? ORDER BY created_at ASC").all(currentTenantId())
-    return json(res, 200, {
-      accounts: rows.map((row) => ({
-        id: row.id, username: row.username, technicianId: row.technician_id, status: row.status,
-        mustChangePassword: Boolean(row.must_change_password), lastLoginAt: row.last_login_at
-      }))
-    })
-  }
-  // 建号弹窗要预填一个用户名 —— 拼音表只在服务端一份,前端问一下就好
-  if (req.method === 'GET' && path === '/admin/staff-accounts/suggest') {
-    const admin = requireAdmin(req)
-    if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    tenantContext.enterWith({ tenantId: admin.tenantId || DEFAULT_TENANT_ID })
-    const tech = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(String(query.technicianId || ''), currentTenantId())
-    if (!tech) throw apiError(404, 'NOT_FOUND', 'Technician not found.')
-    const base = nameToUsername(tech.name) || 'staff'
-    let username = base
-    let suffix = 1
-    while (db.prepare('SELECT id FROM admin_accounts WHERE LOWER(username) = ?').get(username)) { suffix += 1; username = `${base}${suffix}` }
-    return json(res, 200, { username, base, name: tech.name })
-  }
-  if (req.method === 'POST' && path === '/admin/staff-accounts') {
-    const admin = requireAdmin(req)
-    if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    tenantContext.enterWith({ tenantId: admin.tenantId || DEFAULT_TENANT_ID })
-    const body = await readBody(req)
-    const tech = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(String(body.technicianId || ''), currentTenantId())
-    if (!tech) throw apiError(404, 'NOT_FOUND', 'Technician not found.')
-    if (db.prepare('SELECT id FROM admin_accounts WHERE technician_id = ?').get(tech.id)) {
-      throw apiError(409, 'DUPLICATE', '该技师已有登录账号,可重置密码或停用。')
-    }
-    /* 用户名(店主 2026-08-09 拍板):**拼音自动生成**(小婕 → xiaojie),重名加数字后缀;
-       店主可以在建号弹窗里自己改(仍限英数并查重)。存量的 staff/staff2 不迁移。 */
-    const wanted = String(body.username || '').trim().toLowerCase()
-    if (wanted && !isValidUsername(wanted)) throw apiError(400, 'BAD_USERNAME', '用户名只能用英文字母和数字,3–20 位。')
-    if (wanted && db.prepare('SELECT id FROM admin_accounts WHERE LOWER(username) = ?').get(wanted)) {
-      throw apiError(409, 'DUPLICATE', '这个用户名已经有人用了,换一个。')
-    }
-    const base = wanted || nameToUsername(tech.name) || 'staff'
-    let username = base
-    let suffix = 1
-    while (db.prepare('SELECT id FROM admin_accounts WHERE LOWER(username) = ?').get(username)) { suffix += 1; username = `${base}${suffix}` }
-    const initialPassword = randomPassword()
-    db.prepare(`INSERT INTO admin_accounts (id, tenant_id, username, display_name, role, technician_id, password_hash, must_change_password, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'staff', ?, ?, 1, 'active', ?, ?)`)
-      .run(randomId('acct'), currentTenantId(), username, tech.name, tech.id, adminPasswordHash(username, initialPassword), iso(new Date()), iso(new Date()))
-    return json(res, 201, { username, initialPassword, note: '初始密码只显示这一次,请立即发给员工;员工首次登录会被要求改密。' })
-  }
+  if(await staffAccountSetup.route(req,res,{path,query}))return
   const staffAcctMatch = path.match(/^\/admin\/staff-accounts\/([^/]+)\/(reset-password|toggle)$/)
   if (req.method === 'POST' && staffAcctMatch) {
     const admin = requireAdmin(req)
@@ -10567,7 +10497,7 @@ async function route(req, res) {
       db.prepare('DELETE FROM admin_sessions WHERE account_id = ?').run(account.id)
       return json(res, 200, { username: account.username, initialPassword })
     }
-    const nextStatus = account.status === 'active' ? 'disabled' : 'active'
+    const nextStatus = account.status === 'active' ? 'disabled' : 'active'; if(nextStatus==='active')assertRecordActive(db,apiError,currentTenantId(),'technicians',account.technician_id)
     db.prepare('UPDATE admin_accounts SET status = ?, updated_at = ? WHERE id = ?').run(nextStatus, iso(new Date()), account.id)
     if (nextStatus === 'disabled') db.prepare('DELETE FROM admin_sessions WHERE account_id = ?').run(account.id)
     return json(res, 200, { username: account.username, status: nextStatus })
@@ -10694,7 +10624,8 @@ async function route(req, res) {
     return json(res, 200, { technicians: db.prepare(sql).all(...args) })
   }
   if (createPortfolioMedia({ db, resolveTenant, parseJson, apiError, json, customerAppUrl })(req, res, {path, query})) return
-  if (req.method === 'GET' && path === '/add-ons') return json(res, 200, { addOns })
+  if(req.method==='GET'&&path==='/config-revision')return json(res,200,configRevision(resolveTenant(req,query)),{'cache-control':'no-store'})
+  if (req.method === 'GET' && path === '/add-ons') {const tid=resolveTenant(req,query);return json(res,200,{addOns:bookingAddons.visible(tid,query.serviceId),revision:bookingAddons.read(tid).revision},{'cache-control':'no-store'})}
   if (req.method === 'GET' && path === '/availability') {
     expireOldHolds()
     // 多租户:storeId 必须属于"当前进的店",防止跨店查可约时段
@@ -10703,6 +10634,7 @@ async function route(req, res) {
       const s = db.prepare('SELECT tenant_id FROM stores WHERE id = ?').get(query.storeId)
       if (s && s.tenant_id !== tid) throw apiError(404, 'NOT_FOUND', 'Store not found in this shop.')
     }
+    if(query.addOnIds!==undefined){let ids;try{ids=JSON.parse(query.addOnIds)}catch{throw apiError(400,'INVALID_ADDONS','附加服务格式不正确。')}query.extraDurationMin=bookingAddons.resolve(tid,query.serviceId,ids).reduce((n,x)=>n+x.durationMin,0)}
     return json(res, 200, getAvailability(query))
   }
   // 公开门店列表(兜底进店:顾客没带店标识时选择进入哪家)
@@ -10769,7 +10701,7 @@ async function route(req, res) {
     const offlineNote = '到店后由店员为你办理'
     const rows = db.prepare("SELECT * FROM membership_packages WHERE tenant_id = ? AND is_active = 1 AND mall_visible = 1 ORDER BY sort_order ASC, created_at ASC").all(tid)
     const m = (c) => formatMoneyCents(c, tid, 'auto')
-    const items = rows.map((r) => {
+    const items = rows.filter(r=>isRechargePackage(r)||r.kind==='times').map((r) => {
       const isTimes = r.kind === 'times'
       const unit = isTimes && r.times_count > 0 ? timecardUnitCents({ price_cents: r.price_cents, total_times: r.times_count }, 1) : 0
       /* 裁定②(店主 08-23):**不为次卡单开商城**——一个商城,次卡挂在对应服务大类之下,
@@ -10780,7 +10712,7 @@ async function route(req, res) {
         section,
         sectionKind: isTimes ? 'timecard' : 'recharge',
         id: r.id,
-        kind: r.kind,
+        kind: canonicalPackageKind(r.kind),
         name: r.name,
         priceCents: r.price_cents,
         priceText: m(r.price_cents),
@@ -11167,30 +11099,6 @@ async function route(req, res) {
     return json(res, 201, saveAiLogicNote(await readBody(req), adminSession))
   }
   /* 31p 每店可配:会话豁口小时 / 报价有效小时(读走 quote-state settingsOf 同源) */
-  if (req.method === 'GET' && path === '/admin/quote-settings') {
-    return json(res, 200, quoteState.settingsOf(currentTenantId()))
-  }
-  if (req.method === 'PUT' && path === '/admin/quote-settings') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可改报价设置。')
-    const body = await readBody(req)
-    const clamp = (v, min, max, name2) => {
-      const n = Math.round(Number(v))
-      if (!Number.isFinite(n) || n < min || n > max) throw apiError(400, 'BAD_REQUEST', `${name2}须在 ${min}~${max} 之间。`)
-      return n
-    }
-    const now2 = iso(new Date())
-    if (body.gapHours !== undefined) {
-      db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'session_gap_hours', ?, ?)
-        ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
-        .run(currentTenantId(), String(clamp(body.gapHours, 1, 72, '会话豁口小时')), now2)
-    }
-    if (body.validHours !== undefined) {
-      db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'quote_valid_hours', ?, ?)
-        ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
-        .run(currentTenantId(), String(clamp(body.validHours, 1, 336, '报价有效小时')), now2)
-    }
-    return json(res, 200, quoteState.settingsOf(currentTenantId()))
-  }
   if (req.method === 'POST' && path === '/admin/wechat/mock-chat-message') {
     const chatStartedAt = Date.now()
     console.log(`[chat] ${new Date().toISOString()} 收到进线请求`)
@@ -11378,6 +11286,13 @@ async function route(req, res) {
   if (await migrationCardReconciliation.route({req,res,path,adminSession,readBody,json})) return
   if (await migrationBalanceActivation.route({req,res,path,adminSession,readBody,json})) return
   if (await migrationProfile.route({req,res,path,query,adminSession,readBody,json})) return
+  if(path==='/admin/booking-addons'){
+    if(adminSession.role!=='owner')throw apiError(403,'FORBIDDEN','仅老板可配置预约附加服务。')
+    if(req.method==='GET')return json(res,200,{config:bookingAddons.read(currentTenantId())})
+    if(req.method==='PUT')return json(res,200,{config:bookingAddons.configure(currentTenantId(),await readBody(req))})
+  }
+  if(await recordLifecycle.route(req,res,{path,query,adminSession}))return
+  if(req.method==='GET'&&path==='/admin/config-revision')return json(res,200,configRevision(currentTenantId()),{'cache-control':'no-store'})
   if (req.method === 'POST' && path === '/admin/customers') return json(res,201,createCustomer({body:await readBody(req),tenantId:currentTenantId(),role:adminSession.role}))
   if (req.method === 'GET' && path === '/admin/customers') {
     /* 拍板②(店主 2026-08-10):员工「我的客户」——
@@ -11413,6 +11328,7 @@ async function route(req, res) {
        会把别家店的顾客也列出来;发券是写操作,搜出来点一下就发错店,所以这里按 users.tenant_id 收紧。
        不带 q 的老路径一字不动(顾客页行为零变化)。 */
     const q = String(query.q || '').trim().toLowerCase()
+    if(query.archivedId)return json(res,200,{customers:getAdminCustomers(true).filter(c=>c.id===String(query.archivedId)).map(c=>({...c,archived:recordLifecycle.state(currentTenantId(),'customers',c.id)==='archived'}))})
     const all = getAdminCustomers()
     /* A①-2:客户档案里显示爽约留存定金(长期有效则不显示期限)。
        惰性到期收口在前 —— 到期的先转没收,列表里就不会出现已死的留存。 */
@@ -11485,7 +11401,7 @@ async function route(req, res) {
     const technicians = adminSession.role === 'staff' && query.roster !== '1'
       ? db.prepare('SELECT * FROM technicians WHERE tenant_id = ? AND id = ? ORDER BY name ASC').all(currentTenantId(), adminSession.technicianId)
       : db.prepare('SELECT * FROM technicians WHERE tenant_id = ? ORDER BY name ASC').all(currentTenantId())
-    return json(res, 200, { technicians })
+    return json(res, 200, { technicians:activeRecords(db,currentTenantId(),'technicians',technicians) })
   }
   // ===== P1 结算(技师端开单)=====
   // 开单三条路由(preview / 建单 / 列表)搬进 ./settlement-routes.mjs(批次三边改边拆,只搬不改)
@@ -11557,73 +11473,6 @@ async function route(req, res) {
     return json(res, 200, { performance: staffPerformanceView(techId, month, tid) })
   }
   // 员工可见性三态(店铺级):纯业绩 / 业绩+工资 / 纯工资
-  if (path === '/admin/staff-visibility') {
-    const tid = currentTenantId()
-    if (req.method === 'GET') return json(res, 200, { visibility: staffVisibilityOf(tid), modes: STAFF_VISIBILITY_MODES })
-    if (req.method === 'PUT') {
-      if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可改员工可见范围。')
-      const body = await readBody(req)
-      if (!STAFF_VISIBILITY_MODES.includes(body.visibility)) throw apiError(400, 'BAD_REQUEST', '可见性只能是 perf_only / perf_and_salary / salary_only。')
-      db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'staff_visibility', ?, ?)
-        ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
-        .run(tid, body.visibility, iso(new Date()))
-      return json(res, 200, { visibility: body.visibility })
-    }
-  }
-  /* ===== P2 业绩目标(设置=目标怎么定 / 显示=员工端看什么,两组开关独立)===== */
-  if (req.method === 'GET' && path === '/admin/perf-targets') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '业绩目标由店长设置。')
-    const tid = currentTenantId()
-    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(query.month || '')) ? query.month : monthKeyOf()
-    const rows = db.prepare('SELECT * FROM perf_targets WHERE tenant_id = ? AND month = ?').all(tid, month)
-    const byTech = {}
-    for (const r of rows) byTech[r.technician_id] = r
-    return json(res, 200, {
-      month,
-      // 系统默认:设置=总目标、显示=仅总进度。没设过的技师也列出来,但 hasTarget=false
-      technicians: db.prepare('SELECT id, name, title FROM technicians WHERE tenant_id = ? ORDER BY name ASC').all(tid).map((t) => {
-        const r = byTech[t.id]
-        return {
-          technicianId: t.id, name: t.name, title: t.title || '',
-          hasTarget: Boolean(r),
-          mode: r ? r.mode : 'total',
-          displayMode: r ? r.display_mode : 'total_only',
-          perfTargetCents: r ? r.perf_target_cents : 0,
-          cardTargetCents: r ? r.card_target_cents : 0,
-          orderTarget: r ? r.order_target : 0
-        }
-      })
-    })
-  }
-  if (req.method === 'PUT' && path === '/admin/perf-targets') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '业绩目标由店长设置。')
-    const tid = currentTenantId()
-    const body = await readBody(req)
-    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(body.month || '')) ? body.month : monthKeyOf()
-    const now = iso(new Date())
-    const stmt = db.prepare(`INSERT INTO perf_targets
-      (id, tenant_id, technician_id, month, mode, display_mode, perf_target_cents, card_target_cents, order_target, updated_by, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (tenant_id, technician_id, month) DO UPDATE SET
-        mode = excluded.mode, display_mode = excluded.display_mode,
-        perf_target_cents = excluded.perf_target_cents, card_target_cents = excluded.card_target_cents,
-        order_target = excluded.order_target, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
-    for (const t of Array.isArray(body.targets) ? body.targets : []) {
-      const techId = String(t.technicianId || '')
-      if (!db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(techId, tid)) {
-        throw apiError(400, 'BAD_REQUEST', '技师不属于本店。')
-      }
-      stmt.run(randomId('ptgt'), tid, techId, month,
-        t.mode === 'split' ? 'split' : 'total',
-        t.displayMode === 'with_split' ? 'with_split' : 'total_only',
-        Math.max(0, Math.round(Number(t.perfTargetCents) || 0)),
-        Math.max(0, Math.round(Number(t.cardTargetCents) || 0)),
-        Math.max(0, Math.round(Number(t.orderTarget) || 0)),
-        actorOf(adminSession), now)
-    }
-    const rows = db.prepare('SELECT * FROM perf_targets WHERE tenant_id = ? AND month = ?').all(tid, month)
-    return json(res, 200, { month, saved: rows.length })
-  }
   /* ===== P2 日结(店长每天认账)===== */
   if (req.method === 'GET' && path === '/admin/daily-close') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '日结由店长操作。')
@@ -11665,21 +11514,7 @@ async function route(req, res) {
     // D13 同一处:开单页要按定金规则渲染那一行,员工得读得到;改规则仍然只有老板
     if (adminSession.role !== 'owner' && req.method !== 'GET') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const tid = currentTenantId()
-    if (req.method === 'GET') {
-      const config = getDepositConfig(tid)
-      return json(res, 200, {
-        config,
-        onlinePaymentReady: ONLINE_PAYMENT_READY,
-        keyFacts: { zh: depositKeyFacts(config, 'zh'), en: depositKeyFacts(config, 'en') },
-        // 批④ S7:商家端摘要全量行(小程序只读展示用;与顾客端同一份 config 推导,不各查各的)
-        summaryRows: { zh: depositSummaryRows(config, tid, 'zh'), en: depositSummaryRows(config, tid, 'en') },
-        editHint: {
-          zh: '这些规则在网页后台改:电脑打开后台 → 门店设置 → 定金与取消规则,左边改参数、右边实时看顾客会读到的说法;改完顾客预约页与 AI 客服话术自动跟上。',
-          en: 'Edit these in the web admin: Store settings → Deposit & cancellation.'
-        },
-        text: { zh: depositPolicyText(config, tid, 'zh'), en: depositPolicyText(config, tid, 'en') }
-      })
-    }
+    if (req.method === 'GET') return json(res,200,setupRulePresentation.deposit(tid))
     if (req.method === 'PUT') {
       const body = await readBody(req)
       const config = setDepositConfig(tid, body.config && typeof body.config === 'object' ? body.config : body)
@@ -11768,6 +11603,7 @@ async function route(req, res) {
   if (path === '/admin/pricing/categories' || path.startsWith('/admin/pricing/categories/')) {
     const tid = currentTenantId()
     const catId = path.split('/')[4] || null
+    if(req.method!=='GET'&&!isPlatformKey(req))throw apiError(403,'CATEGORY_PLATFORM_ONLY','服务大类由平台管理，请联系平台核对调整。')
     // 业务规则与平台线共用 ./pricing-categories.mjs(原来这里另写了一份,两份迟早长歪)
     if (req.method === 'GET' && !catId) return json(res, 200, { categories: pricingCategoryApi.list(tid) })
     if (req.method === 'POST' && !catId) return json(res, 201, { category: pricingCategoryApi.create(tid, await readBody(req)) })
@@ -11780,13 +11616,7 @@ async function route(req, res) {
     if (req.method === 'GET') return json(res, 200, { rules: getPricingRules(tid) })
     if (req.method === 'PUT') {
       const body = await readBody(req)
-      const incoming = body.rules && typeof body.rules === 'object' ? body.rules : body
-      for (const key of PRICING_RULE_KEYS) {
-        if (incoming[key] === undefined) continue
-        const entry = incoming[key] || {}
-        putPricingRule(tid, key, { isActive: entry.isActive, config: entry.config })
-      }
-      return json(res, 200, { rules: getPricingRules(tid) })
+      return json(res, 200, configurePricingRules({db,apiError,getPricingRules,putPricingRule},tid,body))
     }
   }
   if (req.method === 'POST' && path === '/admin/pricing/preview') {
@@ -11822,22 +11652,7 @@ async function route(req, res) {
   }
   if (path === '/admin/membership/config') {
     const tid = currentTenantId()
-    if (req.method === 'GET') {
-      return json(res, 200, {
-        config: getMembershipConfig(tid),
-        qualifyModes: MEMBER_QUALIFY_MODES,
-        // 2026-08-08 店主拍板:会员资格模式与等级体系(含「储值耗完是否保留会员」)由平台统一把关,
-        // 商家端只读;充值档位与赠送项仍归商家自助。
-        readOnly: true,
-        managedBy: 'platform',
-        readOnlyNote: '会员资格与等级由平台统一配置,如需调整请联系平台。充值档位与赠送项仍可自助设置。',
-        /* 批④ S9(店主 08-24 拍板改定:维持平台统一设置,不放权)——补两件:
-           ①**只读展示行**:分不分级 / 怎么算会员 / 各级门槛与权益,商家两端同源读这里(不各查各的);
-           ②说明句**写成人话**:改什么、找谁改、怎么找,而不是一句「联系平台」让人猜。 */
-        summaryRows: membershipSummaryRows(getMembershipConfig(tid), tid, 'zh'),
-        editHint: '会员怎么算、分不分级、每级门槛与权益,由平台统一按店配置(你家的规则已经按你的要求设好了)。要调整:在微信上直接找平台对接人说明改成什么样,平台改完你这边和顾客端同时生效,不用自己操作。充值档位、次卡、优惠券这些仍然你自己在「会员与营销」里改。'
-      })
-    }
+    if (req.method === 'GET') return json(res,200,setupRulePresentation.membership(tid))
     if (req.method === 'PUT') {
       if (!isPlatformKey(req)) {
         throw apiError(403, 'MANAGED_BY_PLATFORM', '会员资格与等级由平台统一配置,如需调整请联系平台。充值档位与赠送项仍可自助设置。')
@@ -11850,7 +11665,7 @@ async function route(req, res) {
   // ===== 会员套餐(充值套餐 / 会员次卡)定义 CRUD =====
   if (req.method === 'GET' && path === '/admin/packages') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    return json(res, 200, { packages: db.prepare('SELECT * FROM membership_packages WHERE tenant_id = ? ORDER BY kind ASC, sort_order ASC, created_at ASC').all(currentTenantId()).map(serializeMembershipPackage) })
+    return json(res, 200, { packages: db.prepare('SELECT * FROM membership_packages WHERE tenant_id = ? ORDER BY kind ASC, sort_order ASC, created_at ASC').all(currentTenantId()).filter(r=>recordLifecycle.state(currentTenantId(),'packages',r.id)!=='archived').map(serializeMembershipPackage) })
   }
   if(await packageWrite(req,res,{path,adminSession})) return
   /* S2批①(规则⑧ 商城支付闸):线上自助购买总开关 —— 支付通道未接通(批⑤才接)时永远锁定,
@@ -11877,7 +11692,8 @@ async function route(req, res) {
     /* B①(批① 注释押的义务兑现):有持卡实例的定义拒删只停用——删定义会让已售卡断根(快照虽在,审计链断)。 */
     const held = db.prepare('SELECT COUNT(*) c FROM member_timecards WHERE package_id = ? AND tenant_id = ?').get(id, currentTenantId()).c
     if (held > 0) throw apiError(409, 'PACKAGE_HAS_HOLDINGS', `已有 ${held} 张已售卡关联此定义,不能删除;请改用「下架」停售。`)
-    const r = db.prepare('DELETE FROM membership_packages WHERE id = ? AND tenant_id = ?').run(id, currentTenantId())
+    const review=recordLifecycle.inspect(currentTenantId(),'packages',id);if(!review.actions.includes('delete'))throw apiError(409,'PACKAGE_IN_USE','存在关联记录，请在资料管理中核对后归档。',{review})
+    const r = {changes:recordLifecycle.perform(currentTenantId(),'packages',id,{action:'delete',reason:'套餐管理删除',reviewHash:review.reviewHash},actorOf(adminSession)).ok?1:0}
     if (!r.changes) throw apiError(404, 'NOT_FOUND', 'Package not found.')
     return json(res, 200, { deleted: true })
   }
@@ -11897,7 +11713,7 @@ async function route(req, res) {
      员工可读(⑭ 先例:只读、label 后端句)。recharge_tiers 旧模型就此退役——
      面板换源后全仓零读方,CI 断言防复活(A5 义务②)。 */
   if (req.method === 'GET' && path === '/admin/recharge-packages') {
-    const rows = db.prepare("SELECT * FROM membership_packages WHERE tenant_id = ? AND kind = 'recharge' AND is_active = 1 ORDER BY sort_order ASC, created_at ASC").all(currentTenantId())
+    const rows = db.prepare("SELECT * FROM membership_packages WHERE tenant_id = ? AND kind IN ('recharge','stored_value') AND is_active = 1 ORDER BY sort_order ASC, created_at ASC").all(currentTenantId())
     return json(res, 200, {
       packages: rows.filter((r) => r.price_cents > 0).map((r) => ({
         id: r.id, giftItems:giftSnapshotOfPackage(r), name: r.name, priceCents: r.price_cents, bonusCents: r.bonus_cents || 0,
@@ -11924,32 +11740,11 @@ async function route(req, res) {
     // 补件②:与顾客端卡包同一出口(usableTimecardsOf),剩余次数三读方同数
     return json(res, 200, { timecards: usableTimecardsOf(path.split('/')[3], currentTenantId()) })
   }
-  // ===== 优惠券 定义 CRUD =====
-  if (req.method === 'GET' && path === '/admin/coupons') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    // 特批券是「自定义发放」当场生成的一次性券,不属于券模板 —— 不进模板列表
-    return json(res, 200, { coupons: db.prepare('SELECT * FROM coupons WHERE tenant_id = ? AND is_custom = 0 ORDER BY created_at DESC').all(currentTenantId()).map(serializeCoupon) })
-  }
-  if (req.method === 'POST' && path === '/admin/coupons') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const body = await readBody(req)
-    const name = String(body.name || '').trim()
-    if (!name) throw apiError(400, 'BAD_REQUEST', '优惠券名称必填。')
-    const discountType = body.discountType === 'percent' ? 'percent' : 'amount'
-    // 08-28 A3:券面额/折扣的后端闸(实现在 ./write-gates.mjs,前端拦不算数)
-    assertCouponValueOk({ discountType, amountCents: Math.round(Number(body.amountCents) || 0), percentOff: Math.round(Number(body.percentOff) || 0) })
-    const id = randomId('cpn')
-    db.prepare(`INSERT INTO coupons (id, tenant_id, name, discount_type, amount_cents, percent_off, min_spend_cents, valid_days, total_qty, issued_qty, is_active, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`).run(
-      id, currentTenantId(), name, discountType,
-      Math.max(0, Math.round(Number(body.amountCents) || 0)),
-      Math.max(0, Math.min(100, Math.round(Number(body.percentOff) || 0))),
-      Math.max(0, Math.round(Number(body.minSpendCents) || 0)),
-      Math.max(1, Math.round(Number(body.validDays) || 30)),
-      Math.max(0, Math.round(Number(body.totalQty) || 0)),
-      body.isActive === false ? 0 : 1, iso(new Date()))
-    return json(res, 201, { coupon: serializeCoupon(db.prepare('SELECT * FROM coupons WHERE id = ?').get(id)) })
-  }
+  if(await platformTenantConfig.merchantReview(req,res,{path,adminSession}))return
+  if(await operationalSetupRules.route(req,res,{path,query,adminSession}))return
+  if(await staffSetupDefinitions.route(req,res,{path,adminSession}))return
+  if(await storeSetupDefinitions.route(req,res,{path,query,adminSession}))return
+  if(await marketingDefinitions.route(req,res,{path,adminSession}))return
   // 发券:把某张券发给某会员(生成一次性核销码)
   if (req.method === 'POST' && path.startsWith('/admin/coupons/') && path.endsWith('/grant')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -11961,6 +11756,7 @@ async function route(req, res) {
     const body = await readBody(req)
     const user = db.prepare('SELECT id, display_name FROM users WHERE id = ? AND tenant_id = ?').get(String(body.userId || ''), currentTenantId())
     if (!user) throw apiError(404, 'NOT_FOUND', 'Member not found.')
+    assertRecordActive(db,apiError,currentTenantId(),'customers',user.id)
     const code = `LL-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
     // 发放时可覆盖有效期(天);不传则按券模板的 valid_days
     const days = Number.isFinite(Number(body.validDays)) && Number(body.validDays) > 0
@@ -11992,7 +11788,7 @@ async function route(req, res) {
     for (const uid of userIds) {
       if (coupon.total_qty > 0 && issued >= coupon.total_qty) { skipped += 1; continue }
       const user = db.prepare('SELECT id FROM users WHERE id = ? AND tenant_id = ?').get(String(uid), currentTenantId())
-      if (!user) { skipped += 1; continue }
+      if (!user || recordIsArchived(db,currentTenantId(),'customers',user.id)) { skipped += 1; continue }
       const has = db.prepare("SELECT 1 FROM coupon_grants WHERE tenant_id = ? AND coupon_id = ? AND user_id = ? AND status = 'active'").get(currentTenantId(), couponId, user.id)
       if (has) { skipped += 1; continue }
       const code = `LL-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
@@ -12004,44 +11800,6 @@ async function route(req, res) {
     }
     db.prepare('UPDATE coupons SET issued_qty = ? WHERE id = ?').run(issued, couponId)
     return json(res, 201, { granted, skipped, couponName: coupon.name })
-  }
-  // ===== 积分商城 · 老板奖品管理 =====
-  if (req.method === 'GET' && path === '/admin/points-prizes') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const rows = db.prepare('SELECT * FROM points_prizes WHERE tenant_id = ? ORDER BY created_at DESC').all(currentTenantId())
-    return json(res, 200, { prizes: rows.map((r) => serializePrize(r)) })
-  }
-  if (req.method === 'POST' && path === '/admin/points-prizes') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const body = await readBody(req)
-    const coupon = db.prepare('SELECT * FROM coupons WHERE id = ? AND tenant_id = ?').get(String(body.couponId || ''), currentTenantId())
-    if (!coupon) throw apiError(404, 'NOT_FOUND', '券不存在,先到 会员套餐/券 里建一张。')
-    const cost = Math.max(1, Math.round(Number(body.costPoints) || 0))
-    const id = randomId('prize')
-    const now = iso(new Date())
-    db.prepare(`INSERT INTO points_prizes (id, tenant_id, coupon_id, cost_points, stock, per_user_limit, valid_days, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      id, currentTenantId(), coupon.id, cost,
-      Math.max(0, Math.round(Number(body.stock) || 0)),
-      Math.max(0, Math.round(Number(body.perUserLimit) || 0)),
-      Number(body.validDays) > 0 ? Math.min(365, Math.round(Number(body.validDays))) : null,
-      body.isActive === false ? 0 : 1, now, now)
-    return json(res, 201, { prize: serializePrize(db.prepare('SELECT * FROM points_prizes WHERE id = ?').get(id)) })
-  }
-  if (req.method === 'PATCH' && path.match(/^\/admin\/points-prizes\/[^/]+$/)) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const id = path.split('/')[3]
-    const r = db.prepare('SELECT * FROM points_prizes WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
-    if (!r) throw apiError(404, 'NOT_FOUND', '奖品不存在。')
-    const body = await readBody(req)
-    const cost = body.costPoints != null ? Math.max(1, Math.round(Number(body.costPoints) || r.cost_points)) : r.cost_points
-    const stock = body.stock != null ? Math.max(0, Math.round(Number(body.stock) || 0)) : r.stock
-    const limit = body.perUserLimit != null ? Math.max(0, Math.round(Number(body.perUserLimit) || 0)) : r.per_user_limit
-    const vd = body.validDays !== undefined ? (Number(body.validDays) > 0 ? Math.min(365, Math.round(Number(body.validDays))) : null) : r.valid_days
-    const active = body.isActive != null ? (body.isActive ? 1 : 0) : r.is_active
-    db.prepare('UPDATE points_prizes SET cost_points = ?, stock = ?, per_user_limit = ?, valid_days = ?, is_active = ?, updated_at = ? WHERE id = ?')
-      .run(cost, stock, limit, vd, active, iso(new Date()), id)
-    return json(res, 200, { prize: serializePrize(db.prepare('SELECT * FROM points_prizes WHERE id = ?').get(id)) })
   }
   // 撤销兑换(误兑):券未核销 → 券作废 + 积分冲正退回 + 库存回补
   if (req.method === 'POST' && path === '/admin/points-mall/revoke') {
@@ -12089,23 +11847,7 @@ async function route(req, res) {
       }
     })
   }
-  if (req.method === 'PATCH' && path.startsWith('/admin/coupons/')) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const id = path.split('/')[3]
-    const cur = db.prepare('SELECT * FROM coupons WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
-    if (!cur) throw apiError(404, 'NOT_FOUND', 'Coupon not found.')
-    const body = await readBody(req)
-    db.prepare(`UPDATE coupons SET name = ?, discount_type = ?, amount_cents = ?, percent_off = ?, min_spend_cents = ?, valid_days = ?, total_qty = ?, is_active = ? WHERE id = ?`).run(
-      body.name === undefined ? cur.name : String(body.name).trim(),
-      body.discountType === undefined ? cur.discount_type : (body.discountType === 'percent' ? 'percent' : 'amount'),
-      body.amountCents === undefined ? cur.amount_cents : Math.max(0, Math.round(Number(body.amountCents) || 0)),
-      body.percentOff === undefined ? cur.percent_off : Math.max(0, Math.min(100, Math.round(Number(body.percentOff) || 0))),
-      body.minSpendCents === undefined ? cur.min_spend_cents : Math.max(0, Math.round(Number(body.minSpendCents) || 0)),
-      body.validDays === undefined ? cur.valid_days : Math.max(1, Math.round(Number(body.validDays) || 30)),
-      body.totalQty === undefined ? cur.total_qty : Math.max(0, Math.round(Number(body.totalQty) || 0)),
-      body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0), id)
-    return json(res, 200, { coupon: serializeCoupon(db.prepare('SELECT * FROM coupons WHERE id = ?').get(id)) })
-  }
+
 
   /* ===== 券板块「自定义发放」(2026-08-09,设计图屏 C3 + 规则⓪)=====
      位置=商家后台券板块内,不放顾客档案。首版**仅老板可见可发**,员工端整区隐藏 +
@@ -12168,6 +11910,7 @@ async function route(req, res) {
     const body = await readBody(req)
     const user = db.prepare('SELECT id, display_name FROM users WHERE id = ? AND tenant_id = ?').get(String(body.userId || ''), tid)
     if (!user) throw apiError(404, 'NOT_FOUND', '这位顾客不在本店档案里。')
+    assertRecordActive(db,apiError,tid,'customers',user.id)
     const reason = String(body.reason || '').trim()
     if (!reason) throw apiError(400, 'REASON_REQUIRED', '发放原因必填。')
     const days = Math.min(365, Math.max(1, Math.round(Number(body.validDays) || 30)))
@@ -12476,6 +12219,7 @@ async function route(req, res) {
     // D76:演示店建出来就不在选店页(可见性独立于账本归属)
     const tenantListed = tenantKind === 'demo' ? 0 : 1
     db.prepare("INSERT INTO tenants (id, name, plan, status, plan_expires_at, kind, listed) VALUES (?, ?, ?, 'active', ?, ?, ?)").run(id, name.slice(0, 60), plan, planExpiresAt, tenantKind, tenantListed)
+    db.prepare("INSERT INTO tenant_settings(tenant_id,key,value,updated_at) VALUES (?,'booking_addons',?,?)").run(id,JSON.stringify({enabled:false,revision:0,items:[]}),iso(new Date()))
     /* 🔴 D216:收到 phone2 但 `stores` 还没这一列 ⇒ **报错,不许悄悄丢掉**(店主 09-24 裁)。
        「前端发了、后端默默扔掉」是最坏的一种失败:填的人以为存上了。 */
     if (body.phone2 !== undefined && String(body.phone2).trim()) {
@@ -12503,9 +12247,7 @@ async function route(req, res) {
       shopEntry: { scene: `t=${id}`, note: '小程序发布后可用此 scene 生成该店专属小程序码。' }
     })
   }
-  // 平台端代填门店的企微客服账号(D132 口径③;商户自己填不来时由平台代设)
-  /* 平台端·每店配置三条口(企微客服号 / AI 修图三态 / 会员配置)已整块搬进 `platform-tenant-config.mjs`
-     (公约②「边改边拆」:动哪个领域就把该领域搬出去;J-107:逐字搬,行为不变)。 */
+  // 平台配置、资料收集和只读预览；实现及门禁在 platform-tenant-config.mjs。
   {
     const hit = await platformTenantConfig.route({ req, res, path, isPlatform })
     if (hit) return hit
@@ -12520,7 +12262,6 @@ async function route(req, res) {
     db.prepare('UPDATE tenants SET status = ? WHERE id = ?').run(next, id)
     return json(res, 200, { tenant: { id, status: next } })
   }
-  // 平台端·会员政策(2026-08-08 从商家侧收回):资格模式 / 门槛 / 有效期 / 等级体系
   /* 🔴 AI 修图入口三态(店主 11m §三 批):平台后台控,每店一个值。
      `on` 这一档现在会 409 —— 流程未上线,拨到 on 商家点进去是空页面(那是假入口)。 */
   /* ---- 平台端·顾客批量导入(从美团/大众/老系统迁过来的顾客与期初余额)----
@@ -12678,14 +12419,15 @@ async function route(req, res) {
     if (section === 'business-hours') {
       const store = tenantStore()
       if (!store) throw apiError(404, 'NOT_FOUND', 'Store not found for tenant.')
-      if (req.method === 'GET') return json(res, 200, { hours: getBusinessHoursRows(store.id).map(serializeBusinessHour), hoursGateText: HOURS_GATE_TEXT })
+      if(req.method==='POST'&&subId==='review')return json(res,200,reviewBusinessHours({db,apiError,localParts,tenantTimezone},tenantId,store.id,await readBody(req)))
+      if (req.method === 'GET') return json(res, 200, { configRevision:businessHoursRevision(db,store.id,tenantId),bookingAcceptance:readBookingAcceptance(db,store.id,tenantId),hours: getBusinessHoursRows(store.id).map(serializeBusinessHour), hoursGateText: HOURS_GATE_TEXT })
       if (req.method === 'PUT') {
         const body = await readBody(req)
         const entries = Array.isArray(body.hours) ? body.hours : []
         validateBusinessHours(entries, apiError)
         if (!hoursSavable(entries, getBusinessHoursRows(store.id))) throw apiError(400, 'HOURS_ALL_CLOSED', HOURS_GATE_TEXT.saveDisabledNote + '。')
-        writeBusinessHours(db, store.id, entries, 'platform', iso(new Date()))
-        return json(res, 200, { hours: getBusinessHoursRows(store.id).map(serializeBusinessHour), hoursGateText: HOURS_GATE_TEXT })
+        writeBusinessHours(db, store.id, entries, 'platform', iso(new Date()),body.bookingAcceptance,apiError,body.expectedConfigRevision,tenantId)
+        return json(res, 200, { bookingAcceptance:readBookingAcceptance(db,store.id,tenantId),hours: getBusinessHoursRows(store.id).map(serializeBusinessHour), hoursGateText: HOURS_GATE_TEXT })
       }
     }
 
@@ -12857,47 +12599,11 @@ async function route(req, res) {
     return json(res, 200, { works })
   }
   if (await scheduleWrite.route(req,res,{path,adminSession})) return
-  // 特殊日期:新增/更新(节假日休息或调整时段),立即影响可预约时段与 AI 营业时间回答
-  if (req.method === 'POST' && path === '/admin/special-dates') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const body = await readBody(req)
-    const isClosed = specialDateInput(body,apiError)
-    const storeId = body.storeId || defaultStoreId()
-    if (!db.prepare('SELECT id FROM stores WHERE id = ? AND tenant_id = ?').get(storeId, currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Store not found.')
-    db.prepare(`INSERT INTO store_special_dates (store_id, date, is_closed, open_time, close_time, note)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(store_id, date) DO UPDATE SET is_closed = excluded.is_closed, open_time = excluded.open_time, close_time = excluded.close_time, note = excluded.note`)
-      .run(storeId, body.date, Number(isClosed), isClosed ? null : body.openTime, isClosed ? null : body.closeTime, String(body.note || '').slice(0, 100) || null)
-    return json(res, 201, { specialDate: db.prepare('SELECT * FROM store_special_dates WHERE store_id = ? AND date = ?').get(storeId, body.date) })
-  }
-  // 特殊日期:删除(恢复每周固定模式)
-  if (req.method === 'DELETE' && path.startsWith('/admin/special-dates/')) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const date = path.split('/')[3]
-    const storeId = query.storeId || defaultStoreId()
-    if (!db.prepare('SELECT id FROM stores WHERE id = ? AND tenant_id = ?').get(storeId, currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Store not found.')
-    const result = db.prepare('DELETE FROM store_special_dates WHERE store_id = ? AND date = ?').run(storeId, date)
-    if (!result.changes) throw apiError(404, 'NOT_FOUND', 'Special date not found.')
-    return json(res, 200, { deleted: date })
-  }
   // 周排班视图:一次取 7 天所有技师的排班 + 店休信息 + 当日预约数(用于冲突提示)
   /* 排班域两路由(schedule-week/day)08-30h 搬进 ./schedule-board.mjs(公约②;纯迁移,字节对比过)*/
   if (await scheduleBoard.route(req, res, { path, query, adminSession })) return
   if (await dashboardPulse.route(req, res, { path, query, adminSession, json })) return   // 大屏三接口(闸后)
   // 员工管理:添加技师
-  if (req.method === 'POST' && path === '/admin/technicians') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const body = await readBody(req)
-    const name = String(body.name || '').trim()
-    if (!name) throw apiError(400, 'BAD_REQUEST', 'Technician name is required.')
-    const id = randomId('tech')
-    db.prepare('INSERT INTO technicians (id, store_id, name, title, is_active, tenant_id) VALUES (?, ?, ?, ?, 1, ?)')
-      .run(id, body.storeId || defaultStoreId(), name, String(body.title || '').trim() || null, currentTenantId())
-    // 默认可做本店所有在售服务(与新增服务时的自动指派保持一致)
-    const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
-    for (const service of db.prepare('SELECT id FROM services WHERE is_active = 1 AND tenant_id = ?').all(currentTenantId())) assign.run(id, service.id)
-    return json(res, 201, { technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(id, currentTenantId()) })
-  }
   // 客户运营字段:标签/备注/生日
   if (req.method === 'PATCH' && path.startsWith('/admin/customers/') && path.endsWith('/profile')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -12915,18 +12621,6 @@ async function route(req, res) {
     return json(res, 200, { customer: { id: userId, tags, notes, birthday } })
   }
   // 员工管理:改名/职称/在职状态
-  if (req.method === 'PATCH' && path.startsWith('/admin/technicians/') && !path.endsWith('/schedule')) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const technicianId = path.split('/')[3]
-    const current = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(technicianId, currentTenantId())
-    if (!current) throw apiError(404, 'NOT_FOUND', 'Technician not found.')
-    const body = await readBody(req)
-    const name = String(body.name ?? current.name).trim() || current.name
-    const title = body.title === undefined ? current.title : (String(body.title || '').trim() || null)
-    const isActive = body.isActive === undefined ? current.is_active : Number(Boolean(body.isActive))
-    db.prepare('UPDATE technicians SET name = ?, title = ?, is_active = ? WHERE id = ?').run(name, title, isActive, technicianId)
-    return json(res, 200, { technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(technicianId, currentTenantId()) })
-  }
   /* 🟠 D16(店主 2026-08-11 立案):前端 api.js 的 refreshMerchantAi() 调的是
      GET /admin/tenant/entitlements —— 而后端只有 PUT,**从来没有 GET**,一直 404。
      404 被 `catch { return merchantHasAi() }` 静默吞掉,回落到本地缓存,
@@ -13603,52 +13297,7 @@ async function route(req, res) {
   if (req.method === 'POST' && financeReverseMatch) {
     return json(res, 201, await reverseFinanceTxn({ txnId: decodeURIComponent(financeReverseMatch[1]), body: await readBody(req), adminSession, db, tenantId: currentTenantId(), apiError, insertFinanceTransaction, serializeFinanceTransaction, occurredOn: localParts(new Date()).date }))
   }
-  if (req.method === 'GET' && path === '/admin/finance/recurring') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    return json(res, 200, {
-      rules: db.prepare('SELECT * FROM finance_recurring_rules WHERE tenant_id = ? ORDER BY created_at DESC').all(currentTenantId())
-        .map((row) => ({ id: row.id, name: row.name, category: row.category, tags: row.tags, amountCents: row.amount_cents, cadence: row.cadence, dayOfMonth: row.day_of_month, active: Boolean(row.active), lastRunOn: row.last_run_on }))
-    })
-  }
-  if (req.method === 'POST' && path === '/admin/finance/recurring') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const body = await readBody(req)
-    const name = String(body.name || '').trim()
-    const category = String(body.category || '').trim()
-    const amountCents = Number(body.amountCents ?? Number(body.amount || 0) * 100)
-    const dayOfMonth = Math.min(31, Math.max(1, Number(body.dayOfMonth || 1)))
-    if (!name || !category || !Number.isFinite(amountCents) || amountCents <= 0) throw apiError(400, 'BAD_REQUEST', 'name, category and positive amount are required.')
-    const id = randomId('finrule')
-    db.prepare(`
-      INSERT INTO finance_recurring_rules (id, tenant_id, name, category, tags, amount_cents, cadence, day_of_month, active, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'monthly', ?, 1, ?, ?, ?)
-    `).run(id, currentTenantId(), name, category, String(body.tags || ''), amountCents, dayOfMonth, actorOf(adminSession), iso(new Date()), iso(new Date()))
-    const generated = materializeRecurringTransactions()
-    return json(res, 201, { rule: { id, name, category, amountCents, dayOfMonth }, generated })
-  }
-  const financeRuleMatch = path.match(/^\/admin\/finance\/recurring\/([^/]+)$/)
-  if (req.method === 'PATCH' && financeRuleMatch) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const ruleId = decodeURIComponent(financeRuleMatch[1])
-    const current = db.prepare('SELECT * FROM finance_recurring_rules WHERE id = ? AND tenant_id = ?').get(ruleId, currentTenantId())
-    if (!current) throw apiError(404, 'NOT_FOUND', 'Rule not found.')
-    const body = await readBody(req)
-    db.prepare(`
-      UPDATE finance_recurring_rules SET
-        name = ?, category = ?, tags = ?, amount_cents = ?, day_of_month = ?, active = ?, updated_at = ?
-      WHERE id = ?
-    `).run(
-      String(body.name ?? current.name),
-      String(body.category ?? current.category),
-      String(body.tags ?? current.tags),
-      body.amountCents !== undefined ? Math.round(Number(body.amountCents)) : (body.amount !== undefined ? Math.round(Number(body.amount) * 100) : current.amount_cents),
-      body.dayOfMonth !== undefined ? Math.min(31, Math.max(1, Number(body.dayOfMonth))) : current.day_of_month,
-      body.active === undefined ? current.active : Number(Boolean(body.active)),
-      iso(new Date()),
-      ruleId
-    )
-    return json(res, 200, { updated: true })
-  }
+  if(await recurringSetup.route(req,res,{path,adminSession}))return
   if (await kbRoutes.route(req, res, { path, query, adminSession })) return
   if (req.method === 'PUT' && path === '/admin/tenant/plan') {
     // 2026-08-04 安全:此前只判断"你是不是老板",于是任何商家老板都能把自己改成连锁版(自带 AI)、
@@ -13717,25 +13366,6 @@ async function route(req, res) {
       FROM user_identities WHERE user_id = ? ORDER BY created_at ASC
     `).all(userId)
     return json(res, 200, { user: { id: user.id, displayName: user.display_name }, identities })
-  }
-  if (req.method === 'PUT' && path === '/admin/store-info') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const body = await readBody(req)
-    const storeId = body.storeId || defaultStoreId()
-    const store = db.prepare('SELECT * FROM stores WHERE id = ? AND tenant_id = ?').get(storeId, currentTenantId())
-    if (!store) throw apiError(404, 'NOT_FOUND', 'Store not found.')
-    const name = String(body.name ?? store.name).trim() || store.name
-    const address = String(body.address ?? store.address ?? '').trim()
-    const phone = String(body.phone ?? store.phone ?? '').trim()
-    db.prepare('UPDATE stores SET name = ?, address = ?, phone = ? WHERE id = ?').run(name, address, phone, storeId)
-    // 地址来源合一:同步进租户知识库事实,AI 回答与订单系统永远一致
-    const factStmt = db.prepare(`
-      INSERT INTO tenant_kb_facts (tenant_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by, updated_at = excluded.updated_at
-    `)
-    if (address) factStmt.run(currentTenantId(), 'storeAddress', address, adminSession.email || 'owner', iso(new Date()))
-    if (phone) factStmt.run(currentTenantId(), 'storePhone', phone, adminSession.email || 'owner', iso(new Date()))
-    return json(res, 200, { store: db.prepare('SELECT id, name, address, phone FROM stores WHERE id = ? AND tenant_id = ?').get(storeId, currentTenantId()) })
   }
   // 本店时钟(只读):运维/回归用来确认「服务端认为本店现在几号」——按店时区改造后的对外口径
   if (req.method === 'GET' && path === '/admin/store-clock') {
@@ -13875,41 +13505,7 @@ async function route(req, res) {
     })
   }
   // ===== 预约规则(租户级):线上定金开关——关闭=顾客自约免定金直接确认,适配无支付商户号的商家 =====
-  if (req.method === 'GET' && path === '/admin/booking-rules') {
-    const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'booking_rules'").get(currentTenantId())
-    return json(res, 200, { rules: Object.assign({ onlineDeposit: true }, row ? parseJson2(row.value) : {}) })
-  }
-  if (req.method === 'PUT' && path === '/admin/booking-rules') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可改预约规则。')
-    const body = await readBody(req)
-    const rules = { onlineDeposit: body.onlineDeposit !== false }
-    db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'booking_rules', ?, ?)
-      ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
-      .run(currentTenantId(), JSON.stringify(rules), iso(new Date()))
-    return json(res, 200, { rules })
-  }
   // ===== 客户分层(P1-③):分层规则(阈值可微调,存租户设置;默认值与前端一致) =====
-  if (req.method === 'GET' && path === '/admin/segment-rules') {
-    const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'segment_rules'").get(currentTenantId())
-    const defaults = { aDays: 45, aVisits: 3, aSpendCents: 50000, nDays: 30, sDays: 60 }
-    return json(res, 200, { rules: Object.assign(defaults, row ? parseJson2(row.value) : {}) })
-  }
-  if (req.method === 'PUT' && path === '/admin/segment-rules') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可调整分层规则。')
-    const body = await readBody(req)
-    const nz = (v, dft, min, max) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : dft }
-    const rules = {
-      aDays: nz(body.aDays, 45, 1, 365),
-      aVisits: nz(body.aVisits, 3, 1, 50),
-      aSpendCents: nz(body.aSpendCents, 50000, 0, 100000000),
-      nDays: nz(body.nDays, 30, 1, 180),
-      sDays: nz(body.sDays, 60, 7, 365)
-    }
-    db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'segment_rules', ?, ?)
-      ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
-      .run(currentTenantId(), JSON.stringify(rules), iso(new Date()))
-    return json(res, 200, { rules })
-  }
   // ===== 沉睡召回周报:每周自动准备好「该召回谁+一人一句话术」;老板主页横条展示 =====
   // 懒生成:本周(门店时区,周一为界)首次请求时算一次存 tenant_settings,当周内直接回缓存;通道自动直发待企微
   if (req.method === 'GET' && path === '/admin/recall-digest') {
@@ -14058,72 +13654,6 @@ async function route(req, res) {
   }
   // ===== 薪资方案(P1-④) =====
   // 方案列表(owner):全店默认 + 每技师覆盖情况
-  if (req.method === 'GET' && path === '/admin/salary-plans') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可看薪资方案。')
-    const tid = currentTenantId()
-    const dft = db.prepare("SELECT * FROM salary_plans WHERE tenant_id = ? AND technician_id = ''").get(tid)
-    const customs = db.prepare("SELECT * FROM salary_plans WHERE tenant_id = ? AND technician_id != ''").all(tid)
-    const names = {}
-    db.prepare('SELECT id, name FROM technicians WHERE tenant_id = ?').all(tid).forEach((t) => { names[t.id] = t.name })
-    return json(res, 200, {
-      defaultPlan: serializeSalaryPlan(dft),
-      plans: customs.map((r) => Object.assign(serializeSalaryPlan(r), { technicianName: names[r.technician_id] || '' }))
-    })
-  }
-  // 生效方案(owner 任意;员工只能查自己)
-  if (req.method === 'GET' && path === '/admin/salary-plans/effective') {
-    const techId = String(query.technicianId || '').trim()
-    if (adminSession.role !== 'owner' && techId !== adminSession.technicianId) throw apiError(403, 'FORBIDDEN', '只能查看自己的方案。')
-    const r = effectiveSalaryPlan(techId, currentTenantId())
-    return json(res, 200, r)
-  }
-  // 保存方案(owner):technicianId 空串=全店默认;每个数字均可改(前端已全 input 化)
-  if (req.method === 'PUT' && path === '/admin/salary-plans') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可配置薪资方案。')
-    const body = await readBody(req)
-    const tid = currentTenantId()
-    const techId = String(body.technicianId || '').trim()
-    if (techId && !db.prepare('SELECT id FROM technicians WHERE id = ? AND tenant_id = ?').get(techId, tid)) {
-      throw apiError(404, 'NOT_FOUND', '技师不存在。')
-    }
-    const template = ['commission', 'base_ladder', 'base_flat'].includes(body.template) ? body.template : 'base_ladder'
-    const nz = (v) => Math.max(0, Math.round(Number(v) || 0))
-    const pctOk = (v) => Math.min(100, Math.max(0, Number(v) || 0))
-    const ladder = (Array.isArray(body.ladder) ? body.ladder : []).slice(0, 8)
-      .map((t) => ({ minCents: nz(t.minCents), maxCents: t.maxCents == null ? null : nz(t.maxCents), pct: pctOk(t.pct) }))
-      .sort((a, b) => a.minCents - b.minCents)
-    if (template === 'base_ladder' && !ladder.length) throw apiError(400, 'BAD_REQUEST', '阶梯模板至少要有一档。')
-    // 没传 ladderMode 就保持这份方案原来的算法 —— 存量方案默认 whole,不会因为一次保存被悄悄改成累进
-    const prev = db.prepare('SELECT ladder_mode FROM salary_plans WHERE tenant_id = ? AND technician_id = ?').get(tid, techId)
-    const ladderMode = body.ladderMode === 'progressive' ? 'progressive'
-      : (body.ladderMode === 'whole' ? 'whole' : ((prev && prev.ladder_mode) || 'whole'))
-    const onOff = (v) => (v === false ? 0 : 1)
-    const customCommissions = (Array.isArray(body.customCommissions) ? body.customCommissions : []).slice(0, 10)
-      .map((c) => ({ name: String(c.name || '').trim().slice(0, 30) || '自定义提成', pct: pctOk(c.pct), packageId: c.packageId ? String(c.packageId).slice(0, 60) : null }))
-      .filter((c) => c.pct > 0)
-    const now = iso(new Date())
-    const existing = db.prepare('SELECT id FROM salary_plans WHERE tenant_id = ? AND technician_id = ?').get(tid, techId)
-    if (existing) {
-      db.prepare(`UPDATE salary_plans SET template = ?, ladder_mode = ?, base_salary_cents = ?, handwork_fee_cents = ?, ladder_json = ?, flat_pct = ?,
-        first_recharge_pct = ?, renew_recharge_pct = ?, custom_commissions_json = ?,
-        enable_base = ?, enable_handwork = ?, enable_overtime = ?, enable_card_commission = ?,
-        overtime_rate_cents = ?, overtime_unit_min = ?, updated_at = ? WHERE id = ?`)
-        .run(template, ladderMode, nz(body.baseSalaryCents), nz(body.handworkFeeCents), JSON.stringify(ladder), pctOk(body.flatPct),
-          pctOk(body.firstRechargePct), pctOk(body.renewRechargePct), JSON.stringify(customCommissions),
-          onOff(body.enableBase), onOff(body.enableHandwork), onOff(body.enableOvertime), onOff(body.enableCardCommission),
-          nz(body.overtimeRateCents), body.overtimeUnitMin === 60 ? 60 : 30, now, existing.id)
-    } else {
-      db.prepare(`INSERT INTO salary_plans (id, tenant_id, technician_id, template, ladder_mode, base_salary_cents, handwork_fee_cents, ladder_json, flat_pct,
-        first_recharge_pct, renew_recharge_pct, custom_commissions_json, enable_base, enable_handwork, enable_overtime, enable_card_commission,
-        overtime_rate_cents, overtime_unit_min, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(randomId('splan'), tid, techId, template, ladderMode, nz(body.baseSalaryCents), nz(body.handworkFeeCents), JSON.stringify(ladder), pctOk(body.flatPct),
-          pctOk(body.firstRechargePct), pctOk(body.renewRechargePct), JSON.stringify(customCommissions),
-          onOff(body.enableBase), onOff(body.enableHandwork), onOff(body.enableOvertime), onOff(body.enableCardCommission),
-          nz(body.overtimeRateCents), body.overtimeUnitMin === 60 ? 60 : 30, now, now)
-    }
-    return json(res, 200, effectiveSalaryPlan(techId, tid))
-  }
   /* 三模式对比试算(常驻显示):同一个业绩额,阶段 / 阶梯 / 自定义各算一遍。
      不落库、不需要方案已保存 —— 店主边调档位边看差多少。 */
   if (req.method === 'POST' && path === '/admin/salary-plans/preview') {
@@ -14629,18 +14159,18 @@ async function route(req, res) {
     })
     if (userId) {
       const u = db.prepare('SELECT id, display_name, phone, tenant_id FROM users WHERE id = ?').get(userId)
-      if (!u || u.tenant_id !== currentTenantId()) return json(res, 200, { hit: null, reason: '这份档案不属于本店。' })
+      if (!u || u.tenant_id !== currentTenantId() || recordIsArchived(db,currentTenantId(),'customers',u.id)) return json(res, 200, { hit: null, reason: '这份档案不属于本店。' })
       if (adminSession.role === 'staff' && !db.prepare('SELECT 1 FROM bookings WHERE tenant_id=? AND user_id=? AND technician_id=? LIMIT 1').get(currentTenantId(),u.id,adminSession.technicianId)) return json(res,200,{hit:null,reason:'只能查找本人服务的顾客；现场接待请扫描顾客会员码。'})
       return json(res, 200, { hit: shapeHit(u), via: 'user_id' })
     }
     if (memberCode) {
       const uid = userIdFromMemberCode(memberCode)
       const u = uid ? db.prepare('SELECT id, display_name, phone, tenant_id FROM users WHERE id = ?').get(uid) : null
-      if (!u || u.tenant_id !== currentTenantId()) return json(res, 200, { hit: null, reason: '这个会员码不属于本店,或者查不到档案。' })
+      if (!u || u.tenant_id !== currentTenantId() || recordIsArchived(db,currentTenantId(),'customers',u.id)) return json(res, 200, { hit: null, reason: '这个会员码不属于本店,或者查不到档案。' })
       return json(res, 200, { hit: shapeHit(u), via: 'member_code' })
     }
     if (phone.length < 6) return json(res, 200, { hit: null, reason: '手机号太短,查不了。' })
-    const rows = db.prepare('SELECT id, display_name, phone FROM users WHERE tenant_id = ? AND REPLACE(COALESCE(phone, \'\'), \' \', \'\') = ?').all(currentTenantId(), phone)
+    const rows = db.prepare('SELECT id, display_name, phone FROM users WHERE tenant_id = ? AND REPLACE(COALESCE(phone, \'\'), \' \', \'\') = ?').all(currentTenantId(), phone).filter(u=>!recordIsArchived(db,currentTenantId(),'customers',u.id))
     if (rows.length !== 1) return json(res, 200, { hit: null, reason: rows.length ? '这个手机号在本店对应多份档案,请人工确认。' : '' })
     return json(res, 200, { hit: shapeHit(rows[0]), via: 'phone' })
   }
@@ -14957,6 +14487,7 @@ async function route(req, res) {
 }
 
 setupDatabase()
+const recurringSetup=createRecurringSetup({db,json,apiError,readBody,currentTenantId,tenantTimezone,localParts,randomId,actorOf,iso,insertFinanceTransaction})
 try {
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_identities (

@@ -7,7 +7,13 @@
  *
  * 为什么这三条能放一起:它们是同一件事的三面 —— **平台替商家设一个每店一份的值**,
  * 都走 `/platform/tenants/:id/xxx`,都要 `isPlatform()`,都先查租户在不在。 */
+import {createSetupIntake} from './platform-setup-intake.mjs'
+import {createSetupPreview} from './platform-setup-preview.mjs'
+import {createSetupWorkflow} from './platform-setup-workflow.mjs'
 export function createPlatformTenantConfig(deps) {
+  const intake = createSetupIntake(deps)
+  const workflow = createSetupWorkflow(deps)
+  const preview = createSetupPreview({...deps,workflow})
   const { db, apiError, readBody, wecomRouting, aiRetouchGate,
     getMembershipConfig, setMembershipConfig, MEMBER_QUALIFY_MODES } = deps
   /* 🔴 主文件里的 `json()` **返回 undefined** —— 原来那三段是 `return json(...)` 直接从请求处理函数里出去,
@@ -24,6 +30,9 @@ export function createPlatformTenantConfig(deps) {
      不是建实例时传。搬代码时这种「看起来是全局、其实是闭包」的依赖最容易漏,漏了就是启动即崩。 */
   /** 命中就返回 json(...) 的结果;没命中返回 null,交回主路由继续往下走 */
   async function route({ req, res, path, isPlatform }) {
+    if (await intake.route({req,res,path,isPlatform})) return HANDLED
+    if (await preview.route({req,res,path,isPlatform})) return HANDLED
+    if (await workflow.route({req,res,path,isPlatform})) return HANDLED
     if (path.startsWith('/platform/tenants/') && path.endsWith('/wecom-kfid') && (req.method === 'GET' || req.method === 'PUT')) {
       if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
       const id = path.split('/')[3]
@@ -62,5 +71,5 @@ export function createPlatformTenantConfig(deps) {
     }
     return null
   }
-  return { route }
+  return { route, preview, merchantReview:workflow.merchantRoute, merchantInbox:workflow.inbox }
 }

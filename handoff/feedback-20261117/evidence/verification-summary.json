@@ -1,0 +1,45 @@
+{
+  "checkedAt": "2026-11-17T13:43:39.843140+00:00",
+  "status": "local release checks passed; not deployed",
+  "candidateSourceSha256": "632aac4357ec9ad9bb6dc09c7a6008895bd4403a1d388c504e355939533f28ab",
+  "runtime": "v22.11.0",
+  "ci": {
+    "mainSuites": 222,
+    "mainAssertions": 6841,
+    "demoDisabledSuites": 44,
+    "mainNotRun": 0,
+    "logSha256": "97f2e03282c633728e81aef93733f693f33b2c84154b213643a1c5aca4eb54bd",
+    "logPath": "/tmp/feedback-full-ci.log"
+  },
+  "nativeLayout": {
+    "suites": 3,
+    "assertions": 16,
+    "mode": "actual official automator run, later source-hash verification in CI",
+    "checkedAt": "2026-11-17T13:34:00.834Z"
+  },
+  "ui": {
+    "platformEditors": 77,
+    "realPreview": 46,
+    "workbench": 26,
+    "batch": 5,
+    "movedNativeComponents": 4,
+    "samePageSections": 15
+  },
+  "retainedUpgrade": {
+    "originalTables": 132,
+    "originalRows": 12348,
+    "originalTriggers": 51,
+    "originalFieldsUnchanged": true,
+    "repeatStartupStable": true,
+    "originalSnapshotUnchanged": true,
+    "checkedAt": "2026-11-17T13:43:11.297Z"
+  },
+  "notComplete": [
+    "Final release commit CI, deployment and post-deployment original-data reconciliation"
+  ],
+  "productionMutated": false,
+  "originalLocalBusinessDbMutated": false,
+  "explicitlyDeferred": [
+    "Physical WeChat scan, per latest user instruction"
+  ]
+}

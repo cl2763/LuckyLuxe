@@ -63,8 +63,8 @@
       </view>
 
       <view class="member-extra">
-        <view>{{t.totalSpent}} {{memberReady ? cur.p + cur.s + member.totalSpent : '—'}}</view>
-        <view>{{t.visits}} {{memberReady ? member.visits : '—'}} {{t.times}}</view>
+        <view class="member-extra-item">{{t.totalSpent}} {{memberReady ? cur.p + cur.s + member.totalSpent : '—'}}</view>
+        <view class="member-extra-item">{{t.visits}} {{memberReady ? member.visits : '—'}} {{t.times}}</view>
       </view>
     </block>
     <block wx:else>
@@ -80,6 +80,17 @@
       </button>
       <view class="guest-footnote">{{lang === 'en' ? 'Protected entries below will ask you to sign in first.' : '下方会员功能需要登录后使用。'}}</view>
     </block>
+  </view>
+
+  <view class="member-shopping" aria-label="{{lang === 'en' ? 'Store offers' : '商城入口'}}">
+    <button class="shopping-entry card" bindtap="goMall">
+      <text class="shopping-title">{{lang === 'en' ? 'Package shop' : '套餐商城'}} ›</text>
+      <text class="shopping-desc">{{lang === 'en' ? 'Top-ups · Service passes' : '充值套餐 · 次卡'}}</text>
+    </button>
+    <button class="shopping-entry card" bindtap="goPoints">
+      <text class="shopping-title">{{lang === 'en' ? 'Points mall' : '积分商城'}} ›</text>
+      <text class="shopping-desc">{{lang === 'en' ? 'Redeem with points' : '使用积分兑换礼遇'}}</text>
+    </button>
   </view>
 
   <!-- 我签署过的文件 · 只读(图 v2 第 5 屏)。跟卡包、订单放一起,不另开入口。
@@ -148,14 +159,6 @@
       <view class="section-title">{{t.functions}}</view>
     </view>
     <view class="menu-grid">
-      <!-- 裁定(店主 08-24 二拍):积分商城=**同款小方格**排在第一格,不做通栏块。
-           格子里的图标位**本身就是配图位** —— 将来换奖品缩略图只换图源、不动版。
-           与黑卡「积分」格并存:唯一律约束的是页面与数据出口,不是入口数量(两处都进 pages/points,
-           提示句同一个后端出口 redeemablePrizeText)。 -->
-      <view class="menu-card card" hover-class="tap-feedback" bindtap="goPoints">
-        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-gift.png"></image></view>
-        <view class="menu-title">积分商城<text wx:if="{{member.redeemablePrizeCount}}" class="menu-dot">{{member.redeemablePrizeCount}}</text></view>
-      </view>
       <view class="menu-card card" hover-class="tap-feedback" bindtap="scanIncomingCode">
         <view class="menu-badge"><view class="scan-mark">▦</view></view>
         <view class="menu-title">扫码签署 / 绑定</view>

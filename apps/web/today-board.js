@@ -47,7 +47,7 @@ window.TodayBoard = (function () {
 
   /* 与小程序 loadDayView 同构:网格范围 = 营业时段 ∪ 预约跨度;空档 ≥30 分才显示 */
   function assemble(date, r, deps) {
-    const bizOpen = toMin(r.openTime); const bizClose = toMin(r.closeTime)   /* A3 尸清(08-30h):兜底10:00-19:00是死代码 —— 无时段必走未设置墙/休息条,网格不画 */
+    const bizOpen = r.openTime?toMin(r.openTime):1440; const bizClose = r.closeTime?toMin(r.closeTime):0   /* A3 尸清(08-30h):兜底10:00-19:00是死代码 —— 无时段必走未设置墙/休息条,网格不画 */
     let openMin = bizOpen; let closeMin = bizClose
     for (const b of (r.bookings || [])) {
       openMin = Math.min(openMin, toMin(b.startTime))
@@ -102,7 +102,7 @@ window.TodayBoard = (function () {
           top: Math.round((s - openMin) / 60 * PX_PER_HOUR), height: Math.max(20, Math.round((e - s) / 60 * PX_PER_HOUR)),
           /* 百分比宽度:列宽变了也不用重算(判据验的是「包围盒不相交」,不是具体像素) */
           lane: lane || 0, lanes: lanes || 1,
-          startTime: b.startTime, endTime: b.endTime, customerName: b.customerName, serviceName: b.serviceName,
+          startTime: b.startTime, endTime: b.endTime,timeLabel:b.timeLabel, customerName: b.customerName, serviceName: b.serviceName,
           isNewCustomer: b.isNewCustomer, isDesignated: b.isDesignated, ownerDirect: b.ownerDirect,
           depositUnpaid: b.depositUnpaid,depositWorkflow:b.depositWorkflow, afterSalesTag: b.afterSalesTag || ''
         }
@@ -126,7 +126,7 @@ window.TodayBoard = (function () {
       hoursUnset: Boolean(r.hoursUnset),   // D84 三态:未设置 ≠ 休息
       isClosed: r.isClosed, specialNote: r.specialNote || '',
       gridH, hours, cols,
-      total: (r.bookings || []).length, working: (r.technicians||[]).filter(t=>t.isWorking).length,
+      total: r.newBookingCount??(r.bookings || []).length,occupancyTotal:(r.bookings||[]).length,carryoverCount:r.carryoverCount||0, working: (r.technicians||[]).filter(t=>t.isWorking).length,
       freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0,
       duty: r.duty || null,  // 31l 值日:开关关=后端整块不下发=零渲染
       backfill: r.backfill || null   // 补录小合同(01v):过去日后端才下发;今天/未来整块不出现
@@ -146,14 +146,14 @@ window.TodayBoard = (function () {
         <button class="tb-nav" data-tb-next type="button">›</button>
         <button class="tb-today ${dv.isToday ? 'cur' : ''}" data-tb-today type="button">${dv.isToday ? '今天' : '返回今天'}</button>
       </div>
-      ${dv.hoursUnset ? `
+      ${dv.hoursUnset && !dv.occupancyTotal ? `
       <div class="tb-setup-wall">
         <strong>还没设置营业时间</strong>
         <p>设置营业时间后,今天台面、排班表和顾客可约时段才会亮起来 —— 没设置不等于休息。</p>
         <button class="primary slim" data-tb-setup type="button">去设置营业时间</button>
-      </div>` : dv.isClosed ? `<div class="tb-closed">本日休息${dv.specialNote ? ' · ' + escapeHtml(dv.specialNote) : ''}</div>` : `
+      </div>` : dv.isClosed && !dv.occupancyTotal ? `<div class="tb-closed">本日休息${dv.specialNote ? ' · ' + escapeHtml(dv.specialNote) : ''}</div>` : `
       <div class="tb-summary">
-        <span class="tb-pill"><span>今日订单</span><b>${dv.total} 单</b></span>
+        <span class="tb-pill"><span>今日订单</span><b>${dv.total} 单</b></span>${dv.carryoverCount?`<span class="tb-pill">前日延续 ${dv.carryoverCount} 单</span>`:''}
         ${dv.activeCount ? `<span class="tb-pill live"><span>在做</span><b>${dv.activeCount} 人</b></span>` : ''}
         <span class="tb-pill"><span>在岗</span><b>${dv.working} 人</b></span>
         <span class="tb-pill"><span>空档</span><b>${dv.freeHours} h</b></span>
@@ -182,7 +182,7 @@ window.TodayBoard = (function () {
                   ${col.frees.map((f) => `<button class="tb-blk free" style="top:${f.top}px;height:${f.height}px" data-tb-free="${col.id}" data-time="${f.startTime}" data-end="${f.endTime}" type="button"><span>${escapeHtml((stateT.dv && stateT.dv.backfill && stateT.dv.backfill.label) || '+ 直接排单')}</span></button>`).join('')}
                   ${col.blocks.map((b) => `
                     <button class="tb-blk ${b.cls}${b.lanes > 1 ? ' split' : ''}" style="top:${b.top}px;height:${b.height}px;left:calc(${(b.lane / b.lanes) * 100}% + 4px);width:calc(${100 / b.lanes}% - 8px);right:auto" data-tb-block="${b.id}" data-tb-lane="${b.lane}/${b.lanes}" type="button">
-                      <span class="tb-bt">${b.stateGlyph ? `<i class="tb-sdot ${b.state}">${b.stateGlyph}</i>` : ''}${b.startTime}–${b.endTime}</span>
+                      <span class="tb-bt">${b.stateGlyph ? `<i class="tb-sdot ${b.state}">${b.stateGlyph}</i>` : ''}${escapeHtml(b.timeLabel||`${b.startTime}–${b.endTime}`)}</span>
                       <span class="tb-bn">${escapeHtml(b.customerName || '')}</span>
                       <span class="tb-bs">${escapeHtml(b.serviceName || '')}</span>
                       <span class="tb-tags">

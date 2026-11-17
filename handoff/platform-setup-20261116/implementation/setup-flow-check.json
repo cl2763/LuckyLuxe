@@ -1,0 +1,23 @@
+{
+  "scope": "isolated runtime, actual shared package writer",
+  "checks": [
+    "配置总览可读取",
+    "验证草稿不更改套餐金额",
+    "实际商家读取口可预览草稿值",
+    "预览后正式值仍保持",
+    "应用结果与草稿价格一致",
+    "商家实际接口读到应用后值",
+    "重复应用返回原回执",
+    "已应用的草稿预览令牌不能继续当未应用草稿使用",
+    "商家自行修改后旧草稿应用拒绝",
+    "历史账务与已售权益逐字段未变"
+  ],
+  "protectedTables": [
+    "users",
+    "bookings",
+    "settlements",
+    "stored_value_transactions",
+    "finance_transactions",
+    "coupon_grants"
+  ]
+}

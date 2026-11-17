@@ -15,7 +15,7 @@ export function sceneForToken(token) {
 
 export async function getMiniCode({ appid, secret, scene, page = 'pages/scan-entry/index', envVersion = 'trial', fetcher = fetch }) {
   if (!appid || !secret) throw new Error('小程序码配置未就绪')
-  if (!(/^[sbpd][0-9a-f]{24}$/.test(scene) || /^m[A-Z0-9]{8}$/.test(scene))) throw new Error('小程序码场景无效')
+  if (!(/^[sbpdv][0-9a-f]{24}$/.test(scene) || /^m[A-Z0-9]{8}$/.test(scene))) throw new Error('小程序码场景无效')
   if (!cached || cached.appid !== appid || cached.secret !== secret || cached.expires <= Date.now()) {
     const query = new URLSearchParams({ grant_type: 'client_credential', appid, secret })
     const response = await fetcher(`https://api.weixin.qq.com/cgi-bin/token?${query}`, { signal: AbortSignal.timeout(8000) })

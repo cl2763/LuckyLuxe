@@ -9,6 +9,7 @@ Page({
     msRows: [],
     msHint: '', msLoading: true, msError: '',
     recharges: [], timesCards: [], coupons: [],
+    listLoading:false, listError: '', listReady:false, unknownKinds:0,
     customers: [],
     // 屏 C3 自定义发放(小程序老板版)
     grantQuery: '', grantResults: [], grantPicked: null, grants: []
@@ -16,7 +17,7 @@ Page({
 
   onLoad(opt) {
     const seg = Number(opt && opt.seg)
-    if (seg === 1 || seg === 2) this.setData({ seg })
+    if (Number.isInteger(seg) && seg >= 0 && seg <= 4) this.setData({ seg })
   },
 
   async onShow() {
@@ -26,37 +27,47 @@ Page({
     this.loadAll()
   },
 
+  onHide() { this._loadVersion = (this._loadVersion || 0) + 1 },
+  onUnload() { this.onHide(); clearTimeout(this._gt) },
+  async onPullDownRefresh() { try { await this.loadAll() } finally { wx.stopPullDownRefresh() } },
   async loadAll() {
+    const version = this._loadVersion = (this._loadVersion || 0) + 1
+    const context = () => JSON.stringify([api.currentTenantId(),api.getAdminAuth()?.accessToken])
+    const started = context()
+    if(this._listContext && this._listContext!==started)this.setData({recharges:[],timesCards:[],coupons:[],customers:[],listReady:false})
+    this._listContext = started
+    this.setData({listLoading:true,listError:''})
     try {
       const [pkg, cpn, cust] = await Promise.all([
-        api.adminGet('/admin/packages').catch(() => ({ packages: [] })),
-        api.adminGet('/admin/coupons').catch(() => ({ coupons: [] })),
-        api.adminGet('/admin/customers').catch(() => ({ customers: [] }))
+        api.adminGet('/admin/packages'),
+        api.adminGet('/admin/coupons'),
+        require('../../../utils/setup-preview').active()?Promise.resolve({customers:[]}):api.adminGet('/admin/customers')
       ])
-      const pkgs = pkg.packages || []
-      const recharges = pkgs.filter((p) => p.kind === 'recharge').map((p) => ({
-        id: p.id, name: p.name, active: p.isActive !== false,
-        sub: `售价 ${storeMoney(p.priceCents || 0)}` + (p.bonusCents ? ` · 送 ${storeMoney(p.bonusCents)}` : '') + (p.benefits ? ` · ${p.benefits}` : '')
+      if(version!==this._loadVersion || context()!==started)return
+      if(!Array.isArray(pkg.packages)||!Array.isArray(cpn.coupons)||!Array.isArray(cust.customers))throw Error('返回数据不完整，请重试')
+      const pkgs=pkg.packages
+      const recharges=pkgs.filter(p=>['recharge','stored_value'].includes(p.kind)).map(p=>({
+        id:p.id,name:p.name,active:p.isActive!==false,
+        sub:`充值本金 ${storeMoney(p.priceCents || 0)} · 赠送卡金 ${storeMoney(p.bonusCents || 0)}`,
+        giftText:(p.giftItems||[]).map(g=>`${g.name} × ${g.quantity}`).join('、')||'—',
+        discountText:p.defaultPersonalDiscount?.rateBps==null?'沿用会员原折扣':p.defaultPersonalDiscount.rateBps===10000?'无折扣':`${p.defaultPersonalDiscount.rateBps/1000} 折`,
+        mallText:p.mallVisible===false?'顾客端隐藏':'顾客端展示'
       }))
-      const timesCards = pkgs.filter((p) => p.kind === 'times').map((p) => ({
-        id: p.id, name: p.name, active: p.isActive !== false,
-        sub: `售价 ${storeMoney(p.priceCents || 0)}` + (p.timesCount ? ` · ${p.timesCount} 次` : '') + (p.scope ? ` · ${p.scope}` : '')
-      }))
-      const coupons = (cpn.coupons || []).map((c) => ({
-        id: c.id, name: c.name, active: c.isActive !== false,
-        sub: (c.discountType === 'percent' ? `立减 ${c.percentOff}%` : `减 ${storeMoney(c.amountCents || 0)}`)
-          + (c.minSpendCents ? ` · 满 ${storeMoney(c.minSpendCents)}` : ' · 无门槛')
-          + ` · ${c.validDays}天`
-          + (c.totalQty ? ` · 限 ${c.totalQty} 张` : '')
-      }))
-      const list = (cust.customers || []).slice().sort((a, b) => new Date(b.lastVisitAt || 0) - new Date(a.lastVisitAt || 0))
-      this.setData({ recharges, timesCards, coupons, customers: list })
+      const timesCards=pkgs.filter(p=>p.kind==='times').map(p=>({id:p.id,name:p.name,active:p.isActive!==false,sub:`售价 ${storeMoney(p.priceCents || 0)}`+(p.timesCount?` · ${p.timesCount} 次`:'')+(p.scope?` · ${p.scope}`:'')}))
+      const coupons=cpn.coupons.map(c=>({id:c.id,name:c.name,active:c.isActive!==false,
+        sub:(c.discountType==='percent'?`立减 ${c.percentOff}%`:`减 ${storeMoney(c.amountCents || 0)}`)+(c.minSpendCents?` · 满 ${storeMoney(c.minSpendCents)}`:' · 无门槛')+` · ${c.validDays}天`+(c.totalQty?` · 限 ${c.totalQty} 张`:'')}))
+      this.setData({recharges,timesCards,coupons,customers:cust.customers.slice().sort((a,b)=>new Date(b.lastVisitAt||0)-new Date(a.lastVisitAt||0)),listReady:true,unknownKinds:pkgs.filter(p=>!['recharge','stored_value','times'].includes(p.kind)).length})
       this.loadGrants()
-    } catch (e) { /* ignore */ }
+    } catch(e) {
+      if(version===this._loadVersion&&context()===started)this.setData({listError:e?.message||'套餐暂时读取失败，请重试。已有套餐不会因此被清空。'})
+    } finally {
+      if(version===this._loadVersion)this.setData({listLoading:false})
+    }
   },
 
   /* ===== 屏 C3 自定义发放(仅老板;员工端后端一律 403)===== */
   async loadGrants() {
+    if(require('../../../utils/setup-preview').active())return
     try {
       const r = await api.adminGet('/admin/coupon-grants')
       const st = { active: '未使用', used: '已核销', revoked: '已作废', expired: '已过期' }

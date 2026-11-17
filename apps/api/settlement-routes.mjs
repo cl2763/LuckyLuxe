@@ -93,6 +93,8 @@ export function createSettlementRoutes({ apiError, json, readBody, db, currentTe
   }
   if (req.method === 'GET' && path === '/admin/settlements') {
     const tid = currentTenantId()
+    let bookingItems=[],bookingItemWarnings=[]
+    if(query.bookingId){const booking=db.prepare('SELECT * FROM bookings WHERE id=? AND tenant_id=?').get(query.bookingId,tid);if(!booking)throw apiError(404,'NOT_FOUND','预约不存在。');for(const a of JSON.parse(booking.addons_json||'[]')){const linked=a.settlementItemId&&db.prepare("SELECT id FROM services WHERE id=? AND tenant_id=? AND item_kind='addon' AND is_active=1").get(a.settlementItemId,tid);if(linked)bookingItems.push({serviceId:linked.id,qty:1,bookingAddonId:a.id});else bookingItemWarnings.push(a.name+'未关联可用结算加项，请核对后手动选择。')}}
     const rows = query.groupId
       ? db.prepare('SELECT * FROM settlements WHERE tenant_id = ? AND group_id = ? ORDER BY rowid ASC').all(tid, query.groupId)
       : (query.bookingId
@@ -100,7 +102,7 @@ export function createSettlementRoutes({ apiError, json, readBody, db, currentTe
         : db.prepare('SELECT * FROM settlements WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 60').all(tid))
     /* D9 规则⑤:前端要按「归属顾客是否已绑微信」决定签署路(未绑定只有扫码一条路),
        绑定状态随单下发 —— 不让前端自己再查一遍档案。 */
-    json(res, 200, { settlements: rows.map((r) => ({ ...serializeSettlement(r), customerBound: isUserBound(r.user_id) })) })
+    json(res, 200, { bookingItems,bookingItemWarnings,settlements: rows.map((r) => ({ ...serializeSettlement(r), customerBound: isUserBound(r.user_id) })) })
     return true
   }
   if (req.method === 'GET' && path.startsWith('/admin/settlements/') && path.endsWith('/preview-card')) {

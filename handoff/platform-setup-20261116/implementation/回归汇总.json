@@ -1,0 +1,1330 @@
+{
+  "scope": "Only isolated synthetic databases; exact Node 22.11.0. No production or original local database writes. Main suites were resumed after diagnosed fixes; this is not a single uninterrupted CI job.",
+  "main": [
+    {
+      "suite": "mini-pricing-operations",
+      "status": 0,
+      "checks": 5
+    },
+    {
+      "suite": "member-pricing-daily-facts",
+      "status": 0,
+      "checks": 4
+    },
+    {
+      "suite": "booking-checkout",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "deposit-workflow",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "booking-deposit-funding",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "booking-acceptance",
+      "status": 0,
+      "checks": 2
+    },
+    {
+      "suite": "native-phone-login",
+      "status": 0,
+      "checks": 3
+    },
+    {
+      "suite": "store-guide",
+      "status": 0,
+      "checks": 3
+    },
+    {
+      "suite": "subscription-scope",
+      "status": 0,
+      "checks": 2
+    },
+    {
+      "suite": "hero-upload",
+      "status": 0,
+      "checks": 0
+    },
+    {
+      "suite": "hero-receipt",
+      "status": 0,
+      "checks": 2
+    },
+    {
+      "suite": "store-navigation",
+      "status": 0,
+      "checks": 2
+    },
+    {
+      "suite": "booking-subscription-ui",
+      "status": 0,
+      "checks": 4
+    },
+    {
+      "suite": "merchant-messages",
+      "status": 0,
+      "checks": 0
+    },
+    {
+      "suite": "wechat-subscribe",
+      "status": 0,
+      "checks": 2
+    },
+    {
+      "suite": "booking-subscriptions",
+      "status": 0,
+      "checks": 0
+    },
+    {
+      "suite": "public-share",
+      "status": 0,
+      "checks": 13
+    },
+    {
+      "suite": "customer-messages",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "media-privacy-review",
+      "status": 0,
+      "checks": 128
+    },
+    {
+      "suite": "release18-behavior",
+      "status": 0,
+      "checks": 42
+    },
+    {
+      "suite": "release17-behavior",
+      "status": 0,
+      "checks": 23
+    },
+    {
+      "suite": "manual-draft-http",
+      "status": 0,
+      "checks": 26
+    },
+    {
+      "suite": "manual-booking-draft",
+      "status": 0,
+      "checks": 25
+    },
+    {
+      "suite": "customer-loading-20261008",
+      "status": 0,
+      "checks": 31
+    },
+    {
+      "suite": "customer-profile-store-code",
+      "status": 0,
+      "checks": 27
+    },
+    {
+      "suite": "booking-code",
+      "status": 0,
+      "checks": 4
+    },
+    {
+      "suite": "customer-facts-timezone",
+      "status": 0,
+      "checks": 32
+    },
+    {
+      "suite": "customer-facts-http",
+      "status": 0,
+      "checks": 13
+    },
+    {
+      "suite": "customer-facts-mutations",
+      "status": 0,
+      "checks": 0
+    },
+    {
+      "suite": "work-share",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "booking-lanes",
+      "status": 0,
+      "checks": 1
+    },
+    {
+      "suite": "first-use-features",
+      "status": 0,
+      "checks": 0
+    },
+    {
+      "suite": "first-use-binding",
+      "status": 0,
+      "checks": 0
+    },
+    {
+      "suite": "experience-demo-claim",
+      "status": 0,
+      "checks": 17
+    },
+    {
+      "suite": "response-compression",
+      "status": 0,
+      "checks": 21
+    },
+    {
+      "suite": "staff-session-cache",
+      "status": 0,
+      "checks": 4
+    },
+    {
+      "suite": "mini-sign-link",
+      "status": 0,
+      "checks": 39
+    },
+    {
+      "suite": "service-loading",
+      "status": 0,
+      "checks": 20
+    },
+    {
+      "suite": "privacy-policy",
+      "status": 0,
+      "checks": 13
+    },
+    {
+      "suite": "web-sign-access",
+      "status": 0,
+      "checks": 143
+    },
+    {
+      "suite": "sandbox-sync",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "mini-reschedule",
+      "status": 0,
+      "checks": 5
+    },
+    {
+      "suite": "p0-booking-integrity",
+      "status": 0,
+      "checks": 70
+    },
+    {
+      "suite": "p0-platform-integrity",
+      "status": 0,
+      "checks": 32
+    },
+    {
+      "suite": "customer-service-matrix",
+      "status": 0,
+      "checks": 67
+    },
+    {
+      "suite": "working-memory",
+      "status": 0,
+      "checks": 59
+    },
+    {
+      "suite": "business-hours",
+      "status": 0,
+      "checks": 18
+    },
+    {
+      "suite": "intent-guards",
+      "status": 0,
+      "checks": 9
+    },
+    {
+      "suite": "quote-polish",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "silent-handoff",
+      "status": 0,
+      "checks": 14
+    },
+    {
+      "suite": "human-handoff",
+      "status": 0,
+      "checks": 12
+    },
+    {
+      "suite": "after-sales-handoff",
+      "status": 0,
+      "checks": 24
+    },
+    {
+      "suite": "identity-links",
+      "status": 0,
+      "checks": 13
+    },
+    {
+      "suite": "entitlements",
+      "status": 0,
+      "checks": 30
+    },
+    {
+      "suite": "tenant-kb",
+      "status": 0,
+      "checks": 23
+    },
+    {
+      "suite": "finance-core",
+      "status": 0,
+      "checks": 14
+    },
+    {
+      "suite": "finance-goals",
+      "status": 0,
+      "checks": 18
+    },
+    {
+      "suite": "stored-value",
+      "status": 0,
+      "checks": 18
+    },
+    {
+      "suite": "schedule-week",
+      "status": 0,
+      "checks": 15
+    },
+    {
+      "suite": "special-dates",
+      "status": 0,
+      "checks": 14
+    },
+    {
+      "suite": "customer-profile",
+      "status": 0,
+      "checks": 9
+    },
+    {
+      "suite": "staff-portal",
+      "status": 0,
+      "checks": 38
+    },
+    {
+      "suite": "admin-accounts",
+      "status": 0,
+      "checks": 16
+    },
+    {
+      "suite": "pricing-model",
+      "status": 0,
+      "checks": 44
+    },
+    {
+      "suite": "membership-config",
+      "status": 0,
+      "checks": 33
+    },
+    {
+      "suite": "member-discount-history-display",
+      "status": 0,
+      "checks": 3
+    },
+    {
+      "suite": "member-pricing-client",
+      "status": 0,
+      "checks": 32
+    },
+    {
+      "suite": "member-pricing-policy",
+      "status": 0,
+      "checks": 4
+    },
+    {
+      "suite": "member-pricing-transactions",
+      "status": 0,
+      "checks": 1
+    },
+    {
+      "suite": "member-pricing-http",
+      "status": 0,
+      "checks": 18
+    },
+    {
+      "suite": "membership-summary-ui",
+      "status": 0,
+      "checks": 14
+    },
+    {
+      "suite": "customer-import",
+      "status": 0,
+      "checks": 25
+    },
+    {
+      "suite": "migration-center",
+      "status": 0,
+      "checks": 48
+    },
+    {
+      "suite": "migration-profile",
+      "status": 0,
+      "checks": 13
+    },
+    {
+      "suite": "migration-profile-mini",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "migration-balance-activation",
+      "status": 0,
+      "checks": 17
+    },
+    {
+      "suite": "migration-balance-mini",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "migration-refund-allocation",
+      "status": 0,
+      "checks": 7
+    },
+    {
+      "suite": "migration-gifts",
+      "status": 0,
+      "checks": 18
+    },
+    {
+      "suite": "migration-gift-mini",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "migration-service-mini",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "customer-migration-summary",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "migration-card-reconciliation",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "migration-reconciliation-mini",
+      "status": 0,
+      "checks": 5
+    },
+    {
+      "suite": "migration-paid-timecards",
+      "status": 0,
+      "checks": 16
+    },
+    {
+      "suite": "migration-paid-ui",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "pose-cards",
+      "status": 0,
+      "checks": 1
+    },
+    {
+      "suite": "tenant-hygiene",
+      "status": 0,
+      "checks": 25
+    },
+    {
+      "suite": "tenant-timezone",
+      "status": 0,
+      "checks": 32
+    },
+    {
+      "suite": "deposit-config",
+      "status": 0,
+      "checks": 36
+    },
+    {
+      "suite": "message-templates",
+      "status": 0,
+      "checks": 19
+    },
+    {
+      "suite": "settlement",
+      "status": 0,
+      "checks": 55
+    },
+    {
+      "suite": "daily-close",
+      "status": 0,
+      "checks": 66
+    },
+    {
+      "suite": "salary-v2",
+      "status": 0,
+      "checks": 29
+    },
+    {
+      "suite": "schedule-v2",
+      "status": 0,
+      "checks": 20
+    },
+    {
+      "suite": "finance-trend",
+      "status": 0,
+      "checks": 18
+    },
+    {
+      "suite": "finance-lock",
+      "status": 0,
+      "checks": 33
+    },
+    {
+      "suite": "perf-viz",
+      "status": 0,
+      "checks": 21
+    },
+    {
+      "suite": "coupon-settle",
+      "status": 0,
+      "checks": 89
+    },
+    {
+      "suite": "audit-fix",
+      "status": 0,
+      "checks": 91
+    },
+    {
+      "suite": "scan-sign",
+      "status": 0,
+      "checks": 63
+    },
+    {
+      "suite": "double-sheet",
+      "status": 0,
+      "checks": 54
+    },
+    {
+      "suite": "auth-surface",
+      "status": 0,
+      "checks": 54
+    },
+    {
+      "suite": "currency-scan",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "settle-stress",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "sign-stability",
+      "status": 0,
+      "checks": 7
+    },
+    {
+      "suite": "noshow-aftersales",
+      "status": 0,
+      "checks": 761
+    },
+    {
+      "suite": "demo-seed-guard",
+      "status": 0,
+      "checks": 100
+    },
+    {
+      "suite": "card-refund",
+      "status": 0,
+      "checks": 154
+    },
+    {
+      "suite": "amend-linkage",
+      "status": 0,
+      "checks": 34
+    },
+    {
+      "suite": "ledger-guards",
+      "status": 0,
+      "checks": 67
+    },
+    {
+      "suite": "backend-gate",
+      "status": 0,
+      "checks": 15
+    },
+    {
+      "suite": "hero-slides",
+      "status": 0,
+      "checks": 26
+    },
+    {
+      "suite": "image-framing",
+      "status": 0,
+      "checks": 70
+    },
+    {
+      "suite": "cash-notes",
+      "status": 0,
+      "checks": 59
+    },
+    {
+      "suite": "mini-money-inputs",
+      "status": 0,
+      "checks": 13
+    },
+    {
+      "suite": "image-placeholder",
+      "status": 0,
+      "checks": 26
+    },
+    {
+      "suite": "deposit-audit",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "web-settlement",
+      "status": 0,
+      "checks": 45
+    },
+    {
+      "suite": "cross-end-effect",
+      "status": 0,
+      "checks": 17
+    },
+    {
+      "suite": "mini-account-adjust",
+      "status": 0,
+      "checks": 44
+    },
+    {
+      "suite": "today-board",
+      "status": 0,
+      "checks": 41
+    },
+    {
+      "suite": "dashboard-pulse",
+      "status": 0,
+      "checks": 45
+    },
+    {
+      "suite": "dashboard-home",
+      "status": 0,
+      "checks": 101
+    },
+    {
+      "suite": "hours-gate",
+      "status": 0,
+      "checks": 32
+    },
+    {
+      "suite": "hours-batch",
+      "status": 0,
+      "checks": 55
+    },
+    {
+      "suite": "crossend-cta",
+      "status": 0,
+      "checks": 4
+    },
+    {
+      "suite": "tab-colors",
+      "status": 0,
+      "checks": 18
+    },
+    {
+      "suite": "color-usage",
+      "status": 0,
+      "checks": 37
+    },
+    {
+      "suite": "token-entry",
+      "status": 0,
+      "checks": 9
+    },
+    {
+      "suite": "danger-cmd",
+      "status": 0,
+      "checks": 8
+    },
+    {
+      "suite": "notify-scheduler",
+      "status": 0,
+      "checks": 51
+    },
+    {
+      "suite": "quote-state",
+      "status": 0,
+      "checks": 21
+    },
+    {
+      "suite": "ui-spec",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "observe-fixes",
+      "status": 0,
+      "checks": 61
+    },
+    {
+      "suite": "file-ratchet",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "delivery-evidence",
+      "status": 0,
+      "checks": 5
+    },
+    {
+      "suite": "store-name",
+      "status": 0,
+      "checks": 27
+    },
+    {
+      "suite": "correction-reason",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "credential-scan",
+      "status": 0,
+      "checks": 27
+    },
+    {
+      "suite": "exit-code",
+      "status": 0,
+      "checks": 8
+    },
+    {
+      "suite": "fixture-front-door",
+      "status": 0,
+      "checks": 5
+    },
+    {
+      "suite": "wechat-stub",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "wechat-mini-code",
+      "status": 0,
+      "checks": 11
+    },
+    {
+      "suite": "mini-phone",
+      "status": 0,
+      "checks": 30
+    },
+    {
+      "suite": "booking-cancel",
+      "status": 0,
+      "checks": 12
+    },
+    {
+      "suite": "identity-claim",
+      "status": 0,
+      "checks": 14
+    },
+    {
+      "suite": "customer-paths",
+      "status": 0,
+      "checks": 15
+    },
+    {
+      "suite": "coupon-status",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "web-not-signup",
+      "status": 0,
+      "checks": 9
+    },
+    {
+      "suite": "import-phone-guard",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "bench-selfguard",
+      "status": 0,
+      "checks": 18
+    },
+    {
+      "suite": "user-write-auth",
+      "status": 0,
+      "checks": 11
+    },
+    {
+      "suite": "env-inventory",
+      "status": 0,
+      "checks": 9
+    },
+    {
+      "suite": "backup-wal",
+      "status": 0,
+      "checks": 31
+    },
+    {
+      "suite": "secret-output",
+      "status": 0,
+      "checks": 15
+    },
+    {
+      "suite": "restore-fingerprint",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "demo-gate-scope",
+      "status": 0,
+      "checks": 13
+    },
+    {
+      "suite": "demo-gate-coverage",
+      "status": 0,
+      "checks": 16
+    },
+    {
+      "suite": "frontend-routes",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "login-entries",
+      "status": 0,
+      "checks": 15
+    },
+    {
+      "suite": "db-target-guard",
+      "status": 0,
+      "checks": 16
+    },
+    {
+      "suite": "empty-pill",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "untouched-proof",
+      "status": 0,
+      "checks": 23
+    },
+    {
+      "suite": "display-text",
+      "status": 0,
+      "checks": 21
+    },
+    {
+      "suite": "tenant-ownership",
+      "status": 0,
+      "checks": 8
+    },
+    {
+      "suite": "tenant-explicit",
+      "status": 0,
+      "checks": 19
+    },
+    {
+      "suite": "identity-tenant",
+      "status": 0,
+      "checks": 8
+    },
+    {
+      "suite": "version-fingerprint",
+      "status": 0,
+      "checks": 8
+    },
+    {
+      "suite": "tenant-fill-trigger",
+      "status": 0,
+      "checks": 8
+    },
+    {
+      "suite": "conversation-log",
+      "status": 0,
+      "checks": 14
+    },
+    {
+      "suite": "ai-gate",
+      "status": 0,
+      "checks": 15
+    },
+    {
+      "suite": "ai-safety-lines",
+      "status": 0,
+      "checks": 28
+    },
+    {
+      "suite": "ai-fact-gate",
+      "status": 0,
+      "checks": 26
+    },
+    {
+      "suite": "booking-intake",
+      "status": 0,
+      "checks": 154
+    },
+    {
+      "suite": "turn-classify",
+      "status": 0,
+      "checks": 36
+    },
+    {
+      "suite": "turn-answer",
+      "status": 0,
+      "checks": 36
+    },
+    {
+      "suite": "ai-review",
+      "status": 0,
+      "checks": 38
+    },
+    {
+      "suite": "quote-tenant",
+      "status": 0,
+      "checks": 8
+    },
+    {
+      "suite": "conversation-tenant",
+      "status": 0,
+      "checks": 15
+    },
+    {
+      "suite": "mini-ai-same-outlet",
+      "status": 0,
+      "checks": 42
+    },
+    {
+      "suite": "platform-login",
+      "status": 0,
+      "checks": 22
+    },
+    {
+      "suite": "mp-home-owner",
+      "status": 0,
+      "checks": 129
+    },
+    {
+      "suite": "v4-five-fixes",
+      "status": 0,
+      "checks": 82
+    },
+    {
+      "suite": "repeat-guard",
+      "status": 0,
+      "checks": 14
+    },
+    {
+      "suite": "merge-window",
+      "status": 0,
+      "checks": 36
+    },
+    {
+      "suite": "three-stores",
+      "status": 0,
+      "checks": 26
+    },
+    {
+      "suite": "tier-label",
+      "status": 0,
+      "checks": 8
+    },
+    {
+      "suite": "native-dialog",
+      "status": 0,
+      "checks": 7
+    },
+    {
+      "suite": "demo-mark",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "txn-rollback",
+      "status": 0,
+      "checks": 4
+    },
+    {
+      "suite": "store-jury",
+      "status": 0,
+      "checks": 5
+    },
+    {
+      "suite": "signed-docs",
+      "status": 0,
+      "checks": 100
+    },
+    {
+      "suite": "mp-package-size",
+      "status": 0,
+      "checks": 21
+    },
+    {
+      "suite": "tenant-parent-scan",
+      "status": 0,
+      "checks": 8
+    },
+    {
+      "suite": "money-endpoint-abuse",
+      "status": 0,
+      "checks": 30
+    },
+    {
+      "suite": "cert-expiry",
+      "status": 0,
+      "checks": 9
+    },
+    {
+      "suite": "cross-tenant-isolation",
+      "status": 0,
+      "checks": 23
+    },
+    {
+      "suite": "store-placeholder",
+      "status": 0,
+      "checks": 55
+    },
+    {
+      "suite": "tenant-create-front-door",
+      "status": 0,
+      "checks": 48
+    },
+    {
+      "suite": "ai-retouch-gate",
+      "status": 0,
+      "checks": 26
+    },
+    {
+      "suite": "platform-bootstrap",
+      "status": 0,
+      "checks": 24
+    },
+    {
+      "suite": "service-import-tiers",
+      "status": 0,
+      "checks": 26
+    },
+    {
+      "suite": "onboarding-steps",
+      "status": 0,
+      "checks": 21
+    },
+    {
+      "suite": "plan-expiry",
+      "status": 0,
+      "checks": 36
+    },
+    {
+      "suite": "platform-expiry-ui",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "onboarding-lamps",
+      "status": 0,
+      "checks": 201
+    },
+    {
+      "suite": "demo-kind-gate",
+      "status": 0,
+      "checks": 18
+    },
+    {
+      "suite": "phone2-gate",
+      "status": 0,
+      "checks": 9
+    },
+    {
+      "suite": "prod-ro-gate",
+      "status": 0,
+      "checks": 34
+    },
+    {
+      "suite": "platform-setup-intake",
+      "status": 0,
+      "checks": 34
+    },
+    {
+      "suite": "platform-setup-workflow",
+      "status": 0,
+      "checks": 45
+    },
+    {
+      "suite": "platform-setup-presentation",
+      "status": 0,
+      "checks": 7
+    },
+    {
+      "suite": "platform-recurring-date",
+      "status": 0,
+      "checks": 11
+    }
+  ],
+  "gateClosed": [
+    {
+      "suite": "booking-checkout",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "deposit-workflow",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "member-pricing-http",
+      "status": 0,
+      "checks": 18
+    },
+    {
+      "suite": "customer-facts-http",
+      "status": 0,
+      "checks": 13
+    },
+    {
+      "suite": "first-use-binding",
+      "status": 0,
+      "checks": 0
+    },
+    {
+      "suite": "first-use-features",
+      "status": 0,
+      "checks": 0
+    },
+    {
+      "suite": "experience-demo-claim",
+      "status": 0,
+      "checks": 17
+    },
+    {
+      "suite": "web-sign-access",
+      "status": 0,
+      "checks": 143
+    },
+    {
+      "suite": "p0-booking-integrity",
+      "status": 0,
+      "checks": 70
+    },
+    {
+      "suite": "cross-tenant-isolation",
+      "status": 0,
+      "checks": 23
+    },
+    {
+      "suite": "store-placeholder",
+      "status": 0,
+      "checks": 55
+    },
+    {
+      "suite": "tenant-create-front-door",
+      "status": 0,
+      "checks": 48
+    },
+    {
+      "suite": "ai-retouch-gate",
+      "status": 0,
+      "checks": 26
+    },
+    {
+      "suite": "platform-bootstrap",
+      "status": 0,
+      "checks": 24
+    },
+    {
+      "suite": "service-import-tiers",
+      "status": 0,
+      "checks": 26
+    },
+    {
+      "suite": "onboarding-steps",
+      "status": 0,
+      "checks": 21
+    },
+    {
+      "suite": "signed-docs",
+      "status": 0,
+      "checks": 100
+    },
+    {
+      "suite": "auth-surface",
+      "status": 0,
+      "checks": 54
+    },
+    {
+      "suite": "backend-gate",
+      "status": 0,
+      "checks": 15
+    },
+    {
+      "suite": "booking-intake",
+      "status": 0,
+      "checks": 154
+    },
+    {
+      "suite": "card-refund",
+      "status": 0,
+      "checks": 154
+    },
+    {
+      "suite": "customer-profile",
+      "status": 0,
+      "checks": 9
+    },
+    {
+      "suite": "deposit-config",
+      "status": 0,
+      "checks": 36
+    },
+    {
+      "suite": "identity-links",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "mini-ai-same-outlet",
+      "status": 0,
+      "checks": 42
+    },
+    {
+      "suite": "noshow-aftersales",
+      "status": 0,
+      "checks": 761
+    },
+    {
+      "suite": "schedule-v2",
+      "status": 0,
+      "checks": 20
+    },
+    {
+      "suite": "staff-portal",
+      "status": 0,
+      "checks": 38
+    },
+    {
+      "suite": "stored-value",
+      "status": 0,
+      "checks": 18
+    },
+    {
+      "suite": "wechat-stub",
+      "status": 0,
+      "checks": 10
+    },
+    {
+      "suite": "mini-phone",
+      "status": 0,
+      "checks": 30
+    },
+    {
+      "suite": "booking-cancel",
+      "status": 0,
+      "checks": 12
+    },
+    {
+      "suite": "identity-claim",
+      "status": 0,
+      "checks": 14
+    },
+    {
+      "suite": "customer-paths",
+      "status": 0,
+      "checks": 15
+    },
+    {
+      "suite": "coupon-status",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "web-not-signup",
+      "status": 0,
+      "checks": 9
+    },
+    {
+      "suite": "import-phone-guard",
+      "status": 0,
+      "checks": 6
+    },
+    {
+      "suite": "web-settlement",
+      "status": 0,
+      "checks": 45
+    },
+    {
+      "suite": "cross-end-effect",
+      "status": 0,
+      "checks": 17
+    },
+    {
+      "suite": "display-text",
+      "status": 0,
+      "checks": 21
+    },
+    {
+      "suite": "tenant-ownership",
+      "status": 0,
+      "checks": 8
+    },
+    {
+      "suite": "mini-account-adjust",
+      "status": 0,
+      "checks": 44
+    },
+    {
+      "suite": "tenant-timezone",
+      "status": 0,
+      "checks": 32
+    },
+    {
+      "suite": "manual-draft-http",
+      "status": 0,
+      "checks": 26
+    }
+  ],
+  "extra": [
+    {
+      "suite": "auto-return",
+      "status": 0,
+      "checks": 7
+    },
+    {
+      "suite": "schema-consistency",
+      "status": 0,
+      "checks": 4
+    },
+    {
+      "suite": "perf-base-migration",
+      "status": 0,
+      "checks": 16
+    },
+    {
+      "suite": "tenant-isolation",
+      "status": 0,
+      "checks": 10
+    }
+  ],
+  "nativeControls": "pending",
+  "nativeLayout": "pending; prior release evidence is not reused",
+  "latestFocusedReports": [
+    "末轮定向回归.json",
+    "登录状态定向回归.json",
+    "owner-ui-check.json",
+    "workbench-ui-check.json",
+    "intake-ui-check.json",
+    "mini-review-handler-check.json"
+  ],
+  "nativeHandlers": "13 checks passed; real page handlers through official automator, not element taps"
+}

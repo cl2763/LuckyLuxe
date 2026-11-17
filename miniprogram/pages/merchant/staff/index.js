@@ -34,6 +34,7 @@ function monthKey() {
 }
 
 Page({
+  ...require('../../../utils/shift-preview').methods('shiftSheet'),
   data: {
     // 图注:点进员工管理默认落在排班页签,和以前点「排班」一样快
     tab: 'schedule',
@@ -53,6 +54,7 @@ Page({
     scConflicts: []
   },
 
+  onLoad(q){if(require('../../../utils/setup-preview').active()&&['schedule','targets','salary','accounts'].includes(q.tab))this.setData({tab:q.tab})},
   async onShow() {
     if (!(await api.guardOwner())) return
     await refreshStoreClock().catch(() => {})
@@ -87,6 +89,7 @@ Page({
 
   // ===== 业绩目标板块 =====
   async loadRanking() {
+    if(require('../../../utils/setup-preview').active())return
     const r = await api.adminGet(`/admin/perf-ranking?metric=${this.data.metric}&period=month&date=${this.data.month}`)
     const d = displayOf(r.ranking)
     const m = (c) => formatMoney(c, d, d.trimZeroDecimals ? 0 : 2)
@@ -110,6 +113,7 @@ Page({
   async loadTargets() {
     const r = await api.adminGet(`/admin/perf-targets?month=${this.data.month}`)
     this.rawTargets = r.technicians || []
+    if(require('../../../utils/setup-preview').active())this.setData({targets:this.rawTargets.map(t=>({technicianId:t.technicianId,name:t.name,hasTarget:t.hasTarget,pctText:'进度不在配置预览范围内'}))})
   },
   openTargetSheet(e) {
     const id = e.currentTarget.dataset.id
@@ -215,7 +219,7 @@ Page({
         api.adminGet(`/admin/schedule-week?from=${encodeURIComponent(from)}`),
         api.adminGet('/admin/schedule-settings').catch(() => ({ afternoonStart: '14:30' }))
       ])
-      const techs = (week.technicians || []).filter((t) => t.isActive !== false)
+      const techs = (week.technicians || []).filter((t) => t.isActive !== false||(week.carryovers||[]).some(b=>b.technicianId===t.id))
       const byKey = {}
       ;(week.schedules || []).forEach((x) => { byKey[`${x.date}|${x.technicianId}`] = x })
       const counts = {}
@@ -223,24 +227,26 @@ Page({
       const split = settings.afternoonStart || '14:30'
       const today = storeToday()
       const days = (week.days || []).map((d) => {
+        const defaultEnd=d.bookingAcceptance?.mode==='latest_start'?(d.bookingAcceptance.latestStartTime||d.closeTime):d.closeTime
         const caps = techs.map((t) => {
           const x = byKey[`${d.date}|${t.id}`]
           // 没排过班 = 跟随门店营业时间(视作全天),与后端 assertBookable 的兜底一致
-          if (!x) return { techId: t.id, name: t.name, kind: 'full', label: `${d.openTime}–${d.closeTime}`, working: true, count: counts[`${d.date}|${t.id}`] || 0 }
+          if (!x) return { techId: t.id, name: t.name, kind: 'full', label: d.isClosed?'休':`${d.openTime}–${defaultEnd}`, working: !d.isClosed, count: counts[`${d.date}|${t.id}`] || 0 }
           if (!x.isWorking) return { techId: t.id, name: t.name, kind: 'off', label: '休', working: false, count: 0 }
           const isAm = x.endTime === split
           const isPm = x.startTime === split
-          const isFull = x.startTime === d.openTime && x.endTime === d.closeTime
+          const isFull = x.startTime === d.openTime && x.endTime === defaultEnd
           return {
-            techId: t.id, name: t.name, working: true,
+            techId: t.id, name: t.name, working: true,start:x.startTime,end:x.endTime,
             kind: isFull ? 'full' : (isAm ? 'am' : (isPm ? 'pm' : 'custom')),
             label: isFull ? `${x.startTime}–${x.endTime}`
               : (isAm ? `上午 ${x.startTime}–${x.endTime}` : (isPm ? `下午 ${x.startTime}–${x.endTime}` : `${x.startTime}–${x.endTime}`)),
             count: counts[`${d.date}|${t.id}`] || 0
           }
         })
+        for(const c of caps){const carry=(week.carryovers||[]).filter(b=>b.date===d.date&&b.technicianId===c.techId);c.carryLabel=carry.length?'前日延续至 '+carry.map(b=>b.endTime).sort().pop():''}
         return {
-          date: d.date,
+          bookingAcceptance:d.bookingAcceptance,date: d.date,
           title: `周${wdOf(d.date)} ${Number(d.date.slice(5, 7))}.${Number(d.date.slice(8))}`,
           isToday: d.date === today,
           isClosed: d.isClosed,
@@ -267,26 +273,32 @@ Page({
 
   openSheet(e) {
     const { date, tech, name, kind } = e.currentTarget.dataset
-    const day = this.data.sc.days.find((d) => d.date === date)
+    const day = this.data.sc.days.find((d) => d.date === date),cap=day?.caps.find(c=>c.techId===tech)
+    if(!day||!cap)return
+    this._shiftReviewed=null
     this.setData({
-      scConflicts: [],
+      scConflicts: [],shiftPreview:null,
       shiftSheet: {
         date, tech, name, kind,
         weekday: wdOf(date),
-        start: day ? day.openTime : '10:00',
-        end: day ? day.closeTime : '19:00',
+        start:cap.start||day.openTime||'',
+        end:cap.end||(day.bookingAcceptance?.mode==='latest_start'?day.bookingAcceptance.latestStartTime||day.closeTime:day.closeTime)||'',
+        latestMode:day.bookingAcceptance?.mode==='latest_start',
+        businessOpen:day.openTime,businessClose:day.closeTime,cutoff:day.bookingAcceptance?.latestStartTime||day.closeTime,isClosed:day.isClosed,originalRange:cap.working?(cap.start||day.openTime)+'–'+(cap.end||day.bookingAcceptance?.latestStartTime||day.closeTime):'休息',
         repeat: false
       }
     })
   },
-  closeSheet() { this.setData({ shiftSheet: null, scConflicts: [] }) },
+  closeShiftSheet() { if(!this.data.saving)this.setData({ shiftSheet: null, scConflicts: [],shiftPreview:null }) },
   pickKind(e) { this.setData({ 'shiftSheet.kind': e.currentTarget.dataset.k }) },
   onStart(e) { this.setData({ 'shiftSheet.start': e.detail.value }) },
   onEnd(e) { this.setData({ 'shiftSheet.end': e.detail.value }) },
   toggleRepeat() { this.setData({ 'shiftSheet.repeat': !this.data.shiftSheet.repeat }) },
 
   async saveShift() {
+    if(this.data.saving||this.data.shiftReviewLoading||!await this.ensureShiftReviewed())return
     const x = this.data.shiftSheet
+    this.setData({saving:true})
     const body = { date: x.date, applyToFollowingWeeks: x.repeat ? 8 : 0 }
     if (x.kind === 'custom') { body.startTime = x.start; body.endTime = x.end; body.isWorking = true }
     else body.shift = x.kind
@@ -302,7 +314,7 @@ Page({
         wx.showToast({ title: x.repeat ? `已应用到之后每个周${x.weekday}` : '已保存', icon: 'none' })
       }
       this.loadWeek(this.data.sc.from)
-    } catch (e) { wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' }) }
+    } catch (e) { wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' }) }finally{this.setData({saving:false})}
   },
 
   editSplit() {

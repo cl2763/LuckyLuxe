@@ -1,3 +1,5 @@
+import {dateValue} from './schedule-input.mjs'
+import {acceptanceForDate} from './booking-window.mjs'
 import { randomUUID } from 'node:crypto'
 import { availability } from './schedule-availability.mjs'
 /* 排班域(schedule-week 周网格 / schedule-day 台面日视图)—— 2026-08-30h 从 local-server.mjs 搬出。
@@ -48,27 +50,27 @@ export function createScheduleBoard(deps) {
     return db.prepare('SELECT technician_id FROM duty_marks WHERE tenant_id = ? AND date = ?').all(tid, date).map((r) => r.technician_id)
   }
 
-  async function route(req, res, ctx) {
-    const { path, query } = ctx
-    if (req.method === 'GET' && path === '/admin/schedule-week') {
-      const from = query.from && /^\d{4}-\d{2}-\d{2}$/.test(query.from) ? query.from : null
-      const base = from ? localDateTime(from, '12:00') : new Date()
+  function week(query={}){
+      const from=query.from?dateValue(query.from,apiError):localParts(new Date()).date
+      const base=new Date(from+'T12:00:00Z')
       // 对齐到周一
       const monday = new Date(base)
-      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
+      monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7))
       const storeId = query.storeId || defaultStoreId()
+      if(!db.prepare('SELECT id FROM stores WHERE id=? AND tenant_id=?').get(storeId,currentTenantId()))throw apiError(404,'NOT_FOUND','门店不存在。')
       const days = []
       for (let i = 0; i < 7; i += 1) {
         const d = new Date(monday)
-        d.setDate(monday.getDate() + i)
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-        const weekday = localDateTime(dateStr, '12:00').getDay()
+        d.setUTCDate(monday.getUTCDate() + i)
+        const dateStr = d.toISOString().slice(0,10)
+        const weekday = d.getUTCDay()
         const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(storeId, weekday)
         const special = specialDateFor(storeId, dateStr)
         // D84 同族第二处:未设置 ≠ 休息;判定收口到 hoursUnsetOfStore(图 v1.0:七天全关也算未设置)
         const wkUnset = !special && hoursUnsetOfStore(db, storeId)
         days.push({
           date: dateStr,
+          bookingAcceptance:acceptanceForDate(db,storeId,dateStr,Boolean(special),currentTenantId()),
           weekday,
           hoursUnset: wkUnset,
           isClosed: special ? Boolean(special.is_closed) : (wkUnset ? false : (!hours || Boolean(hours.is_closed))),
@@ -86,27 +88,31 @@ export function createScheduleBoard(deps) {
           WHERE date IN (${dates.map(() => '?').join(',')}) AND technician_id IN (${techIds.map(() => '?').join(',')})`)
         .all(...dates, ...techIds) : [])
         .map((row) => ({ technicianId: row.technician_id, date: row.date, startTime: row.start_time, endTime: row.end_time, isWorking: Boolean(row.is_working) }))
-      const bookingCounts = []
+      const bookingCounts = [],carryovers=[]
       for (const day of days) {
         const dayStart = iso(localDateTime(day.date, '00:00'))
-        const dayEnd = iso(addMinutes(localDateTime(day.date, '00:00'), 24 * 60))
+        const dayEnd = iso(localDateTime(new Date(Date.parse(day.date+'T12:00:00Z')+86400000).toISOString().slice(0,10),'00:00'))
         const rows = db.prepare(`SELECT technician_id, COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED') AND appointment_start >= ? AND appointment_start < ? GROUP BY technician_id`).all(currentTenantId(), dayStart, dayEnd)
+        for(const row of db.prepare("SELECT id,technician_id,appointment_end FROM bookings WHERE tenant_id=? AND status IN ('PENDING_PAYMENT','CONFIRMED','COMPLETED','AFTER_SALES') AND appointment_start<? AND appointment_end>?").all(currentTenantId(),dayStart,dayStart))carryovers.push({id:row.id,technicianId:row.technician_id,date:day.date,endTime:localParts(row.appointment_end).time})
         for (const row of rows) bookingCounts.push({ technicianId: row.technician_id, date: day.date, count: row.n })
       }
-      json(res, 200, {
+      return {
         weekStart: days[0].date,
         days,
         technicians: technicians.map((tech) => ({ id: tech.id, name: tech.name, title: tech.title, isActive: Boolean(tech.is_active) })),
         schedules,
-        bookingCounts
-      })
-      return true
-    }
+        bookingCounts,carryovers
+      }
+  }
+  async function route(req, res, ctx) {
+    const { path, query } = ctx
+    if(req.method==='GET'&&path==='/admin/schedule-week'){json(res,200,week(query));return true}
     // 技师维度·日视图(2026-07-22 P0-①):某天每技师的预约明细,前端画时间轴色块
     if (req.method === 'GET' && path === '/admin/schedule-day') {
       const tid = currentTenantId()
       const date = query.date && /^\d{4}-\d{2}-\d{2}$/.test(query.date) ? query.date : localParts(new Date()).date
       const storeId = query.storeId || defaultStoreId()
+      if(!db.prepare('SELECT id FROM stores WHERE id=? AND tenant_id=?').get(storeId,currentTenantId()))throw apiError(404,'NOT_FOUND','门店不存在。')
       const weekday = localDateTime(date, '12:00').getDay()
       const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(storeId, weekday)
       const special = specialDateFor(storeId, date)
@@ -123,11 +129,11 @@ export function createScheduleBoard(deps) {
       const closeTime = (special && !special.is_closed && special.close_time) || (hours && !hours.is_closed ? hours.close_time : null)
       const allTechs = db.prepare('SELECT id, name, title, is_active FROM technicians WHERE tenant_id = ? ORDER BY is_active DESC, name ASC').all(tid)
       const dayStart = iso(localDateTime(date, '00:00'))
-      const dayEnd = iso(addMinutes(localDateTime(date, '00:00'), 24 * 60))
+      const dayEnd = iso(localDateTime(new Date(Date.parse(date+'T12:00:00Z')+86400000).toISOString().slice(0,10),'00:00'))
       /* 裁C(店主 08-22):售后单带徽标上日历,不再蒸发——转售后前它就在台面上,
          行踪不应因售后断链(D66 位面④)。 */
       const rows = db.prepare(`SELECT * FROM bookings WHERE tenant_id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED','COMPLETED','AFTER_SALES')
-        AND appointment_start >= ? AND appointment_start < ? ORDER BY appointment_start ASC`).all(tid, dayStart, dayEnd)
+        AND appointment_end > ? AND appointment_start < ? ORDER BY appointment_start ASC`).all(tid, dayStart, dayEnd)
       // 服务分组(色相):足部美甲/护理由名称识别,其余按类型
       const groupOf = (svc) => {
         if (!svc) return 'hand'
@@ -163,8 +169,10 @@ export function createScheduleBoard(deps) {
           serviceType: svc ? svc.type : '',
           group: groupOf(svc),
           arrivalState,
-          startTime: startLocal.time,
-          endTime: endLocal.time,
+          startTime:startLocal.date<date?'00:00':startLocal.time,
+          endTime:endLocal.date>date?'24:00':endLocal.time,
+          startDate:startLocal.date,endDate:endLocal.date,continuation:startLocal.date<date,
+          timeLabel:(startLocal.date<date?'前日 '+startLocal.time:startLocal.time)+'–'+(endLocal.date>startLocal.date?'次日 ':'')+endLocal.time,
           durationMin: row.total_duration_min || Math.max(30, Math.round((new Date(row.appointment_end) - new Date(row.appointment_start)) / 60000)),
           isNewCustomer: !earlier,
           isDesignated: /指定|指名|点名/.test(String(row.notes || '')),
@@ -176,11 +184,11 @@ export function createScheduleBoard(deps) {
         }
       })
       const bookingCount = {}
-      for (const b of bookings) bookingCount[b.technicianId] = (bookingCount[b.technicianId] || 0) + 1
+      for (const b of bookings.filter(b=>!b.continuation)) bookingCount[b.technicianId] = (bookingCount[b.technicianId] || 0) + 1
       // 只显示在岗技师 + 今天有单的技师(避免停用测试技师塞满表头)
       const technicians = allTechs
-        .filter((t) => t.is_active || bookingCount[t.id])
-        .map((t) => ({ id: t.id, name: t.name, title: t.title, isActive: Boolean(t.is_active), bookingCount: bookingCount[t.id] || 0, ...availability({active:t.is_active,schedule:db.prepare('SELECT * FROM technician_schedules WHERE technician_id=? AND date=?').get(t.id,date),openTime,closeTime,isClosed,date,today:nowParts.date,now:nowParts.time,bookings:bookings.filter(b=>b.technicianId===t.id)}) }))
+        .filter((t) => t.is_active || bookings.some(b=>b.technicianId===t.id))
+        .map((t) => ({ id: t.id, name: t.name, title: t.title, isActive: Boolean(t.is_active), bookingCount: bookingCount[t.id] || 0, ...availability({active:t.is_active,schedule:db.prepare('SELECT * FROM technician_schedules WHERE technician_id=? AND date=?').get(t.id,date),openTime,closeTime:acceptanceForDate(db,storeId,date,Boolean(special),currentTenantId()).mode==='latest_start'?(acceptanceForDate(db,storeId,date,Boolean(special),currentTenantId()).latestStartTime||closeTime):closeTime,isClosed,date,today:nowParts.date,now:nowParts.time,bookings:bookings.filter(b=>b.technicianId===t.id)}) }))
       const activeCount = bookings.filter((b) => b.arrivalState === 'active').length
       const pendingCount = bookings.filter((b) => b.arrivalState === 'pending').length
       /* 值日(31l 合同二/四/六):开关关=响应整块不出现(零渲染);开=名单+空态句后端出(两端同句) */
@@ -217,10 +225,10 @@ export function createScheduleBoard(deps) {
       json(res, 200, {
         ...(backfillBlock ? { backfill: backfillBlock } : {}),
         storeNow: nowParts.time, storeToday: nowParts.date,
-        date, weekday, isClosed, hoursUnset, openTime, closeTime,
+        date, weekday, isClosed, hoursUnset, openTime, closeTime,bookingAcceptance:acceptanceForDate(db,storeId,date,Boolean(special),currentTenantId()),
         specialNote: special?.note || '',
         technicians,
-        bookings,
+        bookings,newBookingCount:bookings.filter(b=>!b.continuation).length,carryoverCount:bookings.filter(b=>b.continuation).length,
         activeCount, pendingCount,
         ...(dutyBlock ? { duty: dutyBlock } : {})
       })
@@ -282,7 +290,7 @@ export function createScheduleBoard(deps) {
        多伦多店晚上 20:00 的单,UTC 已经是次日 —— 台面上有、大屏「此刻」里没有。
        口径写在注释里而没写在代码里,就是没写(一件事一处真相)。改成**照抄台面那一份**。 */
     const dayStart = iso(localDateTime(date, '00:00'))
-    const dayEnd = iso(addMinutes(localDateTime(date, '00:00'), 24 * 60))
+    const dayEnd = iso(localDateTime(new Date(Date.parse(date+'T12:00:00Z')+86400000).toISOString().slice(0,10),'00:00'))
     const rows = db.prepare(`SELECT id, status, arrived_at, appointment_start, user_id, service_id, technician_id
       FROM bookings WHERE tenant_id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED','COMPLETED','AFTER_SALES')
         AND appointment_start >= ? AND appointment_start < ? ORDER BY appointment_start ASC`).all(tenantId, dayStart, dayEnd)
@@ -307,5 +315,5 @@ export function createScheduleBoard(deps) {
     }
   }
 
-  return { route, ensureSchema, dayCounts }
+  return { week, route, ensureSchema, dayCounts }
 }

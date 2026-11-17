@@ -32,7 +32,8 @@
     "pages/mall/index",
     "pages/about/index",
     "pages/privacy/index",
-    "pages/booking-draft/index"
+    "pages/booking-draft/index",
+    "pages/setup-preview/index"
   ],
   "subPackages": [
     {
@@ -67,6 +68,8 @@
         "my-performance/index",
         "staff/index",
         "services/index",
+        "booking-addons/index",
+        "record-management/index",
         "service-edit/index",
         "me/index",
         "subscription/index",
@@ -84,7 +87,8 @@
         "migration-reconciliation/index",
         "booking-draft/index",
         "messages/index",
-        "store-guide/index"
+        "store-guide/index",
+        "setup-review/index"
       ]
     },
     {
@@ -129,5 +133,9 @@
   "style": "v2",
   "__usePrivacyCheck__": true,
   "sitemapLocation": "sitemap.json",
-  "darkmode": true
+  "darkmode": true,
+  "usingComponents": {
+    "config-sync-banner": "/components/config-sync-banner/index",
+    "setup-preview-banner": "/components/setup-preview-banner/index"
+  }
 }

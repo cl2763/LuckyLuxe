@@ -14,7 +14,7 @@ function lastText(iso) { if (!iso) return '—'; const d = Math.floor((Date.now(
 
 Page({
   data: { c: null, orders: [], ordersLoaded: false },
-  onLoad(q) { this.id = decodeURIComponent((q && q.id) || '') },
+  onLoad(q) { this.id = decodeURIComponent((q && q.id) || '');this._archiveView=q?.archived==='1' },
   migrationArchive() { require('../../../utils/nav').to('/pages/merchant/migration-archive/index?userId='+encodeURIComponent(this.id)) },
   writeNote() {
     const nm = (this.data.c && this.data.c.name) || '顾客'
@@ -34,11 +34,11 @@ Page({
   async onShow() { if (!(await api.guardOwner())) return; this.load() },
   async load() {
     try {
-      const r = await api.adminGet('/admin/customers')
+      const r = await api.adminGet('/admin/customers'+(this._archiveView?'?archivedId='+encodeURIComponent(this.id):''))
       const u = (r.customers || r.data || r || []).find((x) => x.id === this.id)
       if (!u) { wx.showToast({ title: '客户不存在', icon: 'none' }); return }
       this.setData({
-        c: {id:this.id,
+        c: {id:this.id,archived:!!u.archived,
           name: u.displayName || '顾客',
           av: (u.displayName || '?').slice(0, 1),
           tier: tierCn(u.memberTier) || '会员',

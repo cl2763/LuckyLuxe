@@ -1,10 +1,12 @@
+import {configFingerprint} from './config-fingerprint.mjs'
+import {canonicalPackageKind} from './package-kind.mjs'
 export function createMembershipPackageSerializer(giftSnapshotOfPackage,discountOf=()=>null) {
   return function serializeMembershipPackage(row) {
   return {
-    giftItems:giftSnapshotOfPackage(row),
+    configRevision:configFingerprint([row,discountOf(row)]),giftItems:giftSnapshotOfPackage(row),
     ...(discountOf(row)?{defaultPersonalDiscount:discountOf(row)}:{}),
     id: row.id,
-    kind: row.kind,
+    kind: canonicalPackageKind(row.kind),
     name: row.name,
     priceCents: row.price_cents,
     bonusCents: row.bonus_cents,

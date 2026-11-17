@@ -457,6 +457,9 @@ Page({
 
   goSandboxIdentity() { require('../../utils/nav').to('/pages/sandbox-identity/index') },
 
+  // Public catalog: browsing does not require a member account or create a purchase.
+  goMall() { wx.navigateTo({ url: '/pages/mall/index' }) },
+
   goMemberBenefits() {
     this.requireLogin(() => wx.navigateTo({ url: '/pages/member-benefits/index' }))
   },

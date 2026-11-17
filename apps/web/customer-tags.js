@@ -126,5 +126,5 @@ window.CustomerTags = (function () {
     return false
   }
 
-  return { memberTierBadge, rfmTierOf, tierBar, applyFilter, currentFilter, handleClick }
+  return { setRules:rules=>{stateR.rules=rules}, memberTierBadge, rfmTierOf, tierBar, applyFilter, currentFilter, handleClick }
 })()

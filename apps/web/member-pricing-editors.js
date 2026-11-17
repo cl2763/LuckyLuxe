@@ -161,7 +161,8 @@ async function savePackage(kind, existing) {
   // D50:prompt 链 → 页内表单弹层(单弹层多字段)
   kind = kind || (existing && existing.kind) || 'recharge'
   const isTimes = kind === 'times'
-  let giftEditor,discountWheel;const packageDiscount=!isTimes&&existing?await request('/admin/member-pricing/packages/'+encodeURIComponent(existing.id)):{rateBps:null,revision:0}
+  let giftEditor,discountWheel,formOverlay,expectedConfigRevision=existing?.configRevision;const packageDiscount=!isTimes&&existing?await request('/admin/member-pricing/packages/'+encodeURIComponent(existing.id)):{rateBps:null,revision:0}
+  const showConflict=c=>{        formOverlay.querySelector('[data-config-conflict]')?.remove();const notice=document.createElement('section');notice.dataset.configConflict='';notice.style.cssText='margin:16px 0;padding:20px;border:1px solid var(--line);border-radius:14px';notice.innerHTML='<h3>套餐已在其他设备修改</h3><p data-current></p><p>本页输入已保留。保留我的修改将以本页填写内容保存，请先核对。</p><div class="action-row"><button type="button" data-server>采用已保存内容</button><button type="button" data-mine>保留我的修改并复核</button></div>';notice.querySelector('[data-current]').textContent=['服务器最新：'+c.name,'金额 '+c.priceCents/100,'赠送 '+c.bonusCents/100,'次数 '+c.timesCount,'权益 '+(c.benefits||'无'),'赠品 '+(c.giftItems||[]).map(g=>g.name+' × '+g.quantity).join('、')].join('；');formOverlay.querySelector('[data-fm-save]').parentElement.before(notice);notice.scrollIntoView({block:'center'});notice.querySelector('[data-server]').onclick=()=>{formOverlay.querySelector('[data-fm-close]').click();savePackage(kind,c)};notice.querySelector('[data-mine]').onclick=()=>{expectedConfigRevision=c.configRevision;Object.assign(packageDiscount,c.defaultPersonalDiscount||{});notice.remove();toast('输入已保留，请核对后再次保存')}}
   /* 裁决(店主 08-20):关联项目组禁自由文本——下拉单选(现有二级分类+不限)。
      存量自由文本匹配不上=选项标 ⚠ 红提示商家改选,不静默改数据。 */
   let groupOptions = [['', '不限(不限制项目组)']]
@@ -177,7 +178,7 @@ async function savePackage(kind, existing) {
   }
   openFormModal({
     closeButtonOnly: !isTimes,
-    mountContent:overlay=>{if(!isTimes){const host=document.createElement("div");overlay.querySelector(".action-row").before(host);giftEditor=window.GiftEditor.mount(host,existing?.giftItems||[],mMoney(0).replace(/[0-9.,\s]/g,""));const wheel=document.createElement("div");host.after(wheel);discountWheel=window.DiscountWheel.mount(wheel,{value:packageDiscount.rateBps})}},
+    mountContent:overlay=>{formOverlay=overlay;if(existing){const check=document.createElement('button');check.type='button';check.className='ghost slim';check.dataset.checkLatest='';check.textContent='查看差异 / 核对最新内容';overlay.querySelector('.action-row').before(check);check.onclick=async()=>{try{const r=await request('/admin/packages'),c=(r.packages||[]).find(p=>p.id===existing.id);if(!c)throw Error('套餐已被移除，请返回列表核对');if(c.configRevision!==expectedConfigRevision)showConflict(c);else toast('该套餐没有变化，当前输入已保留')}catch(e){toast(e.message)}}}if(!isTimes){const host=document.createElement("div");overlay.querySelector(".action-row").before(host);giftEditor=window.GiftEditor.mount(host,existing?.giftItems||[],mMoney(0).replace(/[0-9.,\s]/g,""));const wheel=document.createElement("div");host.after(wheel);discountWheel=window.DiscountWheel.mount(wheel,{value:packageDiscount.rateBps})}},
     title: existing ? `编辑${isTimes ? '次卡' : '充值套餐'}` : `新建${isTimes ? '次卡' : '充值套餐'}`,
     hint: isTimes ? '售卡=预收负债不计积分;核销按折算单价确认收入(批②)。' : '赠送=营销让利:入储值负债、单独列示,不算实收/业绩/积分。',
     fields: [
@@ -186,7 +187,8 @@ async function savePackage(kind, existing) {
       ...(isTimes ? [
         { key: 'times', label: '总次数', type: 'number', value: existing ? existing.timesCount : 5 },
         { key: 'projectGroup', label: '关联项目组', type: 'select', value: existing ? existing.projectGroup || '' : '', options: groupOptions, hint: legacyGroupBad ? '⚠ 原项目组的分类已不存在,请改选后保存(不会自动改动已售卡)' : '核销时从组内选具体项目;选「不限」=全部项目可核销', danger: legacyGroupBad },
-        { key: 'validDays', label: '有效期天数(留空=长期)', type: 'number', value: existing && existing.validDays ? existing.validDays : '' }
+        { key: 'validityMode', label: '有效期方式', type: 'select', value: existing ? (existing.validDays ? 'days' : 'unlimited') : '', options: [['','请选择'],['days','固定天数'],['unlimited','长期有效']] },
+        { key: 'validDays', label: '有效期天数（固定天数时填写）', type: 'number', value: existing && existing.validDays ? existing.validDays : '' }
       ] : [
         { key: 'bonus', label: '赠送金额(可为 0)', type: 'number', value: existing && existing.bonusCents ? existing.bonusCents / 100 : '' }
       ]),
@@ -194,19 +196,26 @@ async function savePackage(kind, existing) {
       { key: 'mallVisible', label: '上架商城(顾客商城可见)', type: 'checkbox', value: existing ? existing.mallVisible !== false : true }
     ],
     onSave: async (v) => {
+      if(formOverlay.querySelector('[data-config-conflict]')){toast('请先核对差异并选择保留内容');return false}
       if (!String(v.name || '').trim()) { toast('名称必填'); return false }
-      const body = { kind, name: String(v.name).trim(), priceCents: mCents(v.price), benefits: String(v.benefits || '').trim(), mallVisible: Boolean(v.mallVisible) }
+      const body = {
+        ...(existing?{expectedConfigRevision}:{}), kind, name: String(v.name).trim(), priceCents: mCents(v.price), benefits: String(v.benefits || '').trim(), mallVisible: Boolean(v.mallVisible) }
       if (isTimes) {
         body.timesCount = Math.round(Number(v.times) || 0)
         body.projectGroup = String(v.projectGroup || '').trim()
-        body.validDays = v.validDays ? Math.round(Number(v.validDays) || 0) : null
+        if(!['days','unlimited'].includes(v.validityMode)){toast('请明确选择有效期方式');return false}
+        if(v.validityMode==='days'&&(!/^\d+$/.test(String(v.validDays))||+v.validDays<1)){toast('请填写正整数有效天数');return false}
+        body.validDays=v.validityMode==='unlimited'?null:Number(v.validDays)
       } else {
         body.bonusCents = mCents(v.bonus || 0)
         body.giftItems = giftEditor.read()
         body.defaultPersonalDiscount={expectedRevision:packageDiscount.revision,rateBps:discountWheel.read()}
       }
-      if (existing) await request(`/admin/packages/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
-      else await request('/admin/packages', { method: 'POST', body: JSON.stringify(body) })
+      try{if (existing) await request(`/admin/packages/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
+      else await request('/admin/packages', { method: 'POST', body: JSON.stringify(body) })}catch(e){
+        if(e.code!=='CONFIG_CHANGED'||!e.details?.current)throw e
+        showConflict(e.details.current);return false
+      }
       toast('已保存')
       await loadMembershipPage()
     }

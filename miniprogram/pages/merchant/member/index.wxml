@@ -1,4 +1,7 @@
+<config-sync-banner changed="{{configSyncChanged}}" error="{{configSyncError}}" checked="{{configSyncChecked}}" bind:retry="configSyncRetry"/>
+<setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
 <view class="page {{themeClass}}">
+<navigator wx:if="{{!setupPreviewActive}}" url="/pages/merchant/record-management/index?kind=packages" style="padding:24rpx;margin-bottom:20rpx;">删除 / 归档管理 ›</navigator>
   <view class="seg">
     <text class="s {{seg===0?'on':''}}" data-i="0" bindtap="onSeg">充值套餐</text>
     <text class="s {{seg===1?'on':''}}" data-i="1" bindtap="onSeg">会员次卡</text>
@@ -7,15 +10,21 @@
     <text class="s {{seg===4?'on':''}}" data-i="4" bindtap="onSeg">会员体系</text>
   </view>
 
+  <view wx:if="{{seg<3}}" class="card">
+    <view wx:if="{{listLoading}}" class="empty">正在读取…</view>
+    <view wx:if="{{listError}}" class="empty">{{listError}}</view>
+    <view wx:if="{{unknownKinds}}" class="mnote">有 {{unknownKinds}} 个套餐的类型需要核对，请联系平台处理；原数据已保留。</view>
+    <button class="add" bindtap="loadAll" disabled="{{listLoading}}">{{listError?'重新加载':'刷新'}}</button>
+  </view>
   <!-- 充值套餐 -->
   <block wx:if="{{seg===0}}">
     <view class="card" wx:for="{{recharges}}" wx:key="id">
       <view class="crow" data-id="{{item.id}}" data-type="recharge" bindtap="edit">
-        <view class="ci"><view class="cn {{item.active?'':'off'}}">{{item.name}}</view><view class="cs">{{item.sub}}</view></view>
+        <view class="ci"><view class="cn {{item.active?'':'off'}}">{{item.name}}</view><view class="cs">{{item.sub}}</view><view class="cs">默认折扣：{{item.discountText}}</view><view class="cs">赠品：{{item.giftText}}</view><view class="cs">{{item.mallText}}</view></view>
         <switch class="sw" checked="{{item.active}}" color="#c8a47e" data-id="{{item.id}}" data-type="recharge" data-active="{{item.active}}" catchchange="toggle" />
       </view>
     </view>
-    <view wx:if="{{!recharges.length}}" class="empty">还没有充值套餐</view>
+    <view wx:if="{{listReady && !listLoading && !listError && !recharges.length}}" class="empty">还没有充值套餐</view>
   </block>
 
   <!-- 会员次卡 -->
@@ -26,7 +35,7 @@
         <switch class="sw" checked="{{item.active}}" color="#c8a47e" data-id="{{item.id}}" data-type="times" data-active="{{item.active}}" catchchange="toggle" />
       </view>
     </view>
-    <view wx:if="{{!timesCards.length}}" class="empty">还没有会员次卡</view>
+    <view wx:if="{{listReady && !listLoading && !listError && !timesCards.length}}" class="empty">还没有会员次卡</view>
   </block>
 
   <!-- 优惠券 -->
@@ -38,8 +47,9 @@
         <switch class="sw" checked="{{item.active}}" color="#c8a47e" data-id="{{item.id}}" data-type="coupon" data-active="{{item.active}}" catchchange="toggle" />
       </view>
     </view>
-    <view wx:if="{{!coupons.length}}" class="empty">还没有优惠券</view>
+    <view wx:if="{{listReady && !listLoading && !listError && !coupons.length}}" class="empty">还没有优惠券</view>
 
+    <block wx:if="{{!setupPreviewActive}}">
     <!-- 屏 C3 自定义发放(小程序老板版,与网页同布局:搜顾客 → 发放 → 记录) -->
     <view class="gsec">自定义发放<text class="gsub">仅老板 · 原因必填,记录只追加</text></view>
     <view class="gcard">
@@ -71,6 +81,7 @@
       </view>
       <view wx:if="{{!grants.length}}" class="empty">还没有发放记录</view>
     </view>
+    </block>
   </block>
 
   <!-- 批④ S9(店主 08-24 拍板改定:维持平台统一设置,不放权)——商家端补**只读展示**,

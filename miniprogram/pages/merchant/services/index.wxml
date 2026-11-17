@@ -1,8 +1,12 @@
+<config-sync-banner changed="{{configSyncChanged}}" error="{{configSyncError}}" checked="{{configSyncChecked}}" bind:retry="configSyncRetry"/>
+<setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
 <view class="page {{themeClass}}">
+<navigator wx:if="{{isOwner && !setupPreviewActive}}" url="/pages/merchant/record-management/index?kind=services" style="padding:24rpx;margin-bottom:20rpx;">删除 / 归档管理 ›</navigator>
   <!-- 两页签与网页两模块一一对应(合同§四) -->
   <view class="tabs">
     <view class="tab {{tab === 'storefront' ? 'on' : ''}}" bindtap="switchTab" data-tab="storefront">① 上架服务</view>
     <view class="tab {{tab === 'catalog' ? 'on' : ''}}" bindtap="switchTab" data-tab="catalog">② 结算单目录</view>
+    <navigator class="tab" url="/pages/merchant/booking-addons/index" wx:if="{{isOwner}}">③ 预约附加服务</navigator>
   </view>
 
   <price-system system="{{tab==='storefront'?'display':'settlement'}}" read-only="{{!isOwner}}" bind:saved="load"/>

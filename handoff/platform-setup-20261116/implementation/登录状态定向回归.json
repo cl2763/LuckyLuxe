@@ -1,0 +1,25 @@
+{
+  "scope": "Latest mini login cache fix; isolated full-regression runtime and synthetic database only",
+  "results": [
+    {
+      "suite": "mini-merchant-hours-session",
+      "status": 0,
+      "tapLines": 4
+    },
+    {
+      "suite": "hours-gate",
+      "status": 0,
+      "tapLines": 32
+    },
+    {
+      "suite": "hours-batch",
+      "status": 0,
+      "tapLines": 55
+    },
+    {
+      "suite": "mini-sign-link",
+      "status": 0,
+      "tapLines": 39
+    }
+  ]
+}

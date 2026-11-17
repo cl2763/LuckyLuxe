@@ -31,8 +31,9 @@
        以前每一天都写着「今天」,翻到 8/03 那页按钮还叫「今天」,根本看不出自己在哪一天。 -->
       <view class="dv-today {{dv.isToday ? 'cur' : ''}}" hover-class="tap-feedback" bindtap="dvToday">{{dv.isToday ? '今天' : '返回今天'}}</view>
     </view>
-    <view class="dv-summary" wx:if="{{dv && !dv.isClosed}}">
+    <view class="dv-summary" wx:if="{{dv && (!dv.isClosed || dv.occupancyTotal)}}">
       <view class="dv-pill"><text>今日订单</text><text class="b">{{dv.total}} 单</text></view>
+      <view class="dv-pill" wx:if="{{dv.carryoverCount}}"><text>前日延续</text><text class="b">{{dv.carryoverCount}} 单</text></view>
       <view class="dv-pill live" wx:if="{{dv.activeCount}}"><text>在做</text><text class="b">{{dv.activeCount}} 人</text></view>
       <view class="dv-pill"><text>在岗</text><text class="b">{{dv.working}} 人</text></view>
       <view class="dv-pill"><text>空档</text><text class="b">{{dv.freeHours}} h</text></view>
@@ -43,12 +44,12 @@
     <!-- D2:台面空态与日结自洽 —— 「本日休息」但日结里有单时,这里就把原因说出来,
          别让店主在两个地方看到互相矛盾的两句话(文案后端下发)。 -->
     <!-- D84(店主自诊):未设置营业时间 ≠ 休息 —— 引导墙说真话,直达设置(店铺页) -->
-    <view wx:if="{{dv && dv.hoursUnset}}" class="dv-setupwall">
+    <view wx:if="{{dv && dv.hoursUnset && !dv.occupancyTotal}}" class="dv-setupwall">
       <view class="dv-sw-t">还没设置营业时间</view>
       <view class="dv-sw-p">设置营业时间后,今天台面、排班表和顾客可约时段才会亮起来 —— 没设置不等于休息。</view>
       <view class="dv-sw-btn" bindtap="goHoursSetup">去设置营业时间</view>
     </view>
-    <view wx:elif="{{dv && dv.isClosed}}" class="dv-closed">
+    <view wx:elif="{{dv && dv.isClosed && !dv.occupancyTotal}}" class="dv-closed">
       本日休息{{dv.specialNote ? ' · ' + dv.specialNote : ''}}
       <!-- D34(2026-08-12):休息日不可开单已成口径 —— 历史单照服务发生日留痕,提示改写;
            旧称谓字样按口径变更全仓移除。 -->
@@ -77,7 +78,7 @@
                 <view wx:for="{{dv.hours}}" wx:key="label" wx:for-item="hl" class="dv-line {{hl.off ? 'off' : ''}}"></view>
                 <view wx:for="{{col.frees}}" wx:key="startTime" wx:for-item="f" class="dv-blk free" hover-class="tap-feedback" style="top:{{f.top}}rpx;height:{{f.height}}rpx" data-tech="{{col.id}}" data-time="{{f.startTime}}" data-end="{{f.endTime}}" bindtap="tapFree"><text>{{dv.backfill ? dv.backfill.label : '+ 直接排单'}}</text></view>
                 <view wx:for="{{col.blocks}}" wx:key="id" wx:for-item="b" class="dv-blk {{b.cls}}" hover-class="tap-feedback" style="top:{{b.top}}rpx;height:{{b.height}}rpx;left:{{b.left}}rpx;width:{{b.width}}rpx;right:auto" data-id="{{b.id}}" bindtap="tapBlock">
-                  <view class="dv-bt"><text wx:if="{{b.stateGlyph}}" class="dv-sdot {{b.state}}">{{b.stateGlyph}}</text>{{b.startTime}}–{{b.endTime}}</view>
+                  <view class="dv-bt"><text wx:if="{{b.stateGlyph}}" class="dv-sdot {{b.state}}">{{b.stateGlyph}}</text>{{b.timeLabel || (b.startTime+'–'+b.endTime)}}</view>
                   <view class="dv-bn">{{b.customerName}}</view>
                   <view class="dv-bs">{{b.serviceName}}</view>
                   <!-- 裁C:售后单带蓝徽标上日历,不再蒸发 -->

@@ -119,11 +119,13 @@ check('④ 渲染链闭合:小程序 member 页真调这条口', jsOf('pages/mer
   const postWifi = await request('/admin/store-wifi', { method: 'POST', body: JSON.stringify({ bssid: 'aa:bb:cc:dd:ee:ff', ssid: '跨端测' }) }, PLATFORM, H)
   const wifis = (await request('/admin/store-wifi', {}, PLATFORM, H)).data.wifis
   check('④c 打卡 WiFi:网页添名单 → 小程序考勤读的同一份', postWifi.status === 201 && wifis.some((w) => w.bssid === 'aa:bb:cc:dd:ee:ff'), JSON.stringify(wifis).slice(0, 120))
-  check('④c 渲染链闭合:三件的网页面都真调这三条口(booking-rules.js / afternoonStartBtn / attendance-wifi.js)',
-    readFileSync(new URL('../web/booking-rules.js', import.meta.url), 'utf8').includes("'/admin/booking-rules'")
+  check('④c 渲染链闭合:单一定金配置入口、排班分界及考勤 WiFi 两端同源',
+    readFileSync(new URL('../web/booking-rules.js', import.meta.url), 'utf8').includes('data-deposit-settings')
+    && readFileSync(new URL('../web/admin.js', import.meta.url), 'utf8').includes("'/admin/deposit-config'")
     && readFileSync(new URL('../web/admin.js', import.meta.url), 'utf8').includes("'/admin/schedule-settings'")
     && readFileSync(new URL('../web/attendance-wifi.js', import.meta.url), 'utf8').includes("'/admin/store-wifi'")
-    && jsOf('pages/merchant/store/index.js').includes('/admin/booking-rules')
+    && readFileSync(new URL('../../miniprogram/pages/merchant/store/index.wxml', import.meta.url), 'utf8').includes('<deposit-form')
+    && jsOf('pages/merchant/components/deposit-form/index.js').includes('/admin/deposit-config')
     && jsOf('pages/merchant/schedule-day/index.js').includes('/admin/schedule-settings'))
 }
 

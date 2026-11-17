@@ -1,0 +1,1 @@
+.page{padding:40rpx 28rpx}.card{padding:32rpx;border:1rpx solid var(--line);border-radius:12rpx;background:var(--card);display:flex;flex-direction:column;gap:24rpx;line-height:1.7;color:var(--ink)}.title{font-size:36rpx;font-weight:600}button{margin:0;padding:12rpx 24rpx;font-size:28rpx}

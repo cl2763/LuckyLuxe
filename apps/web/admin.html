@@ -2,6 +2,8 @@
 <html lang="zh-CN">
   <head>
     <script src="/web/web-scope.js"></script>
+    <script src="/web/setup-owner-review.js?v=20261117-feedback1"></script>
+<script src="/web/admin-preview-session.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
@@ -10,7 +12,7 @@
          生产在墙内可能慢,那时换 ② 而不是换字体。**这一行与合同图第 2 行是同一行。** -->
     <!-- 境内网络不能让外部字体阻塞业务；字体未就绪时使用既有本机字体回退。 -->
     <link rel="stylesheet" media="print" onload="this.media='all'" onerror="this.remove()" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
-    <link rel="stylesheet" href="/web/styles.css?v=20261117-modal-guard1">
+    <link rel="stylesheet" href="/web/styles.css?v=20261117-feedback1">
     <!-- 设计令牌排在 styles.css **之后**:令牌是唯一真相,谁在后面谁说了算。
          `--ink/--line/--paper/--card` 四个原来在 styles.css 里也有一份(值略有出入),
          已从那边删掉 —— 一个令牌只许有一处定义。 -->
@@ -484,7 +486,9 @@
 
           <section class="admin-page hidden" id="schedulePage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
-            <div class="admin-tabs" id="staffTabs">
+            <button class="ghost slim" type="button" data-record-manage="technicians">删除 / 归档管理</button>
+<section class="admin-card" id="employeeRoster" hidden></section>
+<div class="admin-tabs" id="staffTabs">
               <!-- S4(店主 2026-08-25):四板块,顺序照令 ——
                    ①技师业绩(本月趋势=业绩排行+业绩目标两小节)②薪资方案 ③技师排班 ④账号管理。
                    原「业绩目标」独立页签并入①;原那张重复的"本月趋势"卡已删。 -->
@@ -601,10 +605,13 @@
               </div>
               <span class="subtle" id="pricingSubtitle">上架服务用于顾客展示；结算单目录用于开单，两边分别设置。</span>
             </div>
-            <div class="pricing-tabs" id="pricingModuleTabs">
+            <button class="ghost slim" type="button" data-record-manage="services">删除 / 归档管理</button>
+<div class="pricing-tabs" id="pricingModuleTabs">
               <button class="pricing-tab active" data-pricing-module="storefront" type="button">① 上架服务（顾客可见）</button>
               <button class="pricing-tab" data-pricing-module="catalog" type="button">② 结算单目录（开单用 · 顾客不可见）</button>
+              <button class="pricing-tab" data-pricing-module="bookingAddons" type="button">③ 预约附加服务</button>
             </div>
+            <section class="admin-card hidden" id="bookingAddonsPanel"></section>
             <section class="admin-card" id="storefrontPanel">
               <div class="section-row compact-row">
                 <h2 id="servicesTitle">上架服务</h2>
@@ -663,7 +670,7 @@
             <section class="admin-card" id="mtabRecharge">
               <div class="section-row compact-row">
                 <h2>充值套餐</h2>
-                <button class="ghost slim" id="addRechargeButton" type="button">+ 新建充值套餐</button>
+                <button class="ghost slim" type="button" data-record-manage="packages">删除 / 归档管理</button><button class="ghost slim" id="addRechargeButton" type="button">+ 新建充值套餐</button>
               </div>
               <p class="subtle" style="margin:2px 0 10px">充 X 赠 Y(赠送可为 0)。赠送=营销让利:入储值负债、单独列示,永不算实收/业绩/积分。</p>
               <!-- 收编:「给会员充值」从财务储值页并入(拍板) -->
@@ -731,7 +738,8 @@
                 <h1 id="customersTitle">Customer Profiles</h1>
               </div>
               <div class="customer-toolbar">
-                <button class="primary slim" id="createCustomerButton" type="button">＋ 新建顾客</button>
+                <button class="ghost slim" type="button" data-record-manage="customers">删除 / 归档管理</button>
+<button class="primary slim" id="createCustomerButton" type="button">＋ 新建顾客</button>
                 <input class="customer-search" id="customerSearch" placeholder="搜姓名 / 手机 / 会员码…">
                 <label class="customer-sort">
                   <span id="customerFilterSummary">排序</span>
@@ -924,6 +932,7 @@
             </section>
           </section>
           <section class="admin-page hidden" id="storeSettingsPage">
+            <button id="setupOwnerReview" type="button" class="ghost slim">平台配置核对</button>
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <div class="section-row">
               <div>
@@ -1064,8 +1073,8 @@
          晚一步页面就会先闪一下浅色再变深。 -->
     <script src="/web/theme-switch.js?v=20260909b-contrast"></script>
     <script src="/web/image-view-core.js?v=20260924-images"></script>
-    <script src="/web/image-framing.js?v=20261117-modal-guard1"></script>
-    <script src="/web/home-image-preview.js?v=20261117-modal-guard1"></script>
+    <script src="/web/image-framing.js?v=20261117-feedback1"></script>
+    <script src="/web/home-image-preview.js?v=20261117-feedback1"></script>
     <script src="/web/service-image-editor.js?v=20260924-images"></script>
     <script src="/web/img-placeholder.js?v=20260924-images"></script>
     <script src="/web/hours-setup.js?v=20260924-hours-batch"></script>
@@ -1075,25 +1084,25 @@
     <script src="/web/booking-rules.js?v=20260901t-obs01"></script>
     <script src="/web/recall-digest.js?v=20260901t-obs01"></script>
     <script src="/web/customer-notes.js?v=20260922a-placeholder"></script>
-    <script src="/web/customer-docs.js?v=20261117-modal-guard1"></script>
+    <script src="/web/customer-docs.js?v=20261117-feedback1"></script>
     <script src="/web/staff-visibility.js?v=20260901t-obs01"></script>
     <script src="/web/service-note-modal.js?v=20260901t-obs01"></script>
     <script src="/web/duty-setting.js?v=20260901t-obs01"></script>
     <script src="/web/quote-settings.js?v=20260901t-obs01"></script>
-    <script src="/web/today-board.js?v=20261117-modal-guard1"></script>
+    <script src="/web/today-board.js?v=20261115-deposit-flow1"></script>
     <link rel="stylesheet" href="/web/member-pricing.css?v=20261115">
     <script src="/web/member-pricing-shared.js?v=20261115"></script>
-    <script src="/web/member-pricing-input.js?v=20261117-modal-guard1"></script>
-    <script src="/web/member-pricing-member.js?v=20261117-modal-guard1"></script>
+    <script src="/web/member-pricing-input.js?v=20261117-feedback1"></script>
+    <script src="/web/member-pricing-member.js?v=20261117-feedback1"></script>
     <script src="/web/member-pricing-settings.js?v=20261115"></script>
-    <script src="/web/member-pricing-editors.js?v=20261117-modal-guard1"></script>
+    <script src="/web/member-pricing-editors.js?v=20261117-feedback1"></script>
     <script src="/web/member-pricing-composer.js?v=20261115"></script>
-    <link rel="stylesheet" href="/web/deposit-workflow.css?v=20261117-modal-guard1">
-    <script src="/web/deposit-workflow.js?v=20261117-modal-guard1"></script>
-    <script src="/web/settlement-web.js?v=20261117-modal-guard1"></script>
+    <link rel="stylesheet" href="/web/deposit-workflow.css?v=20261115-deposit-flow1">
+    <script src="/web/deposit-workflow.js?v=20261117-feedback1"></script>
+    <script src="/web/settlement-web.js?v=20261115-deposit-flow1"></script>
     <script src="/web/finance-entry-form.js?v=20260829a-ch"></script>
     <script src="/web/placeholder-words.js?v=20260922a-ph"></script>
-    <script src="/web/store-guide.js?v=20261117-modal-guard1"></script>
+    <script src="/web/store-guide.js?v=20261117-feedback1"></script>
     <script src="/web/store-content.js?v=20261115-member-pricing-v3-ops2"></script>
     <script src="/web/ai-desk.js?v=20260825e-w2"></script>
     <script src="/web/finance-trend.js?v=20260928-review2"></script>
@@ -1104,9 +1113,9 @@
     <script src="/web/my-customers.js?v=20260928-review2"></script>
     <script src="/web/customer-tags.js?v=20260827a-n5v12"></script>
     <script src="/web/daily-close-rows.js?v=20261115-member-pricing-v3-ops2"></script>
-    <script src="/web/account-adjust.js?v=20261117-modal-guard1"></script>
-    <script src="/web/snapshot-viewer.js?v=20261117-modal-guard1"></script>
-    <script src="/web/ui-dialog.js?v=20261117-modal-guard1"></script>
+    <script src="/web/account-adjust.js?v=20261117-feedback1"></script>
+    <script src="/web/snapshot-viewer.js?v=20261117-feedback1"></script>
+    <script src="/web/ui-dialog.js?v=20261117-feedback1"></script>
     <script src="/web/correction-reason.js?v=20260902e-d122"></script>
     <script src="/web/ai-review.js?v=20260907-cw-hotfix1"></script>
     <script src="/web/admin-copy.js?v=20260928-review2"></script>
@@ -1114,19 +1123,24 @@
     <script src="/web/dashboard-fullscreen.js?v=20260928-review2"></script>
     <script src="/web/dashboard-home.js?v=20261115-member-pricing-v3-ops2"></script>
     <script src="/web/register-gate.js?v=20260924a-12m"></script>
-    <script src="/web/schedule-editor.js?v=20261117-modal-guard1"></script>
-    <script src="/web/form-modal.js?v=20261117-modal-guard1"></script>
+    <script src="/web/schedule-editor.js?v=20261117-feedback1"></script>
+    <script src="/web/booking-addons.js?v=20261117-feedback"></script>
+    <script src="/web/form-modal.js?v=20261117-feedback1"></script>
     <script src="/web/gift-editor.js?v=20260928"></script>
-    <script src="/web/customer-create.js?v=20261117-modal-guard1"></script>
+    <script src="/web/customer-create.js?v=20261117-feedback1"></script>
     <script src="/web/customer-migration-ui.js?v=20261003-migration-visual"></script>
     <script src="/web/request-indicator.js?v=20261004-loading"></script>
     <script src="/web/perf-ranking.js?v=20261004-ranking"></script>
     <script src="/web/store-code.js"></script>
-<script src="/web/manual-booking-draft.js?v=20261117-modal-guard1"></script>
+<script src="/web/manual-booking-draft.js?v=20261117-feedback1"></script>
 <script src="/web/membership-summary.js?v=20261010-sharing"></script>
-<script src="/web/admin.js?v=20261117-modal-guard1"></script>
+<script src="/web/coupon-template-editor.js?v=20261116-setup"></script>
+    <script src="/web/config-sync.js?v=20261117-feedback"></script>
+    <script src="/web/record-tables.js?v=20261117-feedback"></script>
+    <script src="/web/record-lifecycle.js?v=20261117-feedback"></script>
+    <script src="/web/admin.js?v=20261117-feedback1"></script>
   <dialog id="merchantMessagesPanel" aria-label="消息"></dialog>
-    <script src="/web/merchant-messages.js?v=20261117-modal-guard1"></script>
+    <script src="/web/merchant-messages.js?v=20261117-feedback1"></script>
 
 </body>
 </html>

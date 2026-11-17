@@ -62,12 +62,15 @@ async function main() {
   check('临时店 A 建好技师', tech.status === 201, JSON.stringify(tech.data))
   const techId = tech.data.technician.id
 
+  // 服务大类按已确认的权限表由平台管理，商家保留读取入口。
+  const denied=await request('/admin/pricing/categories',{method:'POST',body:JSON.stringify({name:'不应新增'})},shopA.token)
+  check('商家不能绕过界面自行改大类',denied.status===403&&denied.data.error.code==='CATEGORY_PLATFORM_ONLY')
   // ---- 1. 大类 ----
-  const catExt = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail_ext', name: '美甲延长', sortOrder: 1 }) }, shopA.token)
+  const catExt = await request(`/platform/tenants/${shopA.tenantId}/categories`, { method: 'POST', body: JSON.stringify({ key: 'nail_ext', name: '美甲延长', sortOrder: 1 }) })
   check('新建大类 201', catExt.status === 201 && catExt.data.category.key === 'nail_ext', JSON.stringify(catExt.data))
-  const catRemoval = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'removal', name: '卸甲', sortOrder: 9, isBookable: false }) }, shopA.token)
+  const catRemoval = await request(`/platform/tenants/${shopA.tenantId}/categories`, { method: 'POST', body: JSON.stringify({ key: 'removal', name: '卸甲', sortOrder: 9, isBookable: false }) })
   check('卸甲大类可建且可关预约', catRemoval.status === 201 && catRemoval.data.category.isBookable === false)
-  const dupCat = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail_ext', name: '重复' }) }, shopA.token)
+  const dupCat = await request(`/platform/tenants/${shopA.tenantId}/categories`, { method: 'POST', body: JSON.stringify({ key: 'nail_ext', name: '重复' }) })
   check('同店同 key 大类拒绝重复', dupCat.status === 409)
   const extId = catExt.data.category.id
   const removalCatId = catRemoval.data.category.id
@@ -215,7 +218,7 @@ async function main() {
   const afterLegacyQuote = await request('/admin/pricing/preview', { method: 'POST', body: JSON.stringify({ serviceId: mainId, tierKey: 'list' }) }, shopA.token)
   check('老接口改价即时反映到报价', afterLegacyQuote.data.quote.totalCents === 91000, String(afterLegacyQuote.data.quote.totalCents))
 
-  const delBusy = await request(`/admin/pricing/categories/${extId}`, { method: 'DELETE' }, shopA.token)
+  const delBusy = await request(`/platform/tenants/${shopA.tenantId}/categories/${extId}`, { method: 'DELETE' })
   check('大类下有项目时不允许删除', delBusy.status === 409, JSON.stringify(delBusy.data))
   // 造一笔用到该项目的订单,验证「有历史订单的项目只下架不物理删」
   const usedBooking = await request('/admin/bookings/direct', {

@@ -1,6 +1,6 @@
 // Tenant + language + environment scoped; rejected requests never become empty data.
 const entries = new Map()
-function read(key, fetcher, ttl = 15000) {
+function read(key, fetcher, ttl = 5000) {
   const hit = entries.get(key)
   if (hit && (hit.pending || hit.until > Date.now())) return hit.promise
   const entry = { pending: true, until: 0 }

@@ -420,7 +420,7 @@ Page(Object.assign({
          整块落在网格外看不见 —— 而这些单照样进日结、照样算业绩,台面上看不见
          等于店主对不上账。改成:网格范围 = 营业时段 ∪ 当天所有预约的时间跨度,
          营业时段外的整点行用淡色标出(沿用现有网格语言,不引入新设计)。 */
-      const bizOpen = toMin(r.openTime); const bizClose = toMin(r.closeTime)   /* A3 尸清(08-30h):兜底10:00-19:00是死代码 —— 无时段必走未设置墙/休息条,网格不画 */
+      const bizOpen = r.openTime?toMin(r.openTime):1440; const bizClose = r.closeTime?toMin(r.closeTime):0   /* A3 尸清(08-30h):兜底10:00-19:00是死代码 —— 无时段必走未设置墙/休息条,网格不画 */
       let openMin = bizOpen; let closeMin = bizClose
       for (const b of (r.bookings || [])) {
         openMin = Math.min(openMin, toMin(b.startTime))
@@ -448,7 +448,7 @@ Page(Object.assign({
             id: b.id, userId: b.userId || '', cls: `${group} ${state}`, state,
             stateGlyph: state === 'active' ? '●' : (state === 'done' ? '✓' : ''),
             top: Math.round((s - openMin) / 60 * PX_PER_HOUR), height: Math.max(34, Math.round((e - s) / 60 * PX_PER_HOUR)),
-            startTime: b.startTime, endTime: b.endTime, customerName: b.customerName,
+            startTime: b.startTime, endTime: b.endTime,timeLabel:b.timeLabel, customerName: b.customerName,
             serviceId: b.serviceId || '', serviceName: b.serviceName,
             isNewCustomer: b.isNewCustomer, isDesignated: b.isDesignated, ownerDirect: b.ownerDirect, depositUnpaid: b.depositUnpaid,depositWorkflow:b.depositWorkflow,
             afterSalesTag: b.afterSalesTag || '' // 裁C:售后单蓝徽标上日历(句后端唯一)
@@ -471,7 +471,7 @@ Page(Object.assign({
           todayTag: date === todayStr() ? '今天' : '',
           hoursUnset: Boolean(r.hoursUnset),   // D84 三态:未设置 ≠ 休息(空态说真话)
           isClosed: r.isClosed, specialNote: r.specialNote || '', openTime: r.openTime, closeTime: r.closeTime,
-          gridH, totalWidth: cols.reduce((sum,col) => sum + col.width, 0), colW: 190, hours, total: (r.bookings || []).length, working: (r.technicians||[]).filter(t=>t.isWorking).length,
+          gridH, totalWidth: cols.reduce((sum,col) => sum + col.width, 0), colW: 190, hours, total: r.newBookingCount??(r.bookings || []).length,occupancyTotal:(r.bookings||[]).length,carryoverCount:r.carryoverCount||0, working: (r.technicians||[]).filter(t=>t.isWorking).length,
           freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0, cols,
           duty: r.duty || null,  // 31l 值日:开关关=后端不下发=零渲染
           backfill: r.backfill || null   // 补录小合同(01v):过去日后端才下发;今天/未来整块不出现

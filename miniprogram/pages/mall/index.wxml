@@ -1,3 +1,4 @@
+<config-sync-banner changed="{{configSyncChanged}}" error="{{configSyncError}}" checked="{{configSyncChecked}}" bind:retry="configSyncRetry"/>
 <view class="page mall-page {{themeClass}}">
   <view wx:if="{{loading}}" class="page-loading"><view class="loading-spinner"></view><text>加载中…</text></view>
   <view wx:elif="{{error}}" class="empty" bindtap="load">{{error}} · 点击重试</view>

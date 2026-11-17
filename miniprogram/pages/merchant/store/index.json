@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "门店设置",
   "usingComponents": {
-    "hours-form": "/components/hours-form/index"
+    "hours-form": "/pages/merchant/components/hours-form/index",
+    "deposit-form": "/pages/merchant/components/deposit-form/index"
   }
 }

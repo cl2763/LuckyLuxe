@@ -3,6 +3,7 @@
 # 用法: bash apps/api/run-all-tests.sh
 # 要求: Node 22+;在全新数据库上也能跑(自动填充演示数据)
 set -euo pipefail
+: > /tmp/ll-demo-gate-modes.txt  # Clear previous-run evidence before any early failure.
 RUN_T0=$SECONDS   # 墙钟起点(计时即证:套件时间 ≠ 整跑时间)
 
 # ══ 🔴 跑机口径之一(店主 05w §六 立):**这把脚本不许接 `| tail` / `| head` 之类的管道** ══
@@ -117,7 +118,15 @@ export DATA_DIR="$(mktemp -d /tmp/ll-ci-data.XXXXXX)"
 export TEST_DB_PATH="$DATA_DIR/lucky-luxe.sqlite"  # finance-core 直连库验证防篡改触发器时用
 echo "== 测试数据目录: $DATA_DIR =="
 
-cleanup() { pkill -f "local-server.mjs" 2>/dev/null || true; }
+# Only stop processes launched by this run; other local servers remain untouched.
+stop_ci_pid() {
+  local name="$1" pid="${!1:-}" parent
+  [ -n "$pid" ] || return 0
+  parent=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ' || true)
+  if [ "$parent" = "$$" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+  unset "$name"
+}
+cleanup() { local name; for name in CI_PID_4128 CI_PID_4129 CI_PID_4131 CI_PID_4132; do stop_ci_pid "$name"; done; }
 
 # 🔴 2026-08-09 拆脚枪:回归会 pkill 掉**店主正在用的本地服务**(4128),跑完不还回去 ——
 # 店主再打开小程序就是"每个接口都连不上"的空壳,看起来像登录坏了。真相是后端被测试打死了。
@@ -146,7 +155,7 @@ restore_local() {
   # 端口有人应答但库不对 = CI 实例赖在 4128 上,先请它走(不然下面拉不起来)
   if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health"; then
     echo "== 4128 上是回归实例(库:$(local_health_field 4128 dataFile))—— 先停掉,再还店主那台 =="
-    pkill -f "local-server.mjs" 2>/dev/null || true
+    cleanup
     sleep 1
   fi
   # 脚本开头已经 cd 进 apps/api 了,这里再 dirname $0 会踩空 —— 直接用绝对路径
@@ -375,7 +384,7 @@ curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: ap
   -d '{}' http://127.0.0.1:4128/admin/demo/full-seed > /dev/null || true
 
 # 可用 CI_SUITES="a b c" 环境变量跑子集(调试用)
-DEFAULT_SUITES="mini-pricing-operations member-pricing-daily-facts booking-checkout deposit-workflow booking-deposit-funding booking-acceptance native-phone-login store-guide subscription-scope hero-upload hero-receipt store-navigation booking-subscription-ui merchant-messages wechat-subscribe booking-subscriptions public-share customer-messages media-privacy-review release18-behavior release17-behavior manual-draft-http manual-booking-draft customer-loading-20261008 customer-profile-store-code booking-code customer-facts-timezone customer-facts-http customer-facts-mutations work-share booking-lanes first-use-features first-use-binding experience-demo-claim response-compression staff-session-cache mini-sign-link service-loading privacy-policy web-sign-access sandbox-sync mini-reschedule p0-booking-integrity p0-platform-integrity customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config member-discount-history-display member-pricing-client member-pricing-policy member-pricing-transactions member-pricing-http membership-summary-ui customer-import migration-center migration-profile migration-profile-mini migration-balance-activation migration-balance-mini migration-refund-allocation migration-gifts migration-gift-mini migration-service-mini customer-migration-summary migration-card-reconciliation migration-reconciliation-mini migration-paid-timecards migration-paid-ui pose-cards tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides image-framing cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate hours-batch crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub wechat-mini-code mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard bench-selfguard user-write-auth env-inventory backup-wal secret-output restore-fingerprint demo-gate-scope demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback store-jury signed-docs mp-package-size tenant-parent-scan money-endpoint-abuse cert-expiry cross-tenant-isolation store-placeholder tenant-create-front-door ai-retouch-gate platform-bootstrap service-import-tiers onboarding-steps plan-expiry platform-expiry-ui onboarding-lamps demo-kind-gate phone2-gate prod-ro-gate"
+DEFAULT_SUITES="mini-package-feedback config-sync platform-preview-code mini-merchant-hours-session mini-pricing-operations member-pricing-daily-facts booking-checkout deposit-workflow booking-deposit-funding booking-acceptance native-phone-login store-guide subscription-scope hero-upload hero-receipt store-navigation booking-subscription-ui merchant-messages wechat-subscribe booking-subscriptions public-share customer-messages media-privacy-review release18-behavior release17-behavior manual-draft-http manual-booking-draft customer-loading-20261008 customer-profile-store-code booking-code customer-facts-timezone customer-facts-http customer-facts-mutations work-share booking-lanes first-use-features first-use-binding experience-demo-claim response-compression staff-session-cache mini-sign-link service-loading privacy-policy web-sign-access sandbox-sync mini-reschedule p0-booking-integrity p0-platform-integrity customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config member-discount-history-display member-pricing-client member-pricing-policy member-pricing-transactions member-pricing-http membership-summary-ui customer-import migration-center migration-profile migration-profile-mini migration-balance-activation migration-balance-mini migration-refund-allocation migration-gifts migration-gift-mini migration-service-mini customer-migration-summary migration-card-reconciliation migration-reconciliation-mini migration-paid-timecards migration-paid-ui pose-cards tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides image-framing cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate hours-batch crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub wechat-mini-code mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard bench-selfguard user-write-auth env-inventory backup-wal secret-output restore-fingerprint demo-gate-scope demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback store-jury signed-docs mp-package-size tenant-parent-scan money-endpoint-abuse cert-expiry cross-tenant-isolation store-placeholder tenant-create-front-door ai-retouch-gate platform-bootstrap service-import-tiers onboarding-steps plan-expiry platform-expiry-ui onboarding-lamps demo-kind-gate phone2-gate prod-ro-gate platform-setup-intake platform-setup-workflow platform-setup-presentation platform-recurring-date"
 read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
 
 # 🔴 断言基线(店主 02r 裁定一):每套跑完**就地数** `^ok ` 条数,不事后解析日志 ——
@@ -500,8 +509,9 @@ if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
   echo ""
   echo "== 演示门关掉那一档(DEMO_LOGIN_ALLOWED=false · 生产口径)=="
   wait_port_free 4132 "演示门关闭实例"
-  ( cd "$API_DIR" && nohup env -u ALLOW_DEMO_ADMIN_LOGIN PORT=4132 DATA_DIR="$DATA_DIR" \
-      node local-server.mjs > /tmp/ll-ci-4132.log 2>&1 & )
+  env -u ALLOW_DEMO_ADMIN_LOGIN PORT=4132 DATA_DIR="$DATA_DIR" \
+      node local-server.mjs > /tmp/ll-ci-4132.log 2>&1 &
+  CI_PID_4132=$!
   wait_health 4132 "演示门关闭实例"
   printf '[门关档] 起 4132 实例与自证(第 %s 秒)' "$SECONDS" > "$CURRENT_SUITE_FILE" 2>/dev/null || true
   GATE_OFF="$(curl -s --max-time 3 http://127.0.0.1:4132/health | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(String(JSON.parse(s).guestIdUnsigned))}catch{console.log("?")}})')"
@@ -535,7 +545,7 @@ if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
   echo "   [门关档小结] ${DEMO_GATE_N} 套清单中红 ${DEMO_GATE_RED} 套 —— **这一档的红是真相,单独列,不并进主档**"
   # 🔴 这里**不用 pkill**:危险命令白名单上限 4、只减不增(要增先报店主),
   #    而按端口收本来就更准 —— 只打监听 4132 的那一个,不靠模式串去猜。
-  lsof -ti :4132 2>/dev/null | xargs kill 2>/dev/null || true
+  stop_ci_pid CI_PID_4132
 fi
 
 # ══ 小程序自动化那一档(裁 #91,店主 07l §四 · 2026-09-14 选的是**第 ② 条**)══

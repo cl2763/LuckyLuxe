@@ -1,3 +1,4 @@
+import {ensurePricingCategory} from './pricing-category-fixture.mjs'
 /* 结算单用券回归(2026-08-09,设计图《结算单用券》v3 规则⓪–⑥):
    ③ 恒等式含券:应收 ≡ 档位小计 − 定金 − 券;共优惠(含券)= 档位优惠 + 券;
       分成基数 ≡ 档位小计 —— **定金是付款时序、券是店铺让利,都不扣技师**(店主 08-09 拍板)
@@ -43,12 +44,7 @@ async function request(path, options = {}, token = PLATFORM, extraHeaders = {}) 
 
 /* 分类唯一真相律(店主 2026-08-25):建店即落平台三大类(美甲/美睫/护理·其他),
    所以夹具再建同 key 的大类会撞 409 —— 改成「有就用,没有才建」。判据跟着口径走。 */
-async function ensureCategory(token, body) {
-  const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
-  if (made.data && made.data.category) return made.data.category
-  const list = (await request('/admin/pricing/categories', {}, token)).data.categories || []
-  return list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
-}
+async function ensureCategory(token,body){return ensurePricingCategory({base:BASE_URL,platformToken:PLATFORM,merchantToken:token,body})}
 
 // 恒等式:手会算错,减法不会。每一处金额都用这四条验一遍
 function assertMoney(label, s) {

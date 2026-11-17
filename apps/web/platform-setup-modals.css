@@ -1,0 +1,9 @@
+.form-modal-overlay{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(30,24,18,.45)}
+.form-modal-overlay .form-modal-panel{width:100%;max-width:680px;max-height:85vh;overflow:auto;margin:0;padding:24px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;box-sizing:border-box}
+.form-modal-panel .section-row,.form-modal-panel .action-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.form-modal-panel .kb-facts-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:20px}
+.form-modal-panel label{display:flex;flex-direction:column;gap:8px;min-width:0;color:var(--ink)}
+.form-modal-panel input:not([type=checkbox]),.form-modal-panel select{box-sizing:border-box;width:100%;min-width:0;min-height:44px;padding:10px 12px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px}
+.form-modal-panel .fm-check{flex-direction:row;align-items:center;grid-column:1/-1}.form-modal-panel input[type=checkbox]{width:18px;height:18px;accent-color:var(--brandd)}
+.form-modal-panel [role=alert]{color:var(--bad)}.form-modal-panel button{min-height:44px}.form-modal-panel .primary{background:var(--brand);color:var(--hero)}
+@media(max-width:600px){.form-modal-overlay{padding:16px}.form-modal-panel .kb-facts-grid{grid-template-columns:1fr}}
