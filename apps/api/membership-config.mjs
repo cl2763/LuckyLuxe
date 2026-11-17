@@ -49,7 +49,9 @@ export function createMembershipConfig({ db, iso, currentTenantId, storedValueBa
 
   function setMembershipConfig(tenantId, input = {}) {
     const current = getMembershipConfig(tenantId)
-    const next = {
+    const savedRow=db.prepare("SELECT value FROM tenant_settings WHERE tenant_id=? AND key='membership_config'").get(tenantId)
+    const saved=savedRow?JSON.parse(savedRow.value):{}
+    const next = { ...saved,
       tiersEnabled: input.tiersEnabled === undefined ? Boolean(current.tiersEnabled) : Boolean(input.tiersEnabled),
       memberQualify: MEMBER_QUALIFY_MODES.includes(input.memberQualify) ? input.memberQualify : current.memberQualify,
       qualifyValueCents: input.qualifyValueCents === undefined
@@ -60,7 +62,7 @@ export function createMembershipConfig({ db, iso, currentTenantId, storedValueBa
         : (input.expireDays === null || input.expireDays === '' ? null : Math.max(0, Math.round(Number(input.expireDays) || 0)) || null),
       keepMemberAfterRefund: KEEP_MEMBER_MODES.includes(input.keepMemberAfterRefund)
         ? input.keepMemberAfterRefund : (current.keepMemberAfterRefund || 'keep'),
-      tiers: normalizeTiers(input.tiers, current.tiers),   // D129:label 必填 + 存量条件迁移
+      tiers: input.tiers === undefined && Array.isArray(saved.tiers) ? saved.tiers : normalizeTiers(input.tiers, current.tiers),   // D129:label 必填 + 存量条件迁移
       memberPerks: Array.isArray(input.memberPerks) ? input.memberPerks.map((x) => String(x).slice(0, 60)).slice(0, 10) : (current.memberPerks || [])
     }
     db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'membership_config', ?, ?)

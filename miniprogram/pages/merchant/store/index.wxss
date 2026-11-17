@@ -49,3 +49,5 @@ page{background:var(--paper)}
 
 .store-code-card { padding:24rpx; }
 .store-code-image { width:430rpx; height:430rpx; max-width:100%; display:block; margin:24rpx auto; }
+
+.special-mask{position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:28rpx;box-sizing:border-box}.special-dialog{max-height:85vh;background:var(--card);color:var(--ink);border-radius:12rpx;padding:20rpx;box-sizing:border-box}.special-note{padding:22rpx;border:1rpx solid var(--line);margin:16rpx;border-radius:12rpx}.special-error{color:var(--bad)}.special-save{margin:16rpx}

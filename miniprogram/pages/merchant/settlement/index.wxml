@@ -1,3 +1,4 @@
+<view class="note" wx:for="{{bookingItemWarnings}}" wx:key="*this">{{item}}</view>
 <view class="pg {{themeClass}}">
 <view wx:if="{{pendingMutation}}" class="card"><view>上次开单结果待核实</view><view>项目、充值和折扣已保留，请先查询或重试原操作。</view><button disabled="{{submitting}}" bindtap="mpRecover">查询／重试原操作</button></view><block wx:else>
   <view class="hd">

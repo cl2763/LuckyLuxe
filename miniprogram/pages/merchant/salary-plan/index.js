@@ -77,6 +77,7 @@ Page({
       })
       if (!this.data.ladder.length) this.setData({ ladder: DEFAULT_LADDER.slice() })
     } catch (e) {
+      if(require('../../../utils/setup-preview').active()){this.setData({setupPreviewLabel:'预览读取失败：'+(e.message||'请重新打开')});return}
       this.setData({ ladder: DEFAULT_LADDER.slice() })
     }
     this.refreshPreview()

@@ -1,3 +1,4 @@
+import {assertRecordActive,activeRecords} from './record-lifecycle.mjs'
 export function createStoredValueRechargeRoutes({db,apiError,readBody,json,currentTenantId,isUserBound,DATA_SCOPE_NAME,giftSnapshotOfPackage,actorOf,insertStoredValueTransaction,storedValueOverview,storedValueBalanceCents,pricingTransactions}) {
   const readInput=async req=>{const value=await readBody(req);if(!value||typeof value!=='object'||Array.isArray(value))throw apiError(400,'BAD_REQUEST','请求内容须为对象。');return value}
   return async function(req,res,{path,adminSession}) {
@@ -7,6 +8,7 @@ export function createStoredValueRechargeRoutes({db,apiError,readBody,json,curre
     }
     const body = await readInput(req)
     const userId = String(body.userId || '').trim()
+    assertRecordActive(db,apiError,currentTenantId(),'customers',userId)
     const user = db.prepare('SELECT id, display_name FROM users WHERE id = ? AND tenant_id = ?').get(userId, currentTenantId())
     if (!user) throw apiError(404, 'NOT_FOUND', 'Member not found.')
     /* D25(《财务总逻辑》3-1b,店主 2026-08-12 拍板):未绑定微信的轻档案不可充值 ——
@@ -14,7 +16,7 @@ export function createStoredValueRechargeRoutes({db,apiError,readBody,json,curre
     if (!isUserBound(userId) && !((DATA_SCOPE_NAME === 'sandbox' || DATA_SCOPE_NAME === 'ci') && db.prepare('SELECT kind FROM tenants WHERE id = ?').get(currentTenantId())?.kind === 'demo' && /^demo-openid-[a-z0-9-]+$/i.test(String(db.prepare('SELECT wechat_open_id FROM users WHERE id = ?').get(userId)?.wechat_open_id || '')) && body.note === '演示储值')) {
       throw apiError(400, 'UNBOUND_NO_RECHARGE', '请先让顾客扫码绑定(会员码/签署码)再充值。')
     }
-    const selectedPackage=body.packageId?db.prepare("SELECT * FROM membership_packages WHERE id=? AND tenant_id=? AND kind='recharge' AND is_active=1").get(String(body.packageId),currentTenantId()):null
+    const selectedPackage=body.packageId?db.prepare("SELECT * FROM membership_packages WHERE id=? AND tenant_id=? AND kind IN ('recharge','stored_value') AND is_active=1").get(String(body.packageId),currentTenantId()):null
     if(body.packageId&&!selectedPackage)throw apiError(404,'PACKAGE_NOT_FOUND','充值套餐不存在或已下架。')
     const giftItems=giftSnapshotOfPackage(selectedPackage)
     const amountCents = selectedPackage ? selectedPackage.price_cents : Number(body.amountCents ?? Number(body.amount || 0) * 100)

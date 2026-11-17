@@ -1,0 +1,15 @@
+<config-sync-banner changed="{{configSyncChanged}}" error="{{configSyncError}}" checked="{{configSyncChecked}}" bind:retry="configSyncRetry"/>
+<setup-preview-banner wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
+<view class="page {{themeClass}}">
+ <view wx:if="{{loading}}" class="card">正在读取附加服务…</view>
+ <view wx:if="{{error}}" class="error">{{error}}<button wx:if="{{!config}}" bindtap="load">重新加载</button></view>
+ <block wx:if="{{config && !edit}}">
+  <view class="card"><view class="row"><text class="title">开启预约附加服务</text><switch checked="{{config.enabled}}" disabled="{{saving || readOnly}}" bindchange="enabled" color="#ae9265"/></view><view class="note">关闭后顾客端不显示本区；已有预约明细不变。</view></view>
+  <view class="card" wx:for="{{rows}}" wx:key="id"><view class="row"><text class="title">{{item.name}}</text><text>{{item.isActive?'已开启':'已关闭'}}</text></view><view class="note">预约展示价 {{item.price}} · 增加 {{item.durationMin}} 分钟</view><view class="note">适用项目：{{item.scopeText}}</view><view class="actions" wx:if="{{!readOnly}}"><button bindtap="open" data-index="{{index}}" disabled="{{saving}}">编辑</button><button bindtap="remove" data-index="{{index}}" disabled="{{saving}}">删除</button></view></view>
+  <view class="card" wx:if="{{!rows.length}}">尚无附加服务。</view>
+  <view class="actions" wx:if="{{!readOnly}}"><button bindtap="open" data-index="-1" disabled="{{saving}}">＋ 新增附加服务</button><button class="primary save-config" bindtap="save" loading="{{saving}}" disabled="{{saving}}">保存配置</button></view>
+ </block>
+ <block wx:if="{{edit}}"><view class="card"><view class="title">项目内容</view><label>名称<input value="{{edit.name}}" data-key="name" bindinput="input" maxlength="80"/></label><label>预约展示价（门店经营币种）<input value="{{edit.price}}" data-key="price" bindinput="input" type="digit"/></label><label>增加时长（分钟）<input value="{{edit.duration}}" data-key="duration" bindinput="input" type="number"/></label><label>排序<input value="{{edit.sort}}" data-key="sort" bindinput="input" type="number"/></label><view class="row"><text>允许顾客预约时选择</text><switch checked="{{edit.isActive}}" bindchange="active" color="#ae9265"/></view></view>
+ <view class="card"><view class="title">适用服务</view><view class="note">不勾选表示全部服务</view><checkbox-group bindchange="scope"><label wx:for="{{serviceChoices}}" wx:key="id" class="check"><checkbox value="{{item.id}}" checked="{{item.checked}}" color="#ae9265"/>{{item.name}}</label></checkbox-group></view>
+ <view class="card"><view class="title">结算关联</view><picker range="{{links}}" range-key="name" value="{{edit.link}}" bindchange="link"><view class="picker">{{links[edit.link].name}} ›</view></picker><view class="note">预约所选项目自动带入开单；实际结算价按结算规则和会员本人折扣计算。</view></view><view class="actions"><button bindtap="close">取消</button><button class="primary keep-item" bindtap="keep">确认修改</button></view><view class="note">返回列表后点“保存配置”生效。</view></block>
+</view>

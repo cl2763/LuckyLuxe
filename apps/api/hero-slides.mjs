@@ -107,7 +107,7 @@ export function createHeroSlides({ db, apiError, iso, randomId, currentTenantId 
     }
     assertSlidesOk(slides)
     const now = iso(new Date())
-    db.exec('BEGIN IMMEDIATE')
+    db.exec('SAVEPOINT hero_slides_write')
     try {
       db.prepare('DELETE FROM hero_slides WHERE tenant_id = ?').run(tenantId)
       const insert = db.prepare(`INSERT INTO hero_slides
@@ -118,9 +118,9 @@ export function createHeroSlides({ db, apiError, iso, randomId, currentTenantId 
           String(slide.labelZh || '').trim(), String(slide.labelEn || '').trim(),
           index, slide.isActive === false ? 0 : 1, now, now, JSON.stringify(imageView(slide.imageView)))
       })
-      db.exec('COMMIT')
+      db.exec('RELEASE hero_slides_write')
     } catch (error) {
-      db.exec('ROLLBACK')
+      db.exec('ROLLBACK TO hero_slides_write; RELEASE hero_slides_write')
       throw error
     }
     return listHeroSlides(tenantId)

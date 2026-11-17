@@ -31,8 +31,7 @@ export function createKbRoutes(deps) {
     parseKbEntriesFromText, countAiUsage, hasAi, extractKbEntriesFromDocument } = deps
   /* 调完就算这条路由处理过了 —— 原块里的 `return json(...)` 因此天然返回 true */
   const json = (...args) => { deps.json(...args); return true }
-  async function route(req, res, ctx) {
-    const { path, adminSession } = ctx
+  function handleConfiguration(req,res,ctx,input,json){const {path,adminSession}=ctx
     if (req.method === 'GET' && path === '/admin/kb') {
       return json(res, 200, {
         facts: withoutRetired(tenantKbFacts(currentTenantId())),
@@ -46,7 +45,7 @@ export function createKbRoutes(deps) {
     }
     if (req.method === 'PUT' && path === '/admin/kb/facts') {
       if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-      const body = await readBody(req)
+      const body = input
       const facts = body.facts && typeof body.facts === 'object' ? body.facts : {}
       /* 🔴 J-20(Cowork 05h §一):`depositAmount` 从白名单撤走 —— 定金金额唯一真相是
          「门店设置 → 定金规则」(`deposit_config`),钱按它算,话也按它说。
@@ -81,6 +80,56 @@ export function createKbRoutes(deps) {
       }
       return json(res, 200, { facts: tenantKbFacts(currentTenantId()) })
     }
+    if (req.method === 'POST' && path === '/admin/kb/entries') {
+      if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+      const body = input
+      const question = String(body.question || '').trim()
+      const answerZh = String(body.answerZh || '').trim()
+      if (!question || !answerZh) throw apiError(400, 'BAD_REQUEST', 'question and answerZh are required.')
+      const id = randomId('kb')
+      db.prepare(`
+        INSERT INTO tenant_kb_entries (id, tenant_id, question, keywords, answer_zh, answer_en, enabled, updated_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+      `).run(id, currentTenantId(), question, String(body.keywords || question), answerZh, String(body.answerEn || ''), adminSession.email || 'owner', iso(new Date()), iso(new Date()))
+      return json(res, 201, { entry: db.prepare('SELECT id, question, keywords, answer_zh AS answerZh, answer_en AS answerEn, enabled FROM tenant_kb_entries WHERE id = ?').get(id) })
+    }
+    const kbEntryMatch = path.match(/^\/admin\/kb\/entries\/([^/]+)$/)
+    if ((req.method === 'PATCH' || req.method === 'DELETE') && kbEntryMatch) {
+      if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+      const id = decodeURIComponent(kbEntryMatch[1])
+      const current = db.prepare('SELECT * FROM tenant_kb_entries WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+      if (!current) throw apiError(404, 'NOT_FOUND', 'KB entry not found.')
+      if (req.method === 'DELETE') {
+        db.prepare('DELETE FROM tenant_kb_entries WHERE id = ?').run(id)
+        return json(res, 200, { deleted: true })
+      }
+      const body = input
+      db.prepare(`
+        UPDATE tenant_kb_entries SET
+          question = ?, keywords = ?, answer_zh = ?, answer_en = ?, enabled = ?, updated_by = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        String(body.question ?? current.question),
+        String(body.keywords ?? current.keywords),
+        String(body.answerZh ?? current.answer_zh),
+        String(body.answerEn ?? current.answer_en ?? ''),
+        body.enabled === undefined ? current.enabled : Number(Boolean(body.enabled)),
+        adminSession.email || 'owner',
+        iso(new Date()),
+        id
+      )
+      return json(res, 200, { entry: db.prepare('SELECT id, question, keywords, answer_zh AS answerZh, answer_en AS answerEn, enabled FROM tenant_kb_entries WHERE id = ?').get(id) })
+    }
+    return false
+  }
+  const configurationMatch=(m,p)=>m==='GET'&&p==='/admin/kb'||m==='PUT'&&p==='/admin/kb/facts'||m==='POST'&&p==='/admin/kb/entries'||['PATCH','DELETE'].includes(m)&&/^\/admin\/kb\/entries\/[^/]+$/.test(p)
+  function configure({method,path,body={},adminSession}){
+    if(!configurationMatch(method,path))throw apiError(404,'NOT_FOUND','知识配置不存在。')
+    let result;handleConfiguration({method},null,{path,adminSession},body,(_res,status,data)=>{result={status,data};return true});return result
+  }
+  async function route(req, res, ctx) {
+    const { path, adminSession } = ctx
+    if(configurationMatch(req.method,path)){const r=configure({method:req.method,path,body:req.method==='GET'?{}:await readBody(req),adminSession});return json(res,r.status,r.data)}
     if (req.method === 'POST' && path === '/admin/kb/import') {
       if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
       const body = await readBody(req)
@@ -115,47 +164,7 @@ export function createKbRoutes(deps) {
       db.prepare('DELETE FROM tenant_kb_documents WHERE id = ? AND tenant_id = ?').run(decodeURIComponent(kbDocMatch[1]), currentTenantId())
       return json(res, 200, { deleted: true })
     }
-    if (req.method === 'POST' && path === '/admin/kb/entries') {
-      if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-      const body = await readBody(req)
-      const question = String(body.question || '').trim()
-      const answerZh = String(body.answerZh || '').trim()
-      if (!question || !answerZh) throw apiError(400, 'BAD_REQUEST', 'question and answerZh are required.')
-      const id = randomId('kb')
-      db.prepare(`
-        INSERT INTO tenant_kb_entries (id, tenant_id, question, keywords, answer_zh, answer_en, enabled, updated_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-      `).run(id, currentTenantId(), question, String(body.keywords || question), answerZh, String(body.answerEn || ''), adminSession.email || 'owner', iso(new Date()), iso(new Date()))
-      return json(res, 201, { entry: db.prepare('SELECT id, question, keywords, answer_zh AS answerZh, answer_en AS answerEn, enabled FROM tenant_kb_entries WHERE id = ?').get(id) })
-    }
-    const kbEntryMatch = path.match(/^\/admin\/kb\/entries\/([^/]+)$/)
-    if ((req.method === 'PATCH' || req.method === 'DELETE') && kbEntryMatch) {
-      if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-      const id = decodeURIComponent(kbEntryMatch[1])
-      const current = db.prepare('SELECT * FROM tenant_kb_entries WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
-      if (!current) throw apiError(404, 'NOT_FOUND', 'KB entry not found.')
-      if (req.method === 'DELETE') {
-        db.prepare('DELETE FROM tenant_kb_entries WHERE id = ?').run(id)
-        return json(res, 200, { deleted: true })
-      }
-      const body = await readBody(req)
-      db.prepare(`
-        UPDATE tenant_kb_entries SET
-          question = ?, keywords = ?, answer_zh = ?, answer_en = ?, enabled = ?, updated_by = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
-        String(body.question ?? current.question),
-        String(body.keywords ?? current.keywords),
-        String(body.answerZh ?? current.answer_zh),
-        String(body.answerEn ?? current.answer_en ?? ''),
-        body.enabled === undefined ? current.enabled : Number(Boolean(body.enabled)),
-        adminSession.email || 'owner',
-        iso(new Date()),
-        id
-      )
-      return json(res, 200, { entry: db.prepare('SELECT id, question, keywords, answer_zh AS answerZh, answer_en AS answerEn, enabled FROM tenant_kb_entries WHERE id = ?').get(id) })
-    }
     return false
   }
-  return { route }
+  return { route, configure }
 }

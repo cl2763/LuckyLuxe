@@ -1,0 +1,1 @@
+<view class="page {{themeClass}}"><view class="card"><text class="title">{{title}}</text><text>使用商家小程序的实际页面。经营记录不加载，保存及业务操作不可执行。</text><text wx:if="{{loading}}">正在核验预览权限…</text><text wx:if="{{error}}">{{error}}</text><button wx:if="{{!loading && !error}}" bindtap="open">查看真实页面</button><button bindtap="exit">退出预览</button></view></view>

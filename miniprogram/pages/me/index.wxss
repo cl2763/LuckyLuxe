@@ -133,7 +133,7 @@
 
 .code-grid view {
   border-radius: 3rpx;
-  background:var(--hero);
+  background:var(--ink);
 }
 
 .member-code text {
@@ -155,14 +155,14 @@
 }
 
 .profile-pending-title {
-  color:var(--heroink);
+  color:var(--ink);
   font-size: 27rpx;
   font-weight: 850;
 }
 
 .profile-pending-desc {
   margin-top: 10rpx;
-  color:var(--heroink);
+  color:var(--sub);
   font-size: 22rpx;
   font-weight: 620;
   line-height: 1.45;
@@ -232,7 +232,7 @@
 }
 
 .member-assets text:first-child {
-  color:var(--brandd);
+  color:var(--herogold);
   font-size: 30rpx;
   font-weight: 850;
   line-height: 1.2;
@@ -249,7 +249,7 @@
 /* 裁定①:积分格下的「可兑 N 件」小字(句后端唯一,没有就整行不出) */
 .member-assets .asset-hint {
   margin-top: 4rpx;
-  color:var(--brandd);
+  color:var(--herogold);
   font-size: 20rpx;
   font-weight: 700;
 }
@@ -263,7 +263,7 @@
   font-size: 23rpx;
 }
 
-.member-extra view {
+.member-extra .member-extra-item {
   color:var(--ink);
   max-width: 100%;
   padding: 10rpx 16rpx;
@@ -554,7 +554,7 @@
 
 .menu-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14rpx;
   width: 100%;
   box-sizing: border-box;
@@ -1163,3 +1163,21 @@
 .privacy-policy-link{margin:14rpx 0;color:var(--brandd);font-size:24rpx;text-decoration:underline;text-align:center;padding:10rpx}
 
 .subscription-welcome { min-height:0; padding:40rpx 32rpx 64rpx; gap:24rpx; }
+
+/* Dark membership surface needs its own foreground even when the page is light. */
+.member-card .avatar { --sub:var(--herosub); --line:var(--herogrid); }
+.member-shopping { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16rpx;margin-top:22rpx;margin-bottom:24rpx; }
+.me-page .shopping-entry { min-width:0;margin:0;padding:24rpx 18rpx;display:flex;flex-direction:column;align-items:flex-start;gap:10rpx;text-align:left;background:var(--card);color:var(--ink);border:1rpx solid var(--line);border-radius:18rpx; }
+.shopping-title { color:var(--ink);font-size:28rpx;font-weight:750;line-height:1.4; }
+.shopping-desc { color:var(--sub);font-size:22rpx;line-height:1.5; }
+
+.member-card .avatar .ph-txt { font-size:18rpx;white-space:nowrap; }
+
+/* 仅三个会员标签沿用第二版暖黑底；页面及其他卡片底色不变。 */
+.member-card .level-pill,
+.member-card .member-extra-item {
+  background:var(--hero2);
+  color:var(--heroink);
+  border:1rpx solid var(--herogrid);
+}
+.member-card .level-pill .level-more { color:var(--herogold); }

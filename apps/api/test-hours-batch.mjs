@@ -7,7 +7,7 @@ let checks = 0
 function check(name, fn) { fn(); console.log(`ok ${++checks} - ${name}`) }
 const clone = v => JSON.parse(JSON.stringify(v))
 let definition
-vm.runInNewContext(readFileSync(new URL('../../miniprogram/components/hours-form/index.js', import.meta.url), 'utf8'), { Component: d => { definition = d } })
+vm.runInNewContext(readFileSync(new URL('../../miniprogram/pages/merchant/components/hours-form/index.js', import.meta.url), 'utf8'), { Component: d => { definition = d } })
 function component(initial = null, txt = HOURS_GATE_TEXT) {
   const c = { data: Object.assign(clone(definition.data), { initial, txt, saving: false, saveLabel: '' }), events: [], setData(values) { Object.assign(this.data, values) }, triggerEvent(name, value) { this.events.push({ name, value }) } }
   Object.assign(c, definition.methods); c.rebuild(); return c

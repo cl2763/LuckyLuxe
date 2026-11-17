@@ -108,7 +108,7 @@ const definition={
         this.data.userId ? api.adminGet(`/admin/customers/${encodeURIComponent(this.data.userId)}/timecards`).catch(() => null) : null,
         api.adminGet('/admin/timecard-packages').catch(() => null),
         this.data.userId ? api.adminGet(`/admin/membership/members?userId=${encodeURIComponent(this.data.userId)}`).catch(() => null) : null,
-        this.data.bookingId ? api.adminGet(`/admin/settlements?bookingId=${encodeURIComponent(this.data.bookingId)}`).catch(() => null) : null
+        this.data.bookingId ? api.adminGet(`/admin/settlements?bookingId=${encodeURIComponent(this.data.bookingId)}`) : null
       ])
       const categories = (cats.categories || []).filter((c) => c.isBookable !== false)
       const all = (items.items || []).filter((i) => i.isActive !== false)
@@ -131,7 +131,9 @@ const definition={
         g0.mainId = preselectServiceId
         g0.catId = this.catOf(preselectServiceId) || firstCat
       }
+      for(const a of existing?.bookingItems||[])if(all.some(i=>i.id===a.serviceId))g0.addonIds[a.serviceId]=(g0.addonIds[a.serviceId]||0)+a.qty
       this.setData({
+        bookingItemWarnings:existing?.bookingItemWarnings||[],
         ready: true,
         cats: categories.map((c) => ({ id: c.id, name: c.name }))
           .concat((timecards.length || timecardPackages.length) ? [{ id: '__timecard', name: '次卡', badge: timecards.filter((c) => c.redeemable).length }] : []),

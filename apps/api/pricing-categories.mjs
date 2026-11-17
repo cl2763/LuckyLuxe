@@ -1,10 +1,11 @@
+import {assertRecordActive} from './record-lifecycle.mjs'
 /* 大类字典 CRUD(从 local-server.mjs 搬出,2026-08-25 S13)。
 
    为什么搬:同一套增删改**原来写了两遍** —— 商家线 /admin/pricing/categories 一份,
    S13② 新加的平台线 /platform/tenants/:id/categories 又一份。两份迟早各自长歪。
-   现在一处实现两条线共用:门禁各自在路由上判(商家=老板,平台=isPlatform),
+   现在一处实现两条线共用:门禁各自在路由上判(商家只读,写入限平台),
    业务规则(名称必填 / key 唯一 / 有项目不许删)只有这一份。 */
-export function createPricingCategories({ db, apiError, randomId, iso, serialize, listOf }) {
+export function createPricingCategories({ db, apiError, randomId, iso, serialize, listOf, lifecycle }) {
   function list(tenantId) {
     return listOf(tenantId).map(serialize)
   }
@@ -22,6 +23,7 @@ export function createPricingCategories({ db, apiError, randomId, iso, serialize
   }
 
   function patch(tenantId, catId, body = {}) {
+    assertRecordActive(db,apiError,tenantId,'categories',catId)
     const cur = db.prepare('SELECT * FROM service_categories WHERE id = ? AND tenant_id = ?').get(catId, tenantId)
     if (!cur) throw apiError(404, 'NOT_FOUND', 'Category not found.')
     db.prepare('UPDATE service_categories SET name = ?, sort_order = ?, is_bookable = ?, note = ? WHERE id = ?').run(
@@ -38,7 +40,9 @@ export function createPricingCategories({ db, apiError, randomId, iso, serialize
     if (!cur) throw apiError(404, 'NOT_FOUND', 'Category not found.')
     const used = db.prepare('SELECT COUNT(*) AS n FROM services WHERE tenant_id = ? AND category_id = ?').get(tenantId, catId).n
     if (used > 0) throw apiError(409, 'CATEGORY_IN_USE', `该大类下还有 ${used} 个项目,请先移走或删除项目。`)
-    db.prepare('DELETE FROM service_categories WHERE id = ?').run(catId)
+    const manager=lifecycle(),review=manager.inspect(tenantId,'categories',catId)
+    if(!review.actions.includes('delete'))throw apiError(409,'CATEGORY_IN_USE','该大类存在业务或配置引用，不能永久删除。')
+    manager.perform(tenantId,'categories',catId,{action:'delete',reason:'分类管理删除',reviewHash:review.reviewHash},'category-management')
     return { deleted: true }
   }
 

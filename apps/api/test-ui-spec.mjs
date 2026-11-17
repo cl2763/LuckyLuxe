@@ -70,7 +70,7 @@ check('② 网页按钮必胶囊:能点的一律 999px(硬零;新面长歪即红
 const wxss = globSync('miniprogram/**/*.wxss', { cwd: ROOT }).map((f) => [f, readFileSync(join(ROOT, f), 'utf8')])
 // 2026-10-02 已批准的新合同采用圆角图片卡和方形确认框；只允许这些具名选择器及精确半径。
 // 不扩大旧页面的形制集，也不提高存量上限。其余按钮仍守胶囊规则。
-const contractRadii = new Map()
+const contractRadii = new Map([['miniprogram/pages/me/index.wxss|.me-page .shopping-entry','18rpx']]) // 2026-11-17 已确认的双商城入口卡；保留最终图的形状。
 for (const page of ['list','detail','retouch']) {
   for (const [selector,radius] of Object.entries({'.hint':'18rpx','.card':'22rpx','.thumb':'12rpx','.hero-image':'20rpx','.detail':'20rpx','.photo':'16rpx'})) contractRadii.set(`miniprogram/pages/pose/${page}/index.wxss|${selector}`,radius)
 }

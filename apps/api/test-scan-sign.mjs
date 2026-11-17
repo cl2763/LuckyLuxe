@@ -1,3 +1,4 @@
+import {ensurePricingCategory} from './pricing-category-fixture.mjs'
 import { pendingCustomerFixture } from './test-migration-fixture.mjs'
 import { sceneForToken } from './wechat-mini-code.mjs'
 /* 扫码签闭环回归(2026-08-09)——《扫码签闭环_UI设计图_2026-08-09.html》v2 四屏 + 规则⓪–⑧。
@@ -49,12 +50,7 @@ async function request(path, options = {}, token = PLATFORM) {
 
 /* 分类唯一真相律(店主 2026-08-25):建店即落平台三大类(美甲/美睫/护理·其他),
    所以夹具再建同 key 的大类会撞 409 —— 改成「有就用,没有才建」。判据跟着口径走。 */
-async function ensureCategory(token, body) {
-  const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
-  if (made.data && made.data.category) return made.data.category
-  const list = (await request('/admin/pricing/categories', {}, token)).data.categories || []
-  return list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
-}
+async function ensureCategory(token,body){return ensurePricingCategory({base:BASE_URL,platformToken:PLATFORM,merchantToken:token,body})}
 
 async function newShop(label) {
   const id = `scan-${label}-${RUN}`

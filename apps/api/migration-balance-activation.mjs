@@ -1,3 +1,4 @@
+import {assertRecordActive} from './record-lifecycle.mjs'
 import { makeActorOf } from './actor-name.mjs'
 // Activation is deliberately limited to a merchant-verified, unrestricted aggregate.
 // Restricted/per-card balances must remain pending until their redemption rules exist.
@@ -60,6 +61,7 @@ export function createMigrationBalanceActivation({ db, apiError, randomId, iso, 
         if(prior.request_hash!==requestHash)throw apiError(409,'REQUEST_CONFLICT','同一请求编号的确认内容发生变化，请重新核对。')
         db.exec('COMMIT');return {...JSON.parse(prior.result_json),replayed:true}
       }
+      assertRecordActive(db,apiError,tenantId,'customers',userId)
       const s=source(tenantId,userId,pendingId)
       if(s.pending.status!=='pending'||db.prepare('SELECT id FROM migration_balance_activations WHERE tenant_id=? AND pending_id=?').get(tenantId,pendingId))throw apiError(409,'ALREADY_ACTIVATED','此余额已处理，不能再次入账。')
       if(s.version!==version)throw apiError(409,'SOURCE_CHANGED','原资料或迁移批次已变化，请重新读取并核对。')

@@ -5,6 +5,8 @@
    D88 / 01u 裁① / 01w 裁① 三条口径都在里面,措辞**逐字**照原文,一个字都不许顺手改
    (05l 现测:我搬的时候手滑改了三处字,`test-observe-fixes` 三条当场红)。 */
 
+import {dateValue,isTime} from './schedule-input.mjs'
+import {bookingWindow,acceptanceForDate} from './booking-window.mjs'
 export function createBookingGuards(deps) {
   const {
     db, apiError, getService, localDateTime, localParts, minutesFromTime,
@@ -15,6 +17,7 @@ export function createBookingGuards(deps) {
   }
 
   function assertBookable(input, opts = {}) {
+    dateValue(input.date,apiError);if(!isTime(input.time))throw apiError(400,'BAD_REQUEST','预约时间格式应为HH:MM。')
     const service = getService(input.serviceId)
     if (!service || !service.is_active) throw apiError(404, 'NOT_FOUND', '该服务不存在或已下架。')
     // 老板直接排单:放宽"技师-服务绑定"(老板可指派任意在岗技师),仍要求技师在职且属本店
@@ -47,12 +50,12 @@ export function createBookingGuards(deps) {
     // 老板直接排单可覆盖时长(这次多做/少做);普通预约按服务标准时长
     const durationMin = ((opts.adminDirect || opts.preserveDuration) && input.durationMin) ? input.durationMin : totalDuration(service.type, service.base_duration_min, input.addOns)
     const startMinutes = minutesFromTime(input.time)
-    const endMinutes = startMinutes + durationMin
-    if (!opts.adminDirect && (startMinutes < minutesFromTime(openTime) || endMinutes > minutesFromTime(closeTime))) {
+    const window=opts.adminDirect?null:bookingWindow({dayOpen:baseOpen,dayClose:baseClose,schedule,...acceptanceForDate(db,input.storeId,input.date,Boolean(special),service.tenant_id),durationMin})
+    if (!opts.adminDirect && (!window||startMinutes < window.startMin || startMinutes > window.lastStartMin)) {
       throw apiError(400, 'BAD_REQUEST', 'Requested time is outside available working hours.')
     }
 
-    const start = localDateTime(input.date, input.time)
+    const start = localDateTime(input.date, input.time);const normalized=localParts(start);if(normalized.date!==input.date||normalized.time!==input.time)throw apiError(400,'BAD_REQUEST','当地时区不存在这个时间，请重新选择。')
     return { service, technician, durationMin, start, end: addMinutes(start, durationMin) }
   }
 

@@ -1,0 +1,16 @@
+{
+  "scope": "isolated synthetic owner; actual element.input and element.tap; no production connection",
+  "checks": [
+    "原生输入账号密码并点击登录成功",
+    "原生老板核对第1次进入",
+    "原生老板核对第2次进入",
+    "原生老板核对第3次进入",
+    "原生老板核对第4次进入",
+    "原生老板核对第5次进入",
+    "原生实际勾选和按钮确认成功",
+    "老板原生确认仅留痕未应用",
+    "原生输入反馈并退回成功",
+    "无原生脚本异常"
+  ],
+  "errors": []
+}

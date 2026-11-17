@@ -1,9 +1,10 @@
+import {assertRecordActive,activeRecords} from './record-lifecycle.mjs'
 /** Existing service/catalog writes extracted as one atomic metadata + independent-price operation. */
-export function createServiceEditRoutes({db,apiError,currentTenantId,servicePayload,assertServicePriceOk,assertCategoryOk,serviceIdFrom,upsertServicePrice,serializeService,getService,pricingItemShape,writePricingItemPrices,serializePricingItem,memberPricing,json,readBody}) {
+export function createServiceEditRoutes({db,apiError,recordLifecycle,currentTenantId,servicePayload,assertServicePriceOk,assertCategoryOk,serviceIdFrom,upsertServicePrice,serializeService,getService,pricingItemShape,writePricingItemPrices,serializePricingItem,memberPricing,json,readBody}) {
  function handle(req,res,{path,adminSession},input,json){
   if (req.method === 'GET' && path === '/admin/services') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    return json(res, 200, { services: db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY type ASC, sort_order ASC').all(currentTenantId()).map(serializeService) })
+    return json(res, 200, { services: db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY type ASC, sort_order ASC').all(currentTenantId()).filter(r=>activeRecords(db,currentTenantId(),'services',[r]).length).map(serializeService) })
   }
   if (req.method === 'POST' && path === '/admin/services') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -26,6 +27,7 @@ export function createServiceEditRoutes({db,apiError,currentTenantId,servicePayl
   if (req.method === 'PATCH' && path.startsWith('/admin/services/')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const id = path.split('/')[3]
+    assertRecordActive(db,apiError,currentTenantId(),'services',id)
     const body = input
     const current = getService(id)
     if (!current || (current.tenant_id && current.tenant_id !== currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Service not found.')
@@ -46,7 +48,7 @@ export function createServiceEditRoutes({db,apiError,currentTenantId,servicePayl
     const itemId = path.split('/')[4] || null
     if (req.method === 'GET' && !itemId) {
       const rows = db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY item_kind ASC, sort_order ASC, rowid ASC').all(tid)
-      return json(res, 200, { items: rows.map(serializePricingItem) })
+      return json(res, 200, { items: activeRecords(db,tid,'services',rows).map(serializePricingItem) })
     }
     if (req.method === 'POST' && !itemId) {
       const body = input
@@ -75,6 +77,7 @@ export function createServiceEditRoutes({db,apiError,currentTenantId,servicePayl
       return json(res, 201, { item: serializePricingItem(db.prepare('SELECT * FROM services WHERE id = ?').get(id)) })
     }
     if (req.method === 'PATCH' && itemId) {
+      assertRecordActive(db,apiError,tid,'services',itemId)
       const cur = db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(itemId, tid)
       if (!cur) throw apiError(404, 'NOT_FOUND', 'Item not found.')
       /* S1 合同规则③:次卡不属于服务目录,已迁出本页;编辑一律拒绝,S2 次卡管理接手。 */
@@ -102,25 +105,18 @@ export function createServiceEditRoutes({db,apiError,currentTenantId,servicePayl
     if (req.method === 'DELETE' && itemId) {
       const cur = db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(itemId, tid)
       if (!cur) throw apiError(404, 'NOT_FOUND', 'Item not found.')
-      // 有历史订单引用的项目不能物理删(会断掉订单溯源),改为下架
-      const used = db.prepare('SELECT COUNT(*) AS n FROM bookings WHERE service_id = ?').get(itemId).n
-      if (used > 0) {
-        db.prepare('UPDATE services SET is_active = 0 WHERE id = ?').run(itemId)
-        return json(res, 200, { deleted: false, disabled: true, reason: `该项目有 ${used} 笔历史订单,已改为下架而非删除。` })
-      }
-      db.prepare('DELETE FROM service_prices WHERE service_id = ?').run(itemId)
-      db.prepare('DELETE FROM technician_services WHERE service_id = ?').run(itemId)
-      db.prepare('DELETE FROM services WHERE id = ?').run(itemId)
-      return json(res, 200, { deleted: true })
+      const review=recordLifecycle.inspect(tid,'services',itemId)
+      if(!review.actions.includes('delete')){db.prepare('UPDATE services SET is_active=0 WHERE id=? AND tenant_id=?').run(itemId,tid);return json(res,200,{deleted:false,disabled:true,reason:'项目存在业务或配置引用，已下架，历史记录保留。'})}
+      recordLifecycle.perform(tid,'services',itemId,{action:'delete',reason:'结算目录删除',reviewHash:review.reviewHash},adminSession.email||'owner')
+      return json(res,200,{deleted:true})
     }
   }
 
  }
- return async(req,res,ctx)=>{
+ function configure(req,res,ctx,input){
   if(!((ctx.path==='/admin/services'&&['GET','POST'].includes(req.method))||(/^\/admin\/services\/[^/]+$/.test(ctx.path)&&req.method==='PATCH')||(/^\/admin\/pricing\/items(?:\/[^/]+)?$/.test(ctx.path)&&['GET','POST','PATCH','DELETE'].includes(req.method))))return false;
   const write=['POST','PATCH','DELETE'].includes(req.method);
   if(write&&ctx.adminSession.role!=='owner')throw apiError(403,'FORBIDDEN','仅老板可修改服务与价格。');
-  const input=['POST','PATCH'].includes(req.method)?await readBody(req):{};
   const update=input.priceSystemUpdate;
   if(update&&!['display','settlement'].includes(update.system))throw apiError(400,'INVALID_PRICE_SYSTEM','价格体系无效。');
   let output;
@@ -134,6 +130,14 @@ export function createServiceEditRoutes({db,apiError,currentTenantId,servicePayl
    if(update&&!id){const created=output.data.item||output.data.service;memberPricing.setPrices(currentTenantId(),created.id,update.system,update)}
    if(write)db.exec('RELEASE service_edit');
   }catch(e){if(write)db.exec('ROLLBACK TO service_edit; RELEASE service_edit');throw e}
+  return output
+ }
+ const route=async(req,res,ctx)=>{
+  if(!((ctx.path==='/admin/services'&&['GET','POST'].includes(req.method))||(/^\/admin\/services\/[^/]+$/.test(ctx.path)&&req.method==='PATCH')||(/^\/admin\/pricing\/items(?:\/[^/]+)?$/.test(ctx.path)&&['GET','POST','PATCH','DELETE'].includes(req.method))))return false
+  const input=['POST','PATCH'].includes(req.method)?await readBody(req):{}
+  const output=configure(req,res,ctx,input)
   json(res,output.status,output.data,output.headers);return true
  }
+ route.configure=({path,method,body,adminSession})=>configure({method},null,{path,adminSession},body)
+ return route
 }

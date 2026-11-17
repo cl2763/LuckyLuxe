@@ -1,5 +1,6 @@
 <view class="page {{themeClass}}" wx:if="{{c}}">
-<member-pricing user-id="{{c.id}}"/>
+<view wx:if="{{c.archived}}" class="card">已归档顾客 · 历史资料保留，办理新业务前请先恢复档案。</view><member-pricing wx:else user-id="{{c.id}}"/>
+<navigator wx:if="{{!setupPreviewActive}}" class="hbtn" url="/pages/merchant/record-management/index?kind=customers&id={{c.id}}">管理这份档案 · 删除 / 归档 ›</navigator>
 
   <view class="hero">
     <view class="av">{{c.av}}</view>
@@ -37,8 +38,8 @@
     <view class="hbtn ghost" bindtap="viewProfile">顾客画像 ›</view>
   </view>
   <view class="row2btn">
-    <view class="hbtn" bindtap="accountAdjust">账户调整 ›</view>
-    <view class="hbtn ghost" bindtap="sendCoupon">发优惠券 ›</view>
+    <view wx:if="{{!c.archived}}" class="hbtn" bindtap="accountAdjust">账户调整 ›</view>
+    <view wx:if="{{!c.archived}}" class="hbtn ghost" bindtap="sendCoupon">发优惠券 ›</view>
   </view>
 
   <view class="card">

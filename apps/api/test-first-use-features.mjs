@@ -1,3 +1,5 @@
+import {readBookingAcceptance,writeAcceptance} from './booking-window.mjs'
+import {nextSettlementCode} from './settlement-code.mjs'
 import{mkdtempSync,openSync,closeSync,rmSync,writeFileSync}from'node:fs';import{spawn}from'node:child_process';import{fileURLToPath}from'node:url';import{DatabaseSync}from'node:sqlite';
 const dir=mkdtempSync('/tmp/ll-ci-data.first-use-features-'),port=4363,base=`http://127.0.0.1:${port}`,owner='isolated-first-use-only',fd=openSync(dir+'/server.log','w'),checks=[];
 const server=spawn(process.execPath,['--experimental-sqlite','local-server.mjs'],{cwd:fileURLToPath(new URL('.',import.meta.url)),env:{PATH:process.env.PATH,HOME:process.env.HOME,DATA_DIR:dir,PORT:String(port),HOST:'127.0.0.1',OWNER_TOKEN:owner,WECHAT_MINI_TOKEN_SECRET:'binding-isolated-test-only',WECHAT_APP_SECRET:'configured-test-only',ALLOW_DEMO_ADMIN_LOGIN:'false',NOTIFY_TICK:'off'},stdio:['ignore',fd,fd]});let db;
@@ -5,14 +7,43 @@ const check=(name,ok,detail)=>{checks.push({name,ok,detail});console.log((ok?'ok
 async function req(path,{body,token=owner,tid='first-use-a',method=body?'POST':'GET'}={}){const r=await fetch(base+path,{method,headers:{'content-type':'application/json','x-admin-tenant-id':tid,'x-tenant-id':tid,...(token?{authorization:'Bearer '+token}:{})},body:body?JSON.stringify(body):undefined});return{status:r.status,data:await r.json()}}
 const publicPost=(path,body)=>req(path,{body,token:null});
 try{
- for(let n=0;n<100;n++){try{if((await fetch(base+'/health')).ok)break}catch{}await new Promise(r=>setTimeout(r,100))}
+ const codeDb=new DatabaseSync(':memory:');codeDb.exec('CREATE TABLE settlements(code TEXT UNIQUE)');codeDb.prepare('INSERT INTO settlements VALUES(?)').run('FI-20261117-AAAA');
+ let attempt=0;const generated=nextSettlementCode({db:codeDb,tenantId:'first-use',date:'2026-11-17',suffix:()=>++attempt===1?'AAAA':'BBBB'});
+ check('服务单号撞号后重新生成且保留格式',generated==='FI-20261117-BBBB'&&attempt===2);
+ check('生成新编号不改历史编号',codeDb.prepare('SELECT code FROM settlements').get().code==='FI-20261117-AAAA');
+ let exhausted=false;try{nextSettlementCode({db:codeDb,tenantId:'first-other',date:'2026-11-17',suffix:()=>'AAAA'})}catch(e){exhausted=e.code==='SETTLEMENT_CODE_RETRY'}check('同前缀跨店重号检查且重试有界',exhausted);codeDb.close();
+ for(let n=0;n<100;n++){try{const h=await fetch(base+'/health'),v=await h.json();if(h.ok&&v.dataFile===dir+'/lucky-luxe.sqlite')break}catch{}await new Promise(r=>setTimeout(r,100))}
+ const target=await(await fetch(base+'/health')).json();if(server.exitCode!==null||target.dataFile!==dir+'/lucky-luxe.sqlite')throw Error('Refusing non-owned test server');
  db=new DatabaseSync(dir+'/lucky-luxe.sqlite');
  for(const id of ['first-use-a','first-use-b'])check('建立独立店 '+id,(await req('/platform/tenants',{body:{id,name:id,plan:'chain',currency:'CNY',timezone:'Asia/Shanghai'}})).status===201);
+ const beforeWindowSettings=JSON.stringify(db.prepare('SELECT * FROM tenant_settings ORDER BY tenant_id,key').all());
+ for(const [label,tid]of [['缺租户',undefined],['其他租户','first-use-b']]){
+  let readRejected=false,writeRejected=false;
+  try{readBookingAcceptance(db,'store-first-use-a',tid)}catch(e){readRejected=e.code==='NOT_FOUND'}
+  try{writeAcceptance(db,'store-first-use-a',{mode:'latest_start'},new Date().toISOString(),tid)}catch(e){writeRejected=e.code==='NOT_FOUND'}
+  check('营业接客底层'+label+'读取拒绝',readRejected);check('营业接客底层'+label+'写入拒绝',writeRejected);
+ }
+ check('越权营业接客操作未改变任何门店配置',JSON.stringify(db.prepare('SELECT * FROM tenant_settings ORDER BY tenant_id,key').all())===beforeWindowSettings);
  await req('/platform/tenants/first-use-a/business-hours',{method:'PUT',body:{hours:Array.from({length:7},(_,weekday)=>({weekday,openTime:'08:00',closeTime:'22:00',isClosed:false}))}});
  const tech=(await req('/platform/tenants/first-use-a/technicians',{body:{name:'测试甲'}})).data.technician;
  const other=(await req('/platform/tenants/first-use-a/technicians',{body:{name:'测试乙'}})).data.technician;
  const svc=(await req('/platform/tenants/first-use-a/services',{body:{type:'NAIL',nameZh:'测试服务',nameEn:'Test',priceCents:19800,baseDurationMin:60}})).data.service;
 
+
+ const settings=db.prepare("INSERT INTO tenant_settings(tenant_id,key,value,updated_at) VALUES('first-use-a',?,?,?) ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value");
+ for(const configOn of [true,false])for(const legacyOn of [true,false]){
+  settings.run('deposit_config',JSON.stringify({enabled:configOn,mode:'fixed',fixedAmountCents:5000}),'test');settings.run('booking_rules',JSON.stringify({onlineDeposit:legacyOn,keep:'unchanged'}),'test');
+  const before=db.prepare("SELECT key,value FROM tenant_settings WHERE tenant_id='first-use-a' AND key IN ('deposit_config','booking_rules') ORDER BY key").all();
+  const effective=await req('/admin/deposit-config');check('双旧开关有效值 '+configOn+'/'+legacyOn,effective.data.config.enabled===(configOn&&legacyOn));
+  check('兼容读取不回填配置',JSON.stringify(before)===JSON.stringify(db.prepare("SELECT key,value FROM tenant_settings WHERE tenant_id='first-use-a' AND key IN ('deposit_config','booking_rules') ORDER BY key").all()));
+ }
+ check('旧入口不能意外重开已关闭定金',(await req('/admin/booking-rules',{method:'PUT',body:{onlineDeposit:true}})).status===409);
+ check('统一入口明确开启成功',(await req('/admin/deposit-config',{method:'PUT',body:{enabled:true}})).data.config.enabled);
+ check('旧入口读取跟随统一值',(await req('/admin/booking-rules')).data.rules.onlineDeposit===true);
+ check('旧配置其他字段保留',JSON.parse(db.prepare("SELECT value FROM tenant_settings WHERE tenant_id='first-use-a' AND key='booking_rules'").get().value).keep==='unchanged');
+ check('统一关闭保留金额',(await req('/admin/deposit-config',{method:'PUT',body:{enabled:false}})).data.config.fixedAmountCents===5000);
+ check('关闭时自定义宣传不掩盖无需定金',(await req('/admin/deposit-config',{method:'PUT',body:{displayMode:'custom',customText:'需支付定金'}})).data.text.zh.includes('无需定金'));
+ await req('/admin/deposit-config',{method:'PUT',body:{enabled:true,mode:'per_service',displayMode:'auto'}});
  const make=(displayName,phone='',requestId='create_'+Math.random().toString(36).slice(2))=>req('/admin/customers',{body:{displayName,phone,requestId}});
  const noPhone=await make('同名顾客');check('无电话独立建档',noPhone.status===201,noPhone);
  const uid=noPhone.data.customer.id;check('建档无资产无预约',db.prepare('SELECT count(*) n FROM bookings WHERE user_id=?').get(uid).n===0&&db.prepare('SELECT count(*) n FROM stored_value_transactions WHERE user_id=?').get(uid).n===0);
@@ -30,6 +61,20 @@ try{
  const customer=(await publicPost('/auth/wechat/mini-login',{tenantId:'first-use-a',code:'stub:gifts-person',phoneCode:'stub-phone:gifts-person:13800000099'})).data;
  const items=[{name:'护理油',quantity:1,unitValueCents:6800},{name:'护手霜',quantity:2,unitValueCents:3900}];
  const created=await req('/admin/packages',{body:{kind:'recharge',name:'测试多赠品',priceCents:100000,bonusCents:10000,giftItems:items}});check('套餐保存多行赠品',created.status===201&&created.data.package.giftItems.length===2,created);const pkg=created.data.package.id;
+ // Legacy fixture only in this suite's fresh isolated database.
+ db.prepare("UPDATE membership_packages SET kind='stored_value' WHERE id=?").run(pkg);
+ const legacyRow=JSON.stringify(db.prepare('SELECT * FROM membership_packages WHERE id=?').get(pkg));
+ const legacyList=await req('/admin/packages');
+ check('旧套餐管理读取归一且保留赠品',legacyList.data.packages.some(p=>p.id===pkg&&p.kind==='recharge'&&p.giftItems.length===2));
+ check('旧套餐可用于充值选档',(await req('/admin/recharge-packages')).data.packages.some(p=>p.id===pkg&&p.giftItems.length===2));
+ check('旧套餐个人折扣读取支持',(await req('/admin/member-pricing/packages/'+pkg)).status===200);
+ check('跨店旧套餐折扣不可读',(await req('/admin/member-pricing/packages/'+pkg,{tid:'first-use-b'})).status===404);
+ check('读取不改旧行任何字段',JSON.stringify(db.prepare('SELECT * FROM membership_packages WHERE id=?').get(pkg))===legacyRow);
+ const patchLegacy=await req('/admin/packages/'+pkg,{method:'PATCH',body:{isActive:false}});
+ check('旧套餐仅切状态不更改类型或赠品',patchLegacy.status===200&&db.prepare('SELECT kind FROM membership_packages WHERE id=?').get(pkg).kind==='stored_value'&&patchLegacy.data.package.giftItems.length===2);
+ await req('/admin/packages/'+pkg,{method:'PATCH',body:{isActive:true}});
+ check('未知套餐类型拒绝写入',(await req('/admin/packages',{body:{kind:'mystery',name:'无效',priceCents:100}})).status===400);
+
  check('商城下发赠品',(await req('/my/mall',{token:customer.auth.accessToken})).data.items.some(p=>p.id===pkg&&p.giftItems.length===2));
  for(const amountCents of [-1,0,1.5,100000001])check('非法充值金额不写入 '+amountCents,(await req('/admin/stored-value/recharge',{body:{userId:customer.user.id,amountCents}})).status===400);
  for(const body of [{date:'2030-02-30'},{date:'2030-10-08',isClosed:false,openTime:'99:00',closeTime:'10:00'},{date:'2030-10-08',isClosed:false,openTime:'20:00',closeTime:'10:00'},{date:'2030-10-08',isClosed:'false'}])check('异常特殊营业日拒绝',(await req('/admin/special-dates',{body})).status===400);
@@ -79,5 +124,196 @@ try{
  check('跨店不能看原始迁移资料',(await req(archivePath,{tid:'first-use-b'})).status===404);
  check('跨店不能更改来源',(await req(profilePath,{tid:'first-use-b',method:'PATCH',body:{acquisitionSource:'wrong'}})).status===404);
  check('非法日期不改已有日期',(await req(profilePath,{method:'PATCH',body:{originalJoinedDate:'2023-02-29'}})).status===400&&(await req(profilePath)).data.profile.originalJoinedDate==='2020-02-29');
+
+
+ // The configurable add-on catalog is tenant scoped and preserves booked snapshots.
+ const initialAddons=(await req('/admin/booking-addons')).data.config;
+ check('新门店附加服务默认关闭空列表',initialAddons.enabled===false&&initialAddons.items.length===0);
+ check('新门店顾客端不显示写死加项',(await req('/add-ons')).data.addOns.length===0);
+ db.prepare("DELETE FROM tenant_settings WHERE tenant_id='first-use-b' AND key='booking_addons'").run();
+ const oldAddonRows=db.prepare("SELECT count(*) n FROM tenant_settings WHERE tenant_id='first-use-b' AND key='booking_addons'").get().n;
+ check('未配置存量店读取四条旧项目但不回填',(await req('/admin/booking-addons',{tid:'first-use-b'})).data.config.items.length===4&&db.prepare("SELECT count(*) n FROM tenant_settings WHERE tenant_id='first-use-b' AND key='booking_addons'").get().n===oldAddonRows);
+ const linked=await req('/admin/pricing/items',{body:{nameZh:'隔离结算卸甲',type:'NAIL',itemKind:'addon',unit:'once',listPriceCents:4200,isActive:true}});
+ check('建立结算关联项目',linked.status===201,linked);
+ const linkedId=linked.data.item.id;
+ const addon={id:'scoped_remove',name:'隔离预约卸甲',priceCents:3000,durationMin:30,isActive:true,serviceIds:[svc.id],sortOrder:0,settlementItemId:linkedId};
+ const config={enabled:true,items:[addon],expectedRevision:0};
+ check('收费加项不能作为预约适用项目',(await req('/admin/booking-addons',{method:'PUT',body:{...config,items:[{...addon,serviceIds:[linkedId]}]}})).status===400);
+ check('附加服务保存成功',(await req('/admin/booking-addons',{method:'PUT',body:config})).status===200);
+ const publicCatalog=await req('/add-ons?serviceId='+svc.id);
+ check('顾客读取本店价格时长',publicCatalog.data.addOns[0]?.priceCents===3000&&publicCatalog.data.addOns[0]?.durationMin===30);
+ check('适用范围以外不显示',(await req('/add-ons?serviceId=unlisted')).data.addOns.length===0);
+ check('附加服务并发旧版本不覆盖',(await req('/admin/booking-addons',{method:'PUT',body:config})).status===409);
+ check('员工不得修改附加服务',(await req('/admin/booking-addons',{token:staff.auth.accessToken,method:'PUT',body:{...config,expectedRevision:1}})).status===403);
+ check('其他门店不能关联本店服务',(await req('/admin/booking-addons',{tid:'first-use-b',method:'PUT',body:config})).status===400);
+ const addonBody={storeId:'store-first-use-a',serviceId:svc.id,technicianId:tech.id,date:'2030-10-14',time:'10:00',addOns:[addon]};
+ check('顾客伪造加项价格拒绝',(await req('/bookings',{token:customer.auth.accessToken,body:{...addonBody,addOns:[{...addon,priceCents:1}]}})).status===409);
+ const addonBooking=await req('/bookings',{token:customer.auth.accessToken,body:addonBody});
+ check('预约增加时长真实写入',addonBooking.status===201&&db.prepare('SELECT total_duration_min FROM bookings WHERE id=?').get(addonBooking.data.booking?.id)?.total_duration_min===90,addonBooking.status);
+ const addonBookingId=addonBooking.data.booking.id,beforeAddon=JSON.stringify(db.prepare('SELECT * FROM bookings WHERE id=?').get(addonBookingId));
+ const seed=await req('/admin/settlements?bookingId='+addonBookingId);
+ check('预约关联加项带入开单种子',seed.data.bookingItems?.[0]?.serviceId===linkedId&&seed.data.bookingItemWarnings.length===0,seed);
+ const linkedCheckout=await req('/admin/settlements',{body:{userId:customer.user.id,settlements:[{bookingId:addonBookingId,payIntent:'offline_full',items:[{serviceId:svc.id,qty:1},...seed.data.bookingItems],technicians:[{technicianId:tech.id,role:'main',itemNos:[1,2]}]}]}});
+ check('预约加项按结算价实际开单，不重复收展示价',linkedCheckout.status===201&&linkedCheckout.data.settlements[0].totalCents===24000,linkedCheckout);
+ check('跨店不得读取开单种子',(await req('/admin/settlements?bookingId='+addonBookingId,{tid:'first-use-b'})).status===404);
+ check('用过加项禁止删除',(await req('/admin/booking-addons',{method:'PUT',body:{enabled:true,items:[],expectedRevision:1}})).status===409);
+ check('允许停用历史加项',(await req('/admin/booking-addons',{method:'PUT',body:{enabled:false,items:[{...addon,isActive:false}],expectedRevision:1}})).status===200);
+ check('停用后顾客列表为空',(await req('/add-ons?serviceId='+svc.id)).data.addOns.length===0);
+ check('旧页面继续提交停用项拒绝',(await req('/bookings',{token:customer.auth.accessToken,body:{...addonBody,time:'12:00'}})).status===409);
+ check('停用不改历史预约任何字段',JSON.stringify(db.prepare('SELECT * FROM bookings WHERE id=?').get(addonBookingId))===beforeAddon);
+ check('停用不抹掉已预约结算关联',(await req('/admin/settlements?bookingId='+addonBookingId)).data.bookingItems[0]?.serviceId===linkedId);
+ const snap=await req('/platform/tenants/first-use-a/setup/modules/bookingAddons');
+ check('平台代配置读取与商家相同',snap.status===200&&snap.data.current.config.revision===2,snap.status);
+
+ const revA=(await req('/config-revision')).data,revB=(await req('/config-revision',{tid:'first-use-b'})).data;
+ check('配置版本成功读取',typeof revA.revision==='string'&&revA.revision.length===64);
+ check('重复读取版本稳定',(await req('/config-revision')).data.revision===revA.revision);
+ const beforePkg=(await req('/admin/packages')).data.packages.find(p=>p.id===pkg);
+ const changedPkg=await req('/admin/packages/'+pkg,{method:'PATCH',body:{bonusCents:12300,expectedConfigRevision:beforePkg.configRevision}});check('有效版本保存套餐成功',changedPkg.status===200,changedPkg);
+ check('保存后公开版本立即变化',(await req('/config-revision')).data.revision!==revA.revision,{before:revA,after:(await req('/config-revision')).data});
+ check('本店变更不影响其他门店版本',(await req('/config-revision',{tid:'first-use-b'})).data.revision===revB.revision);
+ const conflict=await req('/admin/packages/'+pkg,{method:'PATCH',body:{bonusCents:99999,expectedConfigRevision:beforePkg.configRevision}});
+ check('旧套餐编辑保存冲突保留服务端新值',conflict.status===409&&conflict.data.error.details.current.bonusCents===12300&&db.prepare('SELECT bonus_cents FROM membership_packages WHERE id=?').get(pkg).bonus_cents===12300);
+ const depRev=(await req('/admin/deposit-config')).data.config.configRevision;
+ await req('/admin/deposit-config',{method:'PUT',body:{enabled:false,expectedConfigRevision:depRev}});
+ check('定金规则并发旧版本不能覆盖',(await req('/admin/deposit-config',{method:'PUT',body:{enabled:true,expectedConfigRevision:depRev}})).status===409);
+ await req('/admin/deposit-config',{method:'PUT',body:{enabled:true}});
+ const hoursRev=(await req('/admin/business-hours')).data.stores[0].configRevision;
+ await req('/admin/business-hours',{method:'PUT',body:{hours:[{weekday:1,openTime:'09:30',closeTime:'22:00',isClosed:false}],expectedConfigRevision:hoursRev}});
+ check('营业时间并发旧版本不能覆盖',(await req('/admin/business-hours',{method:'PUT',body:{hours:[{weekday:1,openTime:'10:00',closeTime:'22:00',isClosed:false}],expectedConfigRevision:hoursRev}})).status===409);
+ check('可约查询拒绝不存在日期',(await req('/availability?storeId=store-first-use-a&serviceId='+svc.id+'&date=2030-02-30')).status===400);
+
+ // Removal/archival uses final-transaction reference checks, never financial deletion.
+ const badArchive=await req('/admin/records/customers/'+customer.user.id);
+ check('有余额和预约的顾客阻止归档',badArchive.status===200&&badArchive.data.blockers.length>0&&badArchive.data.actions.length===0,badArchive.status);
+ const summaryRows=(await req('/admin/records/customers?summary=1')).data.records;
+ const summaryCustomer=summaryRows.find(x=>x.id===customer.user.id);
+ check('客户表余额与真实储值流水一致',summaryCustomer.balanceCents===db.prepare('SELECT COALESCE(SUM(amount_cents),0) n FROM stored_value_transactions WHERE tenant_id=? AND user_id=?').get('first-use-a',customer.user.id).n);
+ check('客户表待处理数与同店业务一致',summaryCustomer.pendingCount>0&&summaryRows.every(x=>db.prepare('SELECT tenant_id FROM users WHERE id=?').get(x.id).tenant_id==='first-use-a'));
+ check('员工无权读取客户表财务摘要',(await req('/admin/records/customers?summary=1',{token:staff.auth.accessToken})).status===403);
+ const emptyCustomer=(await make('生命周期空档案')).data.customer.id;
+ const life=await req('/admin/records/customers/'+emptyCustomer);check('无业务顾客可删除',life.data.actions.includes('delete'),life);
+ check('跨店无法查看删除检查',(await req('/admin/records/customers/'+emptyCustomer,{tid:'first-use-b'})).status===404);
+ check('员工不能管理归档',(await req('/admin/records/customers/'+emptyCustomer,{token:staff.auth.accessToken})).status===403);
+ check('无原因不执行删除',(await req('/admin/records/customers/'+emptyCustomer,{body:{action:'delete',reviewHash:life.data.reviewHash}})).status===400);
+ const removed=await req('/admin/records/customers/'+emptyCustomer,{body:{action:'delete',reason:'隔离误建档案',reviewHash:life.data.reviewHash}});
+ check('确认删除只删除未使用顾客',removed.status===200&&!db.prepare('SELECT id FROM users WHERE id=?').get(emptyCustomer));
+ check('删除保留最少审计',db.prepare("SELECT count(*) n FROM record_lifecycle_events WHERE record_id=? AND action='delete'").get(emptyCustomer).n===1);
+ const archiveCustomer=(await make('归档保留资料')).data.customer.id;
+ const currentArchive=await req('/admin/records/customers/'+archiveCustomer);
+ await req('/admin/customers/'+archiveCustomer+'/migration-profile',{method:'PATCH',body:{acquisitionSource:'测试来源'}});
+ check('预览后新增引用需重新核对',(await req('/admin/records/customers/'+archiveCustomer,{body:{action:'delete',reason:'竞态验证',reviewHash:currentArchive.data.reviewHash}})).status===409);
+ const canArchive=(await req('/admin/records/customers/'+archiveCustomer)).data;
+ const archiveRaw=JSON.stringify(db.prepare('SELECT * FROM users WHERE id=?').get(archiveCustomer));
+ check('已有历史只可归档不可删',canArchive.actions.includes('archive')&&!canArchive.actions.includes('delete'),canArchive);
+ check('明确归档完成',(await req('/admin/records/customers/'+archiveCustomer,{body:{action:'archive',reason:'隔离归档',reviewHash:canArchive.reviewHash}})).status===200);
+ check('归档不改原顾客字段',JSON.stringify(db.prepare('SELECT * FROM users WHERE id=?').get(archiveCustomer))===archiveRaw);
+ check('日常顾客列表隐藏归档项',!(await req('/admin/customers')).data.customers.some(x=>x.id===archiveCustomer));
+ check('老板可查看已归档顾客',(await req('/admin/records/customers?archived=1')).data.records.some(x=>x.id===archiveCustomer));
+ check('归档档案可单独读取历史页',(await req('/admin/customers?archivedId='+archiveCustomer)).data.customers[0]?.archived===true);
+ check('外店不能读归档档案',(await req('/admin/customers?archivedId='+archiveCustomer,{tid:'first-use-b'})).data.customers.length===0);
+ check('员工不能用归档参数扩展顾客范围',!(await req('/admin/customers?archivedId='+archiveCustomer,{token:staff.auth.accessToken})).data.customers.some(c=>c.id===archiveCustomer));
+ const restore=(await req('/admin/records/customers/'+archiveCustomer)).data;
+ await req('/admin/records/customers/'+archiveCustomer,{body:{action:'restore',reason:'隔离恢复',reviewHash:restore.reviewHash}});
+ check('恢复后回到顾客列表',(await req('/admin/customers')).data.customers.some(x=>x.id===archiveCustomer));
+ const retired=(await req('/admin/technicians',{body:{name:'待离职验收员工'}})).data.technician;
+ const ra=(await req('/admin/staff-accounts',{body:{technicianId:retired.id}})).data;
+ const rlogin=(await publicPost('/admin/auth/login',{email:ra.username,password:ra.initialPassword})).data;
+ const retirement=(await req('/admin/records/technicians/'+retired.id)).data;
+ check('员工有账号时保留资料只归档',retirement.actions.includes('archive')&&!retirement.actions.includes('delete'));
+ check('离职需明确核对薪酬',(await req('/admin/records/technicians/'+retired.id,{body:{action:'archive',reason:'隔离离职',reviewHash:retirement.reviewHash}})).status===400);
+ const exited=await req('/admin/records/technicians/'+retired.id,{body:{action:'archive',reason:'隔离离职',reviewHash:retirement.reviewHash,salaryReviewed:true}});
+ check('员工离职归档成功',exited.status===200,exited);
+ check('离职停用登录并失效现有会话',(await req('/admin/auth/me',{token:rlogin.auth.accessToken})).status===401);
+ check('归档员工不出现在日常员工列表',!(await req('/admin/technicians')).data.technicians.some(x=>x.id===retired.id));
+ const retiredAccount=db.prepare('SELECT id FROM admin_accounts WHERE technician_id=?').get(retired.id);
+ check('归档员工不可绕过恢复直接启用账号',(await req('/admin/staff-accounts/'+retiredAccount.id+'/toggle',{body:{}})).status===409);
+ check('归档员工不可通过建号建议重新选入',(await req('/admin/staff-accounts/suggest?technicianId='+retired.id)).status===409);
+ check('员工原姓名及历史身份保留',db.prepare('SELECT name FROM technicians WHERE id=?').get(retired.id).name==='待离职验收员工');
+ const inUseService=await req('/admin/pricing/items/'+linkedId,{method:'DELETE'});
+ check('已被预约关联结算的服务不能物理删',inUseService.status===200&&inUseService.data.disabled&&db.prepare('SELECT id FROM services WHERE id=?').get(linkedId),inUseService);
+ check('有充值关联旧套餐不能物理删',(await req('/admin/packages/'+pkg,{method:'DELETE'})).status===409);
+ const mondayBoard=await req('/admin/schedule-week?from=2031-10-06');
+ check('上海门店周一查询仍是本周而非服务器上一周',mondayBoard.data.days[0].date==='2031-10-06'&&mondayBoard.data.days[6].date==='2031-10-12',mondayBoard.data.days);
+ check('排班周查询拒绝不存在日期',(await req('/admin/schedule-week?from=2031-02-30')).status===400);
+ // Booking cutoff tests use new future fixture dates and never touch earlier bookings.
+ const day='2031-10-08',nextDay='2031-10-09',storeId='store-first-use-a';
+ const hours=Array.from({length:7},(_,weekday)=>({weekday,openTime:'10:30',closeTime:'22:30',isClosed:false}));
+ await req('/admin/business-hours',{method:'PUT',body:{hours}});
+ db.prepare('UPDATE services SET base_duration_min=120 WHERE id=?').run(svc.id);
+ await req('/admin/technicians/'+tech.id+'/schedule',{method:'PATCH',body:{date:day,startTime:'09:00',endTime:'23:00',isWorking:true}});
+ const av=async(date=day)=>req('/availability?storeId='+storeId+'&serviceId='+svc.id+'&technicianId='+tech.id+'&date='+date);
+ const slots=r=>r.data.slots.find(t=>t.technician.id===tech.id)?.slots||[];
+ let times=slots(await av());check('旧班次与营业取交集：10:30至20:30',times[0]==='10:30'&&times.at(-1)==='20:30',times);
+ const book=time=>req('/bookings',{token:customer.auth.accessToken,body:{storeId,serviceId:svc.id,technicianId:tech.id,date:day,time,addOns:[]}});
+ check('最终提交拒绝旧班次越界09:00',(await book('09:00')).status===400);
+ const shiftBefore=JSON.stringify(db.prepare('SELECT * FROM technician_schedules WHERE technician_id=? AND date=?').get(tech.id,day));
+ const accept={mode:'latest_start',weekly:{},special:{}};
+ const enabled=await req('/admin/business-hours',{method:'PUT',body:{hours,bookingAcceptance:accept}});check('明确开启最晚开始模式',enabled.status===200&&enabled.data.bookingAcceptance.mode==='latest_start',enabled);
+ check('切换模式不改旧排班字段',JSON.stringify(db.prepare('SELECT * FROM technician_schedules WHERE technician_id=? AND date=?').get(tech.id,day))===shiftBefore);
+ check('120分钟最后22:30开始',slots(await av()).at(-1)==='22:30');
+ db.prepare('UPDATE services SET base_duration_min=180 WHERE id=?').run(svc.id);
+ check('180分钟仍最后22:30开始',slots(await av()).at(-1)==='22:30');
+ check('超出截止拒绝',(await book('23:00')).status===400);
+ const late=await book('22:30');check('22:30实际建单跨日3小时',late.status===201,late);
+ if(late.status===201){
+  const raw=db.prepare('SELECT * FROM bookings WHERE id=?').get(late.data.booking.id);
+  check('跨日实际时长180分钟',Date.parse(raw.appointment_end)-Date.parse(raw.appointment_start)===180*60000);
+  check('跨日服务占位后时段消失',!slots(await av()).includes('22:30'));
+  const todayBoard=await req('/admin/schedule-day?date='+day),nextBoard=await req('/admin/schedule-day?date='+nextDay);
+  const head=todayBoard.data.bookings.find(b=>b.id===raw.id),tail=nextBoard.data.bookings.find(b=>b.id===raw.id);
+  check('开始日跨日标签、次日延续同一ID',head?.timeLabel==='22:30–次日 01:30'&&tail?.continuation&&tail.startTime==='00:00'&&tail.endTime==='01:30',{head,tail});
+  check('次日延续不再计新单',nextBoard.data.technicians.find(t=>t.id===tech.id)?.bookingCount===0);
+  const proposed=hours.map(h=>({...h,closeTime:'20:00'}));
+  const dbHoursBefore=JSON.stringify(db.prepare('SELECT * FROM business_hours WHERE store_id=? ORDER BY weekday').all(storeId));
+  const impact=await req('/admin/business-hours/review',{body:{storeId,hours:proposed,bookingAcceptance:{mode:'finish_by_close',weekly:{},special:{}}}});
+  check('营业修改预览列出已有冲突单',impact.status===200&&impact.data.bookings.some(b=>b.id===raw.id),impact);
+  check('营业影响预览不修改已存时间',dbHoursBefore===JSON.stringify(db.prepare('SELECT * FROM business_hours WHERE store_id=? ORDER BY weekday').all(storeId)));
+  check('营业影响拒绝跨店',(await req('/admin/business-hours/review',{tid:'first-use-b',body:{storeId,hours:proposed}})).status===404);
+  const platformHours=(await req('/platform/tenants/first-use-a/business-hours')).data;
+  const platformImpact=await req('/platform/tenants/first-use-a/business-hours/review',{body:{hours:proposed,bookingAcceptance:{mode:'finish_by_close',weekly:{},special:{}},expectedConfigRevision:platformHours.configRevision}});
+  check('平台原营业入口显示同一影响核对',platformImpact.status===200&&platformImpact.data.bookings.some(b=>b.id===raw.id),platformImpact);
+  check('平台营业入口拒绝过期版本',(await req('/platform/tenants/first-use-a/business-hours',{method:'PUT',body:{hours:proposed,expectedConfigRevision:'stale'}})).status===409);
+
+  const shiftReview=await req('/admin/schedule-preview',{body:{technicianId:tech.id,date:day,shift:'full',durationMin:180,applyToFollowingWeeks:8}});
+  check('批量排班预览九个日期且截止包含22:30',shiftReview.status===200&&shiftReview.data.previews.length===9&&shiftReview.data.previews[0].latestStart==='22:30',shiftReview);
+  check('排班预览不改已保存班次',JSON.stringify(db.prepare('SELECT * FROM technician_schedules WHERE technician_id=? AND date=?').get(tech.id,day))===shiftBefore);
+  check('员工不能预览别人排班',(await req('/admin/schedule-preview',{token:staff.auth.accessToken,body:{technicianId:other.id,date:day,shift:'full'}})).status===403);
+  const preview=await req('/bookings/'+raw.id+'/cancel-preview',{token:customer.auth.accessToken});
+  const cancelled=await req('/bookings/'+raw.id+'/cancel',{token:customer.auth.accessToken,body:{reason:'隔离测试取消',reviewHash:preview.data.reviewHash}});
+  check('跨日取消成功且释放开始时段',cancelled.status===200&&slots(await av()).includes('22:30'),cancelled.status);
+  check('跨日取消释放午夜后占位',db.prepare('SELECT count(*) n FROM booking_slots WHERE booking_id=?').get(raw.id).n===0);
+
+ }
+ const specBefore=(await req('/admin/business-hours')).data.stores[0].configRevision;
+ const spec=await req('/admin/special-dates',{body:{storeId,date:day,isClosed:false,openTime:'12:00',closeTime:'20:00',latestStartTime:'21:30',expectedConfigRevision:specBefore}});
+ check('特殊日期可单独设置最晚开始',spec.status===201&&slots(await av())[0]==='12:00'&&slots(await av()).at(-1)==='21:30',spec);
+ check('特殊日期旧版本不能覆盖',(await req('/admin/special-dates',{body:{storeId,date:day,isClosed:true,expectedConfigRevision:specBefore}})).status===409);
+ const specialRow=JSON.stringify(db.prepare('SELECT * FROM store_special_dates WHERE store_id=? AND date=?').get(storeId,day));
+ check('特殊日期无效截止整体拒绝',(await req('/admin/special-dates',{body:{storeId,date:day,isClosed:false,openTime:'12:00',closeTime:'20:00',latestStartTime:'10:00'}})).status===400);
+ check('失败不改特殊日期旧字段',JSON.stringify(db.prepare('SELECT * FROM store_special_dates WHERE store_id=? AND date=?').get(storeId,day))===specialRow);
+ check('跨店不能删除特殊日期',(await req('/admin/special-dates/'+day+'?storeId='+storeId,{tid:'first-use-b',method:'DELETE'})).status===404);
+ check('删除旧版本需要复核',(await req('/admin/special-dates/'+day+'?storeId='+storeId+'&expectedConfigRevision='+specBefore,{method:'DELETE'})).status===409);
+ check('删除特殊日期恢复每周规则',(await req('/admin/special-dates/'+day+'?storeId='+storeId,{method:'DELETE'})).status===200&&slots(await av()).at(-1)==='22:30');
+ check('删除后不遗留孤立截止',(await req('/admin/business-hours')).data.stores[0].bookingAcceptance.special[day]===undefined);
+ check('删除后营业设置仍可保存',(await req('/admin/business-hours',{method:'PUT',body:{hours}})).status===200);
+ check('异常截止整体拒绝',(await req('/admin/business-hours',{method:'PUT',body:{hours,bookingAcceptance:{...accept,weekly:{3:'08:00'}}}})).status===400);
+ check('配置失败不退回旧模式',(await req('/admin/business-hours')).data.stores[0].bookingAcceptance.mode==='latest_start');
+ const movedSource=await book('22:30'),moving=movedSource.data.booking;
+ const moved=await req('/admin/bookings/'+moving.id+'/reschedule',{body:{date:nextDay,time:'22:30',expectedStart:moving.appointmentStart,reason:'跨日改期验收'}});
+ check('跨日预约改期仍保留单号时长与金额',moved.status===200&&moved.data.booking.id===moving.id&&moved.data.booking.totalDurationMin===180&&moved.data.booking.finalDueCents===moving.finalDueCents,moved);
+ check('跨日改期释放原日占位并锁定新日',slots(await av()).includes('22:30')&&!slots(await av(nextDay)).includes('22:30'));
+ const movedPreview=await req('/bookings/'+moving.id+'/cancel-preview',{token:customer.auth.accessToken});
+ check('改期后的跨日取消成功',(await req('/bookings/'+moving.id+'/cancel',{token:customer.auth.accessToken,body:{reason:'跨日改期后取消',reviewHash:movedPreview.data.reviewHash}})).status===200);
+ check('跨日改期后取消释放所有午夜后占位',db.prepare('SELECT count(*) n FROM booking_slots WHERE booking_id=?').get(moving.id).n===0&&slots(await av(nextDay)).includes('22:30'));
+ await req('/platform/tenants/first-use-a/store',{method:'PUT',body:{timezone:'America/New_York'}});
+ await req('/admin/business-hours',{method:'PUT',body:{hours:Array.from({length:7},(_,weekday)=>({weekday,openTime:'00:00',closeTime:'23:30',isClosed:false})),bookingAcceptance:accept}});
+ const spring=await av('2027-03-14'),springTimes=slots(spring),springDetails=spring.data.slots.find(x=>x.technician.id===tech.id)?.slotDetails||[];
+ check('夏令时不存在的02:00和02:30不开放',!springTimes.includes('02:00')&&!springTimes.includes('02:30')&&springTimes.includes('03:00'));
+ check('跨夏令时仍按真实180分钟结束',springDetails.find(x=>x.time==='01:30')?.endTime==='05:30',springDetails.find(x=>x.time==='01:30'));
+ const autumn=slots(await av('2027-11-07'));check('冬令时重复本地时刻只出现一个预约入口',autumn.includes('01:30')&&autumn.filter(x=>x==='01:30').length===1);
+ const yearEnd=await av('2026-12-31'),yearLast=yearEnd.data.slots.find(x=>x.technician.id===tech.id)?.slotDetails.find(x=>x.time==='23:30');
+ check('年末跨日结束日期正确',yearLast?.endDate==='2027-01-01'&&yearLast?.endTime==='02:30',yearLast);
+
 
 }catch(e){check('完整执行',false,e.stack)}finally{db?.close();server.kill('SIGTERM');await new Promise(r=>server.exitCode!==null?r():server.once('exit',r));closeSync(fd);writeFileSync('/tmp/first-use-features-result.json',JSON.stringify(checks,null,2));if(checks.every(c=>c.ok))rmSync(dir,{recursive:true,force:true});else console.log('现场保留 '+dir)}process.exitCode=checks.some(c=>!c.ok)?1:0;

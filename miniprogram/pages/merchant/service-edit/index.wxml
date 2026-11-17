@@ -1,3 +1,5 @@
+<config-sync-banner changed="{{configSyncChanged}}" error="{{configSyncError}}" checked="{{configSyncChecked}}" bind:retry="configSyncRetry"/>
+<setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
 <view class="page {{themeClass}}">
  <view class="ai">{{system==='display'?'顾客展示价格仅供参考，实际结算按服务确认单。':'服务结算价格仅用于开单，会员价按顾客当前有效折扣计算。'}}</view>
  <view wx:if="{{loading}}" class="note">正在读取项目…</view>

@@ -1,0 +1,1 @@
+.preview-banner{display:flex;gap:20rpx;align-items:center;justify-content:space-between;padding:20rpx 26rpx;background:var(--tagmbg);color:var(--tagm);font-size:24rpx;line-height:1.6}.preview-exit{flex:none;margin:0;font-size:24rpx;padding:6rpx 18rpx;line-height:1.8;background:var(--card);color:var(--tagm)}

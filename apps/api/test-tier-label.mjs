@@ -39,7 +39,7 @@ const check = (name, cond, detail = '') => {
 /* ① 归一化出口在,且必填闸 + 迁移分支都在 */
 const cfg = readFileSync(join(ROOT, 'apps/api/membership-config.mjs'), 'utf8')
 check('① 梯子档位有归一化唯一出口 `normalizeTiers`,保存路径经过它(不是各处各写一套)',
-  /function normalizeTiers\(/.test(cfg) && /tiers: normalizeTiers\(/.test(cfg), '')
+  /function normalizeTiers\(/.test(cfg) && /tiers: [^\n]*normalizeTiers\(/.test(cfg), '')
 check('①b label 必填闸在后端(TIER_LABEL_REQUIRED)—— 后端是最终闸,前端拦只算体验',
   /TIER_LABEL_REQUIRED/.test(cfg), '')
 check('①c 存量条件迁移分支在:调用方没给 tiers 时,label 空的补成 key 并打 labelFromKey 标记'
@@ -64,23 +64,25 @@ check('③ 同族:`ai-desk.js` 的 `qsLabel` 不再自存一份 none 态文案 �
 const { ensureSandbox } = await import('./test-need-sandbox.mjs')
 const sb = await ensureSandbox({ label: '[tier-label]' })
 if (!sb.ok) {
-  console.log('   ⚠️ 沙箱不可用 —— **行为层两条本轮未跑**(不静默跳过,如实说)')
+  check('行为层测试环境必须可用',sb.ok,JSON.stringify(sb))
 } else {
   const {SANDBOX_URL:SANDBOX}=await import('./test-need-sandbox.mjs')
   /* 只对 ensureSandbox 核过的本机沙箱做现测,且造完当场还原配置。 */
-  const TID = 'lucky-luxe'
+  const {requireOwnerToken}=await import('./owner-token.mjs');const fixtureAuth='Bearer '+requireOwnerToken()
+  const TID='tier-label-'+Date.now().toString(36)
+  const made=await fetch(SANDBOX+'/platform/tenants',{method:'POST',headers:{authorization:fixtureAuth,'content-type':'application/json'},body:JSON.stringify({id:TID,name:'梯子名称隔离测试店',plan:'single'})});if(made.status!==201)throw Error('Tier fixture could not create isolated tenant')
   const put = async (tiers) => {
-    const r = await fetch(`${SANDBOX}/admin/membership/config`, {
+    const r = await fetch(`${SANDBOX}/platform/tenants/${TID}/membership-config`, {
       method: 'PUT',
-      headers: { authorization: 'Bearer owner-demo-token', 'x-admin-tenant-id': TID, 'content-type': 'application/json' },
-      body: JSON.stringify({ config: { tiersEnabled: true, memberQualify: 'any_recharge', tiers } }),
+      headers: { authorization:fixtureAuth, 'x-admin-tenant-id': TID, 'content-type': 'application/json' },
+      body: JSON.stringify({ tiersEnabled: true, memberQualify: 'any_recharge', tiers }),
     }).catch(() => null)
     if (!r) return { status: 0, code: '(请求失败)', labels: [] }
     const j = await r.json().catch(() => ({}))
     return { status: r.status, code: j?.error?.code || '', labels: ((j?.config || j)?.tiers || []).map((t) => t.label) }
   }
   const before = await fetch(`${SANDBOX}/admin/membership/config`, {
-    headers: { authorization: 'Bearer owner-demo-token', 'x-admin-tenant-id': TID },
+    headers: { authorization:fixtureAuth, 'x-admin-tenant-id': TID },
   }).then((r) => r.json()).catch(() => null)
 
   const blank = await put([{ key: 'gold', label: '  ', minSpendCents: 0 }])
@@ -93,10 +95,10 @@ if (!sb.ok) {
 
   /* 收尾:把演示店配置还原成现测前的样子 */
   if (before && before.config) {
-    await fetch(`${SANDBOX}/admin/membership/config`, {
+    await fetch(`${SANDBOX}/platform/tenants/${TID}/membership-config`, {
       method: 'PUT',
-      headers: { authorization: 'Bearer owner-demo-token', 'x-admin-tenant-id': TID, 'content-type': 'application/json' },
-      body: JSON.stringify({ config: before.config }),
+      headers: { authorization:fixtureAuth, 'x-admin-tenant-id': TID, 'content-type': 'application/json' },
+      body: JSON.stringify(before.config),
     }).catch(() => null)
     console.log('   [收尾] 沙箱店会员配置已还原成现测前的值')
     /* 🔴 06a §六 查明并留痕:**值还原得回来,`updated_at` 还不回去** ——

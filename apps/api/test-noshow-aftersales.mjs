@@ -1,3 +1,4 @@
+import {ensurePricingCategory} from './pricing-category-fixture.mjs'
 import {fileURLToPath as localFilePath} from 'node:url'
 /* 爽约定金处置 + 售后完成态 + D19/D20 红线回归(2026-08-11 图 A/B 部,店主已确认)。
    corner case 为主:
@@ -873,6 +874,9 @@ const main = async () => {
           global.localStorage={getItem:()=>null,setItem(){},removeItem(){}}; global.sessionStorage=global.localStorage;
           global.navigator={language:'zh-CN',clipboard:{}}; global.location={search:'',hash:'',origin:'http://x',pathname:'/'};
           global.fetch=()=>new Promise(()=>{}); global.history={replaceState(){}}; global.alert=()=>{}; global.MutationObserver=class{observe(){}};
+          // Load the real shared bootstrap dependency, as index.html does.
+          const nativeSetTimeout=global.setTimeout;global.setTimeout=(...args)=>{const timer=nativeSetTimeout(...args);timer.unref();return timer};
+          require(${JSON.stringify(ROOT32)} + 'apps/web/config-sync.js');
           require(${JSON.stringify(ROOT32)} + ${JSON.stringify(f)});
           console.log('TOPOK');
         `
@@ -992,7 +996,7 @@ const main = async () => {
       const flip = await request('/admin/mall/self-purchase', { method: 'PUT', body: JSON.stringify({ enabled: true }) }, shop.token)
       check('㊵ 规则⑧ 锁定期 PUT 开=400 PAYMENT_CHANNEL_OFFLINE', flip.status === 400 && flip.data.error.code === 'PAYMENT_CHANNEL_OFFLINE')
       // 次卡新字段 CRUD 往返
-      await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ name: '护理', key: `ci-care-${RUN_ID}` }) }, shop.token)  // 裁决后项目组必须是现有分类
+      await ensurePricingCategory({base:BASE_URL,platformToken:PLATFORM,merchantToken:shop.token,body:{name:'护理',key:`ci-care-${RUN_ID}`}})  // 裁决后项目组必须是现有分类
       const tk = await request('/admin/packages', { method: 'POST', body: JSON.stringify({ kind: 'times', name: `CI次卡${RUN_ID}`, priceCents: 54000, timesCount: 3, projectGroup: '护理', validDays: 90, mallVisible: false }) }, shop.token)
       check('㊵ 次卡字段(项目组/有效期/商城位)持久化', tk.status === 201 && tk.data.package.projectGroup === '护理' && tk.data.package.validDays === 90 && tk.data.package.mallVisible === false)
       // 赠送口径:充100赠20 → recharge+bonus 两行;余额=120;bonus 不触发首充判定之外的业绩口(type≠recharge)
@@ -1882,6 +1886,7 @@ const main = async () => {
                     // A① 爽约前置:已完成的单不许再标爽约(原来任何状态都能标一次,标完主状态被改写、收入被冲销)
                     const bA = await mk('㋙爽约', 13)
                     const shA = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: bA.userId || bA.user_id || (bA.user && bA.user.id), settlements: [{ bookingId: bA.id, payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }] }] }) }, shop.token)
+                    check('㋙A 建单夹具有效',shA.status===201,JSON.stringify(shA.data))
                     await signFixture(`/settlements/${encodeURIComponent(shA.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋙签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                     const incA0 = incomeOf(bA.id).reduce((n, r) => n + r.amount_cents, 0)
                     const nsBad = await request(`/admin/bookings/${bA.id}/no-show`, { method: 'POST', body: JSON.stringify({ reason: '试试已完成的单能不能标爽约' }) }, shop.token)
@@ -2314,7 +2319,7 @@ const main = async () => {
                             for (const x of sc.settlements) await request(`/admin/settlements/${x.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋆ 矩阵清场' }) }, shop.token)
                           }
                           const ok = gp.offlineDueCents === exp.cash && gp.storedUsedCents === exp.storedUsed && off === exp.cash && st === exp.storedUsed && cardDue === exp.cash && heroOk
-                          if (!ok) bad.push(`${tag}: exp(cash=${exp.cash},st=${exp.storedUsed}) pv(${gp.offlineDueCents},${gp.storedUsedCents}) legs(${off},${st}) card(${cardDue}) hero(${heroOk})`)
+                          if (!ok) bad.push(`${tag}: exp(cash=${exp.cash},st=${exp.storedUsed}) pv(${gp.offlineDueCents},${gp.storedUsedCents}) legs(${off},${st}) card(${cardDue}) hero(${heroOk}) error(${sc.error?.code || sc.error || sc.code || ''}: ${sc.message || ''})`)
                         }
                       }
                     }
@@ -2357,10 +2362,10 @@ const main = async () => {
       check('㊶ D50 会员与营销页原生弹窗=0(全部页内表单弹层)', memberHits === 0, `hits=${memberHits}`)
       const formModalJs = readFileSync(join(ROOT41, 'apps/web/form-modal.js'), 'utf8')
       const adminHtml = readFileSync(join(ROOT41, 'apps/web/admin.html'), 'utf8')
-      check('㊶ D50 弹层组件接通且先于 admin 加载(Esc/遮罩/保存取消)',
+      check('㊶ D50 弹层组件接通且先于 admin 加载(背景/Esc不丢输入，按钮明确关闭)',
         adminJs.includes('function openFormModal') && adminJs.includes('window.FormModal.open')
         && adminHtml.indexOf('/web/form-modal.js') >= 0 && adminHtml.indexOf('/web/form-modal.js') < adminHtml.indexOf('/web/admin.js?')
-        && formModalJs.includes("e.key === 'Escape'") && formModalJs.includes('e.target === overlay')
+        && formModalJs.includes("if (e.key === 'Escape') e.preventDefault()") && !formModalJs.includes('e.target === overlay') && formModalJs.includes('data-fm-close')
         && formModalJs.includes('data-fm-save') && formModalJs.includes('data-fm-cancel'))
       const PROMPT_BASELINE = 19 // 服务与价目页 5 处提前修(店主 08-21 亲撞拍板:新增/改名/删大类+删项目全换弹层)24→19;此前 A5 退役 27→24;其余存量按 Cowork 归批清单分批收敛,只减不增
       const total = (adminJs.match(/window\.(prompt|confirm|alert)\(/g) || []).length
@@ -2725,12 +2730,14 @@ const main = async () => {
       check('㋖ S8 裁:技师小记不给顾客看(顾客端零 service_notes 出口)',
         !odWx98.includes('serviceNote') && !custWeb98.includes('serviceNote')
         && !readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8').includes('serviceNote'))
-      // S7:定金摘要做全 + 引导句;小程序不做编辑器
+      // F04 (2026-11-17):用户确认双端可编辑，单一开关，完整取消规则，同一后端出口。
       const storeWx98 = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/store/index.wxml'), 'utf8')
       const storeJs98 = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/store/index.js'), 'utf8')
-      check('㋖ S7:小程序只读展示(渲染后端 summaryRows + 引导句,不做编辑器、不再弹说明框)',
-        storeWx98.includes('depositRows') && storeWx98.includes('depositEditHint')
-        && storeJs98.includes('d.summaryRows') && !storeJs98.includes('goDepositRule'))
+      const depositForm98=readFileSync(join(ROOT42,'miniprogram/pages/merchant/components/deposit-form/index.js'),'utf8')
+      check('㋖ F04:小程序单一定金编辑器，读写同源且带配置版本核对',
+        (storeWx98.match(/<deposit-form/g)||[]).length===1 && !storeWx98.includes('bindchange="onOnlineDeposit"')
+        && depositForm98.includes("adminGet('/admin/deposit-config')") && depositForm98.includes("'/admin/deposit-config'")
+        && depositForm98.includes('expectedConfigRevision') && depositForm98.includes('cancelPolicy') && depositForm98.includes('r.summaryRows'))
       const apiJs98 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
       check('㋖ S7 顺手件:定金拿不到不再返 0(0=免定金是假数),返 null 由前端显示「—」',
         /if \(d && d\.enabled === false\) return 0/.test(apiJs98) && /\/\* storage 拿不到 = 下面返 null,不猜 \*\/[\s\S]{0,40}return null/.test(apiJs98))
@@ -2757,17 +2764,18 @@ const main = async () => {
         pointsPages95.length === 1 && pointsPages95[0] === 'pages/points/index', JSON.stringify(pointsPages95))
       /* 网页两个入口:黑卡那格是字面 data-me-target="pointsMall",功能格是菜单数组里的 'pointsMall' 项
          —— 数字面量会漏掉后者,所以两种写法各验一次(判据要能覆盖真实写法,08-24 教训的延伸)。 */
-      const webCellEntry = /menu-grid-web[\s\S]{0,600}'pointsMall'/.test(custWeb95)
+      const webCellEntry = /shopping-entry-web[^>]*data-me-target="pointsMall"/.test(custWeb95)
       check('㋕ 多入口同页:小程序黑卡格 + 功能格都走 goPoints(2 处);网页黑卡格 + 功能格都指 pointsMall',
         miniPointsEntries >= 2 && webPointsEntries >= 1 && webCellEntry
         && /goPoints\(\)\s*\{[^}]*pages\/points/.test(meJs95.replace(/\n/g, ' ')),
         JSON.stringify({ mini: miniPointsEntries, webLiteral: webPointsEntries, webCell: webCellEntry }))
       /* 08-24 二拍:积分商城不是通栏块,是**与其他功能同款的小方格**(排在网格第一格);
          格子里的图标位本身就是配图位 —— 将来换奖品缩略图只换图源不动版。 */
-      check('㋕ 积分商城=同款小方格排进网格第一格(通栏块 fn-block 已撤,0 残留)',
+      check('㋕ F09:套餐商城与积分商城并排直达，保留资产区入口，各自进入原页面',
         !meWx95.includes('fn-block') && !custWeb95.includes('fn-block')
-        && /menu-grid[\s\S]{0,400}bindtap="goPoints"[\s\S]{0,200}menu-ic/.test(meWx95)
-        && /menu-grid-web[\s\S]{0,600}'pointsMall'/.test(custWeb95))
+        && /member-shopping[\s\S]{0,800}bindtap="goMall"[\s\S]{0,800}bindtap="goPoints"/.test(meWx95)
+        && /member-shopping-web[\s\S]{0,800}data-me-target="mall"[\s\S]{0,800}data-me-target="pointsMall"/.test(custWeb95)
+        && meJs95.includes('/pages/mall/index') && meJs95.includes('/pages/points/index'))
       /* 商城页的信息层级:主体=奖品,顶部只留一行余额,明细降级为次级入口(默认收起) */
       const ptsWx96 = readFileSync(join(ROOT42, 'miniprogram/pages/points/index.wxml'), 'utf8')
       const ptsJs96 = readFileSync(join(ROOT42, 'miniprogram/pages/points/index.js'), 'utf8')
@@ -3552,7 +3560,7 @@ const main = async () => {
           ['pointsMall', 'cardPack', 'storedValue'].every((k) => webKeys.includes(k)), webKeys.join(','))
         /* 两端资产入口 key 数组逐项相同(照第三案:各自从源文件取,再逐项比) */
         const webAssetKeys = (custA3.match(/<div class="member-assets">[\s\S]*?<\/div>\n/) || [''])[0]
-        const webBlackCard = [...custA3.matchAll(/data-me-target="(pointsMall|cardPack|storedValue)"/g)].map((m) => m[1])
+        const webBlackCard = [...webAssetKeys.matchAll(/data-me-target="(pointsMall|cardPack|storedValue)"/g)].map((m) => m[1])
         const miniBlackCard = [...meWxA3.matchAll(/class="asset-tap" bindtap="(go[A-Za-z]+)"/g)].map((m) => m[1])
         const MINI_TO_KEY = { goPoints: 'pointsMall', goCardPack: 'cardPack', goStored: 'storedValue' }
         const miniKeys = miniBlackCard.map((g) => MINI_TO_KEY[g] || g)

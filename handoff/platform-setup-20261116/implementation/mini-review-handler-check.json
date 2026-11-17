@@ -1,0 +1,19 @@
+{
+  "scope": "Isolated synthetic owner; real native page handlers via official evaluate, NOT actual control taps; no production data",
+  "checks": [
+    "真实登录处理器进入本店商家首页",
+    "原生消息页从真实接口显示待核对配置",
+    "原生读取消息更新已读状态",
+    "原生消息入口到达本店核对页",
+    "原生核对页反复进入保持数据 1",
+    "原生核对页反复进入保持数据 2",
+    "原生核对页反复进入保持数据 3",
+    "原生核对页反复进入保持数据 4",
+    "原生核对页反复进入保持数据 5",
+    "真实确认处理器留痕且尚未应用",
+    "原生退回说明完整保存",
+    "退回后不再出现待核对消息",
+    "无原生脚本异常"
+  ],
+  "errors": []
+}

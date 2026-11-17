@@ -1,0 +1,1 @@
+<view class="preview-banner"><text>{{label}}</text><button class="preview-exit" bindtap="exit">退出预览</button></view>

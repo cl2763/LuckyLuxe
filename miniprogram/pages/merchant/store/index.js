@@ -12,6 +12,7 @@ Page({
     loading: true
   },
 
+  goSetupReview(){require('../../../utils/nav').to('/pages/merchant/setup-review/index')},
   async showStoreCode() {
     if (this.data.qrLoading) return
     this.setData({ qrLoading:true, qrError:'', qrUrl:'' })
@@ -35,23 +36,7 @@ Page({
     } catch (err) { wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' }); this.loadDuty() }
   },
 
-  async onShow() { if (!(await api.guardOwner())) return; this.setData({ hoursTxt: (wx.getStorageSync('lucky_lang') === 'en' ? api.hoursGateText().en : api.hoursGateText()) || api.hoursGateText() }); this.load(); this.loadRules(); this.loadDuty() },
-
-  async loadRules() {
-    try {
-      const r = await api.adminGet('/admin/booking-rules')
-      this.setData({ onlineDeposit: r.rules ? r.rules.onlineDeposit !== false : true })
-      /* 批④ S7(店主 08-24):摘要做全 —— 7 项关键值逐行显示,全部读后端 summaryRows
-         (与顾客端 keyFacts/政策全文同一份 config 推导,商家看到的与顾客体验到的同源,不各查各的)。
-         前端零拼串:label/value 与「去哪改」的引导句都由后端给。 */
-      api.adminGet('/admin/deposit-config').then((d) => {
-        this.setData({
-          depositRows: (d && d.summaryRows && d.summaryRows.zh) || [],
-          depositEditHint: (d && d.editHint && d.editHint.zh) || ''
-        })
-      }).catch(() => {})
-    } catch (e) { /* 默认开 */ }
-  },
+  async onShow() { if (!(await api.guardOwner())) return; this.setData({ hoursTxt: (wx.getStorageSync('lucky_lang') === 'en' ? api.hoursGateText().en : api.hoursGateText()) || api.hoursGateText() }); this.load(); this.loadDuty() },
 
   async load() {
     try {
@@ -63,12 +48,12 @@ Page({
       const hours = s.hours || []
       const specials = (s.specialDates || []).map((d) => ({
         date: d.date,
-        text: d.isClosed ? '休息' : `${d.openTime}-${d.closeTime}`,
+        text: d.isClosed ? '休息' : `${d.openTime}-${d.closeTime}${s.bookingAcceptance?.mode==='latest_start'?' · 最晚开始 '+(s.bookingAcceptance.special?.[d.date]||d.closeTime):''}`,
         note: d.note || ''
       }))
       /* 🔴 11k 出口普查抓到的第 14 处:这是**编辑表单**,读的是后台原始值(不过 toMiniStore)。
          占位值预填进输入框,商家一点保存就把「Address TBD」存成了真地址 —— 与网页 store-content.js 同病。 */
-      this.setData({ storeId: s.id, name: s.name || '', address: realValue(s.address), phone: realValue(s.phone), hours, specials, loading: false })
+      this.setData({ storeId: s.id,configRevision:s.configRevision, name: s.name || '', address: realValue(s.address), phone: realValue(s.phone),bookingAcceptance:s.bookingAcceptance, hours, specials, loading: false })
     } catch (e) { this.setData({ loading: false }); wx.showToast({ title: '加载失败', icon: 'none' }) }
   },
 
@@ -95,32 +80,28 @@ Page({
     if (this.data.hoursSaving) return
     this.setData({ hoursSaving: true, hoursSaveError: '' })
     try {
-      await api.adminRequest('/admin/business-hours', 'PUT', { storeId: this.data.storeId, hours: e.detail.hours })
+      await api.adminRequest('/admin/business-hours', 'PUT', { storeId: this.data.storeId,expectedConfigRevision:e.detail.expectedConfigRevision||this.data.configRevision, hours: e.detail.hours,bookingAcceptance:e.detail.bookingAcceptance })
       const r = await api.adminGet('/admin/business-hours')
       const store = (r.stores || []).find(s => s.id === this.data.storeId)
       if (!store) throw new Error('营业时间读取失败')
-      this.setData({ hours: store.hours || [], hoursSaving: false })
+      this.setData({ configRevision:store.configRevision,hours: store.hours || [],bookingAcceptance:store.bookingAcceptance,hoursSaving: false })
       wx.showToast({ title: '营业时间已保存', icon: 'none' })
     } catch (err) {
-      this.setData({ hoursSaving: false, hoursSaveError: this.data.hoursTxt.failed || '保存失败' })
+      this.setData({ hoursSaving: false, hoursSaveError: err.message || this.data.hoursTxt.failed || '保存失败' })
       wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' })
     }
   },
 
-  addSpecial() {
-    wx.showModal({
-      title: '新增特殊日期(休息)', editable: true, placeholderText: '格式 2026-12-25',
-      success: async (r) => {
-        if (!r.confirm) return
-        const date = (r.content || '').trim()
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { wx.showToast({ title: '日期格式不对', icon: 'none' }); return }
-        try {
-          await api.adminPost('/admin/special-dates', { storeId: this.data.storeId, date, isClosed: true })
-          wx.showToast({ title: '已添加', icon: 'none' }); this.load()
-        } catch (err) { wx.showToast({ title: (err && err.message) || '添加失败', icon: 'none' }) }
-      },
-      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-    })
+  addSpecial() { this.setData({specialDraft:{date:'',isClosed:true,openTime:'',closeTime:'',latestStartTime:'',note:''},specialError:''}) },
+  closeSpecial(){if(!this.data.specialSaving)this.setData({specialDraft:null})},
+  specialField(e){if(!this.data.specialSaving)this.setData({['specialDraft.'+e.currentTarget.dataset.key]:e.detail.value,specialError:''})},
+  async saveSpecial(){
+    if(this.data.specialSaving||!this.data.specialDraft)return
+    this.setData({specialSaving:true,specialError:''})
+    try{
+      await api.adminPost('/admin/special-dates',{...this.data.specialDraft,storeId:this.data.storeId,expectedConfigRevision:this.data.configRevision})
+      this.setData({specialDraft:null});await this.load();wx.showToast({title:'特殊日期已保存',icon:'none'})
+    }catch(e){this.setData({specialError:e.message||'保存失败，输入已保留'})}finally{this.setData({specialSaving:false})}
   },
 
   delSpecial(e) {
@@ -130,7 +111,7 @@ Page({
       success: async (r) => {
         if (!r.confirm) return
         try {
-          await api.adminRequest(`/admin/special-dates/${date}?storeId=${encodeURIComponent(this.data.storeId)}`, 'DELETE')
+          await api.adminRequest(`/admin/special-dates/${date}?storeId=${encodeURIComponent(this.data.storeId)}&expectedConfigRevision=${encodeURIComponent(this.data.configRevision)}`, 'DELETE')
           wx.showToast({ title: '已删除', icon: 'none' }); this.load()
         } catch (err) { wx.showToast({ title: (err && err.message) || '删除失败', icon: 'none' }) }
       },

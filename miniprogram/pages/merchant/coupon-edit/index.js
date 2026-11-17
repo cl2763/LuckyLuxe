@@ -1,16 +1,18 @@
 const api = require('../../../utils/api')
+const {refreshStoreClock,storeCurrencyPrefix}=require('../../../utils/storeclock')
 
 Page({
   // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
-  onShow() { api.guardMerchant() },
+  async onShow(){if(!await api.guardOwner())return;await refreshStoreClock().catch(()=>{});this.setData({currency:storeCurrencyPrefix()})},
   data: {
     id: '', isNew: true,
     typeIdx: 0, types: [{ k: 'amount', label: '满减券' }, { k: 'percent', label: '折扣券' }],
     name: '', amount: '', percent: '', minSpend: '', validDays: '30', totalQty: '', active: true,
-    saving: false
+    saving: false,currency:'',categories:[],scopeCategoryIds:[],copyTemplate:false,issuedQty:0
   },
 
   onLoad(opt) {
+    this.loadCategories()
     if (opt && opt.id) {
       this.setData({ id: opt.id, isNew: false })
       wx.setNavigationBarTitle({ title: '编辑优惠券' })
@@ -31,11 +33,15 @@ Page({
         minSpend: c.minSpendCents ? String(c.minSpendCents / 100) : '',
         validDays: String(c.validDays || 30),
         totalQty: c.totalQty ? String(c.totalQty) : '',
-        active: c.isActive !== false
-      })
+        active: c.isActive !== false,scopeCategoryIds:c.scopeCategoryIds||[],issuedQty:c.issuedQty||0,copyTemplate:!!c.issuedQty
+      });this.updateCategoryChecks()
     } catch (e) { wx.showToast({ title: '加载失败', icon: 'none' }) }
   },
 
+  async loadCategories(){try{const r=await api.adminGet('/admin/pricing/categories');this.setData({categories:r.categories||[]});this.updateCategoryChecks()}catch(e){wx.showToast({title:'适用范围加载失败',icon:'none'})}},
+  updateCategoryChecks(){this.setData({categories:this.data.categories.map(c=>({...c,checked:this.data.scopeCategoryIds.includes(c.id)}))})},
+  onScope(e){this.setData({scopeCategoryIds:e.detail.value});this.updateCategoryChecks()},
+  onCopy(e){this.setData({copyTemplate:e.detail.value})},
   onType(e) { this.setData({ typeIdx: Number(e.detail.value) }) },
   onName(e) { this.setData({ name: e.detail.value }) },
   onAmount(e) { this.setData({ amount: e.detail.value }) },
@@ -53,7 +59,7 @@ Page({
     if (type === 'amount' && !(Number(amount) > 0)) { wx.showToast({ title: '请输入面额', icon: 'none' }); return }
     if (type === 'percent' && !(Number(percent) > 0)) { wx.showToast({ title: '请输入折扣', icon: 'none' }); return }
     const body = {
-      name: name.trim(), discountType: type,
+      scopeCategoryIds:this.data.scopeCategoryIds,name: name.trim(), discountType: type,
       amountCents: type === 'amount' ? Math.round((Number(amount) || 0) * 100) : 0,
       percentOff: type === 'percent' ? Math.round(Number(percent) || 0) : 0,
       minSpendCents: Math.round((Number(minSpend) || 0) * 100),
@@ -63,7 +69,7 @@ Page({
     }
     this.setData({ saving: true })
     try {
-      if (isNew) await api.adminPost('/admin/coupons', body)
+      if (isNew||this.data.copyTemplate) await api.adminPost('/admin/coupons', body)
       else await api.adminPatch(`/admin/coupons/${encodeURIComponent(id)}`, body)
       wx.showToast({ title: '已保存', icon: 'success' })
       setTimeout(() => wx.navigateBack(), 500)

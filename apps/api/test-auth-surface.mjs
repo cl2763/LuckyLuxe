@@ -1,3 +1,4 @@
+import {ensurePricingCategory} from './pricing-category-fixture.mjs'
 import { pendingCustomerFixture } from './test-migration-fixture.mjs'
 /* 商家接口门禁全量扫描(店主 2026-08-09 红线级指令)。
 
@@ -248,7 +249,7 @@ async function main() {
     return r.data
   }
   const tech2 = mustOk(await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `技乙${RUN}` }) }, PLATFORM), '建技师乙').technician
-  const fxCat = mustOk(await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: `fx${RUN}`, name: `范围类${RUN}` }) }, shop.token), '建大类').category
+  const fxCat = await ensurePricingCategory({base:BASE_URL,platformToken:PLATFORM,merchantToken:shop.token,body:{key:`fx${RUN}`,name:`范围类${RUN}`}})
   const fxSvc = mustOk(await request('/admin/pricing/items', {
     method: 'POST', body: JSON.stringify({ nameZh: `范围款${RUN}`, type: 'NAIL', categoryId: fxCat.id, itemKind: 'main', listPriceCents: 10000, memberPriceCents: 10000 })
   }, shop.token), '建服务项目').item

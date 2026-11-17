@@ -1,0 +1,7 @@
+// One-time credentials stay in this DOM only; never storage, audit, exports or URL.
+export function showAccountHandoff(handoff){return new Promise(resolve=>{
+ const d=document.createElement('dialog');d.style.cssText='padding:28px;max-width:540px;width:90vw;border:1px solid #ddd8cc;border-radius:8px';d.innerHTML='<h2>员工账号已创建</h2><p>初始密码只显示这一次。请妥善交付给该员工，首次登录需要本人修改。</p><label>用户名<input readonly data-user></label><label>初始密码<input readonly type="password" data-pass></label><div style="display:flex;gap:12px;margin-top:20px"><button data-show>显示密码</button><button data-copy>复制账号与初始密码</button></div><p role="status"></p><button data-close style="margin-top:20px">已妥善记录，关闭</button>';document.body.append(d);d.showModal();d.querySelector('[data-user]').value=handoff.username;d.querySelector('[data-pass]').value=handoff.initialPassword
+ d.querySelector('[data-show]').onclick=()=>{const p=d.querySelector('[data-pass]');p.type=p.type==='password'?'text':'password'}
+ d.querySelector('[data-copy]').onclick=async()=>{try{await navigator.clipboard.writeText('用户名：'+handoff.username+'\n初始密码：'+handoff.initialPassword);d.querySelector('[role=status]').textContent='已复制，请仅交付给对应员工。'}catch(e){d.querySelector('[role=status]').textContent='复制失败，请手动记录。'}}
+ d.oncancel=e=>e.preventDefault();d.querySelector('[data-close]').onclick=()=>{d.querySelector('[data-pass]').value='';handoff.initialPassword='';d.close();d.remove();resolve()}
+})}

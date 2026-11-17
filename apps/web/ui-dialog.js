@@ -56,7 +56,7 @@ window.UIDialog = (() => {
         <div class="section-row" style="justify-content:flex-end;gap:8px;margin-top:12px">
           <button class="ghost slim" data-uid="cancel" type="button">${esc(cancelText)}</button>
           <button class="primary slim" data-uid="ok" type="button">${esc(okText)}</button>
-        </div>`, { onKey: (e) => { if (e.key === 'Escape') done(null) } })
+        </div>`, { onKey: (e) => { if (e.key === 'Escape') e.preventDefault() } })
       const input = m.el.querySelector('.ui-dialog-input')
       const done = (v) => { m.close(); resolve(v) }
       m.el.querySelector('[data-uid="ok"]').addEventListener('click', () => done(input.value))
@@ -73,7 +73,7 @@ window.UIDialog = (() => {
         <div class="section-row" style="justify-content:flex-end;gap:8px;margin-top:12px">
           <button class="ghost slim" data-uid="cancel" type="button">${esc(cancelText)}</button>
           <button class="${danger ? 'danger' : 'primary'} slim" data-uid="ok" type="button">${esc(okText)}</button>
-        </div>`, { onKey: (e) => { if (e.key === 'Escape') done(false) } })
+        </div>`, { onKey: (e) => { if (e.key === 'Escape') e.preventDefault() } })
       const done = (v) => { m.close(); resolve(v) }
       m.el.querySelector('[data-uid="ok"]').addEventListener('click', () => done(true))
       m.el.querySelector('[data-uid="cancel"]').addEventListener('click', () => done(false))
@@ -87,7 +87,7 @@ window.UIDialog = (() => {
       const m = mount(`${head(title, hint)}
         <div class="section-row" style="justify-content:flex-end;margin-top:12px">
           <button class="primary slim" data-uid="ok" type="button">${esc(okText)}</button>
-        </div>`, { onKey: (e) => { if (e.key === 'Escape' || e.key === 'Enter') done() } })
+        </div>`, { onKey: (e) => { if (e.key === 'Enter') done() } })
       const done = () => { m.close(); resolve() }
       m.el.querySelector('[data-uid="ok"]').addEventListener('click', done)
       setTimeout(() => m.el.querySelector('[data-uid="ok"]').focus(), 0)

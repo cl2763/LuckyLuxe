@@ -10,6 +10,6 @@ window.DiscountWheel={mount(host,{value=null,onChange=()=>{},disabled=false}={})
  wheel.addEventListener('click',e=>{const b=e.target.closest('button');if(b)select(Number(b.dataset.index),true)});
  wheel.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','Home','End'].includes(e.key)){e.preventDefault();const i=options.findIndex(o=>o.rateBps===draft);select(e.key==='Home'?0:e.key==='End'?options.length-1:i+(e.key==='ArrowUp'?-1:1),true)}});
  host.querySelector('[data-confirm]').onclick=()=>{clearTimeout(timer);select(Math.round(wheel.scrollTop/height),false);selected=draft;showValue();dialog.close();onChange(selected)};
- host.querySelector('[data-cancel]').onclick=()=>{clearTimeout(timer);dialog.close()};dialog.addEventListener('cancel',()=>clearTimeout(timer));showValue();
+ host.querySelector('[data-cancel]').onclick=()=>{clearTimeout(timer);dialog.close()};dialog.addEventListener('cancel',e=>e.preventDefault());showValue();
  return {read:()=>selected,set:value=>{selected=value;showValue();if(dialog.open)select(options.findIndex(o=>o.rateBps===value),true);onChange(selected)}}
 }};

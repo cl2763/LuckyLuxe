@@ -242,9 +242,10 @@ const RW_EXEMPT = new Map([
      —— 今天一条都没有;有了必须写理由,不许只留个行号。 */
 ])
 const RW_EXEMPT_CAP = 0
-const rw = scanReadWriteTenant(src)
+const rwFiles=['local-server.mjs','store-setup-routes.mjs','operational-setup-routes.mjs','staff-account-setup-routes.mjs','recurring-setup-routes.mjs','staff-setup-routes.mjs']
+const rw=rwFiles.reduce((all,file)=>{const found=scanReadWriteTenant(readFileSync(join(ROOT,'apps/api',file),'utf8'));all.total+=found.total;all.bad.push(...found.bad.map(b=>file+': '+b));return all},{total:0,bad:[]})
 const rwBad = rw.bad.filter((b) => !RW_EXEMPT.has(b))
-check(`⑤b 读写同源:全仓 ${rw.total} 条带租户条件的语句里,`
+check(`⑤b 读写同源:主服务与本轮迁出模块 ${rw.total} 条带租户条件的语句里,`
   + '**同一路由段 · 同一张表 · 14 行内 · 一写一读而租户来源不同** 零处(命中要么修,要么进具名豁免)',
 rwBad.length === 0, rwBad.join(' | ').slice(0, 400))
 check(`⑤c 反向守:豁免清单具名且 ${RW_EXEMPT.size} <= 上限 ${RW_EXEMPT_CAP}(只许变短);扫描面条数下限 380`,

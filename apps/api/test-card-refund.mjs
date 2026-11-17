@@ -514,7 +514,7 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
     check('v1.1③-3 🔴 员工账号打退卡接口 = 403', false, `建员工号失败 ${JSON.stringify(acct.data).slice(0, 120)}`)
   }
   check('v1.1③-4 员工端**连按钮都不渲染**(不是点了报错)',
-    /owner\.role === 'owner' \? `<button class="ghost slim" data-account-adjust/.test(adminSrc), '入口没有按角色渲染')
+    /owner\.role === 'owner' \? `[^`]*<button class="ghost slim" data-account-adjust/.test(adminSrc), '入口没有按角色渲染')
 }
 
 /* 🔴 缓存失效(店主 2026-08-27 第三轮:两次"功能没生效"其实都是浏览器在跑旧 JS)。

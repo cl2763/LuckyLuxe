@@ -1,3 +1,4 @@
+const setupPreview=require('./setup-preview')
 const USE_LOCAL_SANDBOX = false // 正式提审构建
 const { realValue } = require('./placeholder-words.js')   // 11j 判据 A:占位词表两端同源(见该文件抬头)
 const publicCatalogCache = require('./public-catalog-cache')
@@ -98,6 +99,7 @@ function isLoggedIn() {
 }
 
 function getAdminAuth() {
+  if(setupPreview.active()){const p=setupPreview.get();return {accessToken:p.token,expiresAt:p.expiresAt,tenantId:p.tenantId,admin:{role:p.role}}}
   const auth = wx.getStorageSync(ADMIN_AUTH_KEY) || null
   if (!auth) return null
 
@@ -110,18 +112,22 @@ function getAdminAuth() {
 }
 
 function setAdminAuth(auth) {
+  if(setupPreview.active())throw Error('请先退出只读预览')
   adminMeCache = null
+  for(const key of ['lucky_hours_unset','lucky_hours_gate','lucky_admin_role'])wx.removeStorageSync(key)
   wx.setStorageSync(ADMIN_AUTH_KEY, Object.assign({}, auth, { apiBase: API_BASE }))
   return auth
 }
 
 function clearAdminAuth() {
+  if(setupPreview.active()){setupPreview.clear();return}
   adminMeCache = null
   wx.removeStorageSync(ADMIN_AUTH_KEY)
 }
 
 
 function currentTenant() {
+  if(setupPreview.active())return setupPreview.get().tenantId
   return wx.getStorageSync('lucky_tenant') || deploy.defaultTenantId || ''
 }
 const realWechatClaimKey = tenantId => `lucky_real_wechat_claim::${tenantId}`
@@ -166,7 +172,7 @@ function goPickStore() {
 }
 
 
-const publicPaths = new Set(['/shops', '/health', '/stores', '/services', '/portfolio', '/add-ons', '/service-categories'])
+const publicPaths = new Set(['/config-revision','/shops', '/health', '/stores', '/services', '/portfolio', '/add-ons', '/service-categories'])
 let renewingCustomer = null
 function contextChanged() { return Object.assign(new Error('门店已切换，请重试'), { code: 'STORE_CHANGED' }) }
 function publicRead(path) {
@@ -175,6 +181,7 @@ function publicRead(path) {
 }
 const inflight = require('./inflight')
 function request(path, method = 'GET', data, _retried) {
+  if(setupPreview.active())return Promise.reject(Error('请退出配置预览后使用顾客功能'))
   return inflight.run(JSON.stringify(['c',currentTenant(),getAuth()?.accessToken,path,data,_retried]),method==='GET',()=>customerRequest(path,method,data,_retried))
 }
 function customerRequest(path, method, data, _retried) {
@@ -228,6 +235,7 @@ function customerRequest(path, method, data, _retried) {
 }
 
 function adminRequest(path, method = 'GET', data) {
+  if(setupPreview.active())return setupPreview.request(API_BASE,path,method,data)
   return inflight.run(JSON.stringify(['a',getAdminAuth()?.accessToken,wx.getStorageSync('lucky_finance_key'),path,data]),method==='GET',()=>merchantRequest(path,method,data))
 }
 function merchantRequest(path, method, data) {
@@ -568,18 +576,10 @@ function miniMember(user = {}) {
 }
 
 
-let _addOnCatalog = null
-let _addOnCatalogAt = 0
-async function selectedAddOns(ids) {
+async function selectedAddOns(ids,serviceId) {
   if (!ids || !ids.length) return []
-  if (!_addOnCatalog || Date.now() - _addOnCatalogAt > 60000) {
-    _addOnCatalog = await getAddOns()
-    _addOnCatalogAt = Date.now()
-  }
-  return ids.map((id) => {
-    const item = _addOnCatalog.find((a) => a.id === id)
-    return item ? { id: item.id, name: item.name, priceCents: item.priceCents, durationMin: item.durationMin || 0 } : null
-  }).filter(Boolean)
+  const catalog=await getAddOns(serviceId)
+  return ids.map(id=>{const item=catalog.find(a=>a.id===id);if(!item)throw Error('附加服务已更新，请返回项目重新选择');return {id:item.id,name:item.name,priceCents:item.priceCents,durationMin:item.durationMin||0}})
 }
 
 async function getServices(type, lang) {
@@ -630,13 +630,13 @@ async function getStoreCurrency() {
   return { currency: data.currency || '', currencyDisplay: data.currencyDisplay || null, deposit: data.deposit || null }
 }
 
-async function getAddOns() {
+async function getAddOns(serviceId) {
   try {
-    const data = await request('/add-ons')
+    const data = await request('/add-ons'+(serviceId?'?serviceId='+encodeURIComponent(serviceId):''))
     return (data.addOns || []).map((item) => ({
       id: item.id,
       name: item.name,
-      price: Math.round(item.priceCents / 100),
+      price: item.priceCents / 100,
       priceCents: item.priceCents,
       durationMin: item.durationMin
     }))
@@ -684,16 +684,16 @@ async function getService(id, lang) {
 }
 
 async function getAvailability(serviceId, date, addOnIds, technicianId) {
-  const extraDurationMin = (await selectedAddOns(addOnIds)).reduce((total, item) => total + item.durationMin, 0)
+  const extraDurationMin = (await selectedAddOns(addOnIds,serviceId)).reduce((total, item) => total + item.durationMin, 0)
   try {
     const techQuery = technicianId ? `&technicianId=${technicianId}` : ''
     const storeId = await activeStoreId()   // D19:当前门店上下文,不写死
-    const data = await request(`/availability?storeId=${storeId}&serviceId=${serviceId}&date=${date}&extraDurationMin=${extraDurationMin}${techQuery}`)
+    const data = await request(`/availability?storeId=${storeId}&serviceId=${serviceId}&date=${date}&extraDurationMin=${extraDurationMin}&addOnIds=${encodeURIComponent(JSON.stringify(addOnIds||[]))}${techQuery}`)
     const firstGroup = data.slots && data.slots[0]
     return {
       technician: firstGroup ? firstGroup.technician : null,
       slots: firstGroup ? firstGroup.slots : [],
-      durationMin: data.durationMin
+      dayOpen:data.dayOpen,dayClose:data.dayClose,durationMin: data.durationMin,closed:data.closed,reason:data.reason,bookingMode:data.bookingMode,latestStartTime:data.latestStartTime,slotsByTech:data.slots
     }
   } catch (error) {
     throw error
@@ -711,7 +711,7 @@ async function getTechnicians(serviceId) {
 }
 
 
-async function bookingCheckoutPayload(items,remark,useBalance){const user=await ensureLogin(),store=await activeStoreId();return {useBalance:!!useBalance,items:await Promise.all(items.map(async x=>({clientItemId:x._id,userId:user.id,storeId:x.storeId||store,serviceId:x.serviceId,technicianId:x.appointmentInfo.technicianId,date:x.appointmentInfo.date,time:x.appointmentInfo.time,addOns:await selectedAddOns(x.appointmentInfo.addOns),referenceImages:x.appointmentInfo.referenceDataImages||x.appointmentInfo.referenceImages||[],sourceChannel:'wechat_miniprogram',notes:remark||x.appointmentInfo.remark||'',bookingDraftId:x.bookingDraftId||x.appointmentInfo.bookingDraftId||x.draftId||''})))}}
+async function bookingCheckoutPayload(items,remark,useBalance){const user=await ensureLogin(),store=await activeStoreId();return {useBalance:!!useBalance,items:await Promise.all(items.map(async x=>({clientItemId:x._id,userId:user.id,storeId:x.storeId||store,serviceId:x.serviceId,technicianId:x.appointmentInfo.technicianId,date:x.appointmentInfo.date,time:x.appointmentInfo.time,addOns:await selectedAddOns(x.appointmentInfo.addOns,x.serviceId),referenceImages:x.appointmentInfo.referenceDataImages||x.appointmentInfo.referenceImages||[],sourceChannel:'wechat_miniprogram',notes:remark||x.appointmentInfo.remark||'',bookingDraftId:x.bookingDraftId||x.appointmentInfo.bookingDraftId||x.draftId||''})))}}
 async function createBooking(cartItem, remark) {
   const user = await ensureLogin()
   const appointment = cartItem.appointmentInfo
@@ -724,7 +724,7 @@ async function createBooking(cartItem, remark) {
     technicianId,
     date: appointment.date,
     time: appointment.time,
-    addOns: await selectedAddOns(appointment.addOns),
+    addOns: await selectedAddOns(appointment.addOns,cartItem.serviceId),
     referenceImages: appointment.referenceDataImages || appointment.referenceImages || [],
     sourceChannel: appointment.sourceChannel || 'wechat_miniprogram',
     notes: remark || appointment.remark || '',
@@ -755,6 +755,7 @@ async function adminLogin(email, password, remember = true) {
   const ttlMs = (data.auth && data.auth.expiresIn ? data.auth.expiresIn : 30 * 86400) * 1000
   auth.expiresAt = Date.now() + ttlMs
   setAdminAuth(auth)
+  if(!auth.admin?.mustChangePassword)await adminMe(true)
   return auth
 }
 
@@ -898,7 +899,7 @@ function voidSignedDoc(docId, reason) {
 
 function getMySignedDocs() { return request('/my/signed-docs') }
 
-function getCachedRole() { return wx.getStorageSync('lucky_admin_role') || '' }
+function getCachedRole() { if(setupPreview.active())return setupPreview.get().role;return wx.getStorageSync('lucky_admin_role') || '' }
 function isOwner() { return getCachedRole() === 'owner' }
 
 
@@ -910,8 +911,9 @@ function goMerchantLogin() {
 
 
 const HOURS_SETUP_PAGE = 'pages/merchant/hours-setup/index'
-function hoursGateText() { try { return JSON.parse(wx.getStorageSync('lucky_hours_gate') || 'null') || {} } catch (e) { return {} } }
+function hoursGateText() { if(setupPreview.active())return setupPreview.get().hoursGateText||{};try { return JSON.parse(wx.getStorageSync('lucky_hours_gate') || 'null') || {} } catch (e) { return {} } }
 function enforceHoursGate() {
+  if(setupPreview.active())return false
   if (wx.getStorageSync('lucky_hours_unset') !== '1') return false
   const pages = getCurrentPages()
   const cur = pages[pages.length - 1]
@@ -958,10 +960,12 @@ async function financeUnlock(password, confirmPassword) {
 
 let adminMeCache = null
 async function adminMe(force = false) {
+  if(setupPreview.active()){const data=await adminRequest('/admin/auth/me');setupPreview.get().hoursGateText=data.hoursGateText||{};return data.admin}
   const auth = getAdminAuth()
   const token = auth && (auth.accessToken || auth.token)
   if (!force && adminMeCache && adminMeCache.token === token && Date.now() - adminMeCache.at < 5000) return adminMeCache.value
   const data = await adminRequest('/admin/auth/me')
+  if(token!==getAdminAuth()?.accessToken)throw contextChanged()
   if (data && data.admin && data.admin.role) wx.setStorageSync('lucky_admin_role', data.admin.role)
 
   wx.setStorageSync('lucky_hours_unset', data && data.hoursUnset ? '1' : '')
@@ -973,6 +977,7 @@ async function adminMe(force = false) {
 
 
 async function refreshMerchantAi() {
+  if(setupPreview.active())return !!setupPreview.get().entitlements?.features?.ai_customer_service?.enabled
   try {
     const d = await adminRequest('/admin/tenant/entitlements')
     const on = Boolean(d && d.entitlements && d.entitlements.features
@@ -981,7 +986,7 @@ async function refreshMerchantAi() {
     return on
   } catch (e) { return merchantHasAi() }
 }
-function merchantHasAi() { return wx.getStorageSync('lucky_merchant_ai') === true }
+function merchantHasAi() { if(setupPreview.active())return !!setupPreview.get().entitlements?.features?.ai_customer_service?.enabled;return wx.getStorageSync('lucky_merchant_ai') === true }
 
 async function getAdminDashboardData() {
   const [me, bookingsData, techniciansData] = await Promise.all([
@@ -1033,6 +1038,7 @@ async function refreshPhoneRequirement() {
 
 module.exports = {
   getMemberPricing:()=>request('/my/member-pricing'),
+  getConfigRevision:()=>request('/config-revision'),
   getMemberDocuments:()=>request('/my/member-documents'),
   getMemberGroupLink:id=>request('/my/member-document-groups/'+encodeURIComponent(id)+'/sign-link','POST',{}),
   phoneBindingRequired, refreshPhoneRequirement,

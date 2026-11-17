@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261115-deposit-flow1'
+const ADMIN_BUILD = '20261117-feedback1'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -12,13 +12,6 @@ function storeTimezone() {
 }
 function storeToday() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: storeTimezone(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-}
-function readStoredAuth() {
-  try {
-    return readJson('lucky-owner-auth') || JSON.parse(sessionStorage.getItem('lucky-owner-auth') || 'null')
-  } catch {
-    return readJson('lucky-owner-auth')
-  }
 }
 const owner = {
   token: '',
@@ -62,7 +55,7 @@ const owner = {
   tenantPlan: null,
   tenantKb: null,
   financeLedger: { month: '', data: null, rules: [], ledger: null, filterType: 'all', filterCategory: 'all', lockConfigured: undefined, lockEnabled: undefined, tab: 'trend' }, // D50-c③:进财务页第一眼=趋势
-  financeKey: sessionStorage.getItem('lucky-finance-key') || ''
+  financeKey: window.SetupPreview ? '' : sessionStorage.getItem('lucky-finance-key') || ''
 }
 const els = {
   adminBrandTitle: document.querySelector('#adminBrandTitle'),
@@ -330,7 +323,7 @@ function isOwnerRole() {
 }
 
 async function request(path, options = {}) {
-  const finishLoading = window.RequestIndicator?.begin() || (() => {})
+  const requestIdentity=ownerBearer(),finishLoading = window.RequestIndicator?.begin() || (() => {})
   try {
   const isPublic = Boolean(options.public)
   delete options.public
@@ -387,7 +380,7 @@ async function request(path, options = {}) {
     err.details = data.error?.details
     throw err
   }
-  return data
+  if(requestIdentity===ownerBearer())window.ConfigSync.saved(path,options,{storeName:owner.storeName,tenantId:owner.tenantId,context:()=>ownerBearer()===requestIdentity?owner.tenantId:null});return data
   } finally { finishLoading() }
 }
 
@@ -556,6 +549,7 @@ function applyLanguage() {
 }
 
 async function loadAll() {
+  if(window.SetupPreview)return window.SetupPreview.load({owner,request,setLocked,render,renderBrandSubtitle,loadMembershipPage,loadPricingPage,loadMembershipSettings,loadDepositSettings,loadSalaryPlansPanel,loadPerfTargets,loadStaffAccountsPanel})
   owner.token = els.tokenInput.value.trim()
   if (owner.token) localStorage.setItem('lucky-owner-token', owner.token)
   if (!ownerBearer()) {
@@ -568,7 +562,7 @@ async function loadAll() {
     request('/admin/technicians')
   ])
   owner.role = meData.admin?.role || owner.auth?.admin?.role || 'owner'; owner.hoursUnset = Boolean(meData.hoursUnset); owner.hoursGateText = meData.hoursGateText   // D84 旗标(图 v1.0)
-  owner.storeName = meData.admin?.storeName || ''   // D156:顶栏那行的唯一来源,取不到就空着让它出「—」
+  owner.tenantId = meData.admin?.tenantId; owner.storeName = meData.admin?.storeName || ''   // D156:顶栏那行的唯一来源,取不到就空着让它出「—」
   renderBrandSubtitle()
   const relatedData = Promise.allSettled([
     request('/admin/wechat/status'),
@@ -719,6 +713,7 @@ function renderForcePasswordChange() {
 }
 
 function ownerLogout() {
+  if(window.SetupPreview){window.SetupPreview.failed('预览访问已结束，请关闭后从平台重新打开。');return}
   owner.auth = null
   owner.role = 'owner'
   owner.token = ''
@@ -770,6 +765,7 @@ function setLocked(locked) {
 }
 
 function render() {
+  if(window.SetupPreview)return window.SetupPreview.draw({applyLanguage,renderAdminPages,renderServices,renderStoreSettings,renderScheduleWeek,applyStaffTab,renderRecurringRules})
   if (!owner.auth?.admin?.mustChangePassword && window.HoursSetup?.gate(owner, { request, escapeHtml, toast, reboot: loadAll })) return   // D84 强制设置闸(图 v1.0 合同一);改密先行=账户安全在前(图 v1.1 已追认为合同)
   applyLanguage()
   renderMetrics()
@@ -1424,7 +1420,7 @@ function showFinanceGuide(section = 'all') {
     event.stopPropagation()
     if (event.target.closest('[data-guide-close]')) overlay.remove()
   })
-  overlay.addEventListener('click', () => overlay.remove())
+  // Backdrop clicks preserve the open dialog.
   overlay.appendChild(panel)
   document.body.appendChild(overlay)
 }
@@ -1853,7 +1849,7 @@ function showFinanceInsights() {
     event.stopPropagation()
     if (event.target.closest('[data-guide-close]')) overlay.remove()
   })
-  overlay.addEventListener('click', () => overlay.remove())
+  // Backdrop clicks preserve the open dialog.
   overlay.appendChild(panel)
   document.body.appendChild(overlay)
   request('/admin/finance/insights', { method: 'POST', body: '{}' })
@@ -1941,7 +1937,7 @@ async function openGoalSetupModal() {
       } catch (error) { toast(error.message) }
     }
   })
-  overlay.addEventListener('click', () => overlay.remove())
+  // Backdrop clicks preserve the open dialog.
   overlay.appendChild(panel)
   document.body.appendChild(overlay)
 }
@@ -2461,7 +2457,7 @@ function openSalaryPlanPanel(techId, name) {
     event.stopPropagation()
     if (event.target.closest('[data-sp-close]')) overlay.remove()
   })
-  overlay.addEventListener('click', () => overlay.remove())
+  // Backdrop clicks preserve the open dialog.
   overlay.appendChild(panel)
   document.body.appendChild(overlay)
   salaryPlanEditing = techId == null ? null : { techId, name: name || '' }
@@ -2794,6 +2790,28 @@ function animateFinanceMetrics() {
   })
 }
 
+function renderRecurringRules(){
+  const fin=owner.financeLedger,expenseOptions=financeExpenseCategories().map(cat=>`<option value="${cat}">${cat}</option>`).join('')
+  const activeRules = (fin.rules || []).filter((rule) => rule.active)
+  els.financeRecurringSummary.textContent = activeRules.length
+    ? `${activeRules.length} ${owner.lang === 'zh' ? '条规则' : 'rules'} · ${cadText(activeRules.reduce((sum, rule) => sum + rule.amountCents, 0))}/${owner.lang === 'zh' ? '月' : 'mo'}`
+    : (owner.lang === 'zh' ? '未设置' : 'None')
+  els.financeRecurringBody.innerHTML = `
+    ${(fin.rules || []).length ? (fin.rules || []).map((rule) => `
+      <div class="finance-rule-row ${rule.active ? '' : 'disabled'}">
+        <span><strong>${escapeHtml(rule.name)}</strong>${rule.effectiveFrom?` <small>${escapeHtml(rule.effectiveFrom)} ${owner.lang==='zh'?'起生效':'onwards'}</small>`:''} · ${escapeHtml(rule.category)} · ${cadText(rule.amountCents)} · ${owner.lang === 'zh' ? `每月${rule.dayOfMonth}号` : `day ${rule.dayOfMonth}`}</span>
+        <button class="ghost slim" data-fin-rule-toggle="${escapeHtml(rule.id)}" data-fin-rule-next="${rule.active ? '0' : '1'}" type="button">${rule.active ? (owner.lang === 'zh' ? '停用' : 'Disable') : (owner.lang === 'zh' ? '启用' : 'Enable')}</button>
+      </div>`).join('') : `<p class="subtle">${owner.lang === 'zh' ? '还没有固定支出。房租、水电这类每月固定的,建一条规则后系统每月自动入账。' : 'No recurring expenses yet.'}</p>`}
+    <div class="finance-rule-add">
+      <input id="finRuleName" placeholder="${owner.lang === 'zh' ? '名称,如:店面房租' : 'Name'}">
+      <select id="finRuleCategory">${expenseOptions}</select>
+      <input id="finRuleAmount" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="${owner.lang === 'zh' ? '金额' : 'Amount'}">
+      <input id="finRuleDay" type="number" min="1" max="31" value="1" title="${owner.lang === 'zh' ? '每月几号' : 'Day of month'}">
+      <button class="primary slim" data-fin-rule-add type="button">${owner.lang === 'zh' ? '添加规则' : 'Add'}</button>
+    </div>
+  `
+}
+
 function renderFinancePage() {
   if (!els.financeMetrics) return
   renderFinanceProgress()
@@ -2808,24 +2826,7 @@ function renderFinancePage() {
   const expenseOptions = financeExpenseCategories().map((cat) => `<option value="${cat}">${cat}</option>`).join('')
   // 「记一笔」表单渲染 + 提交搬到 /web/finance-entry-form.js(08-29 边改边拆;付款方式收窄同批)
   window.FinanceEntryForm.render(els.financeQuickBody, fin, { zh: owner.lang === 'zh', expenseOptions, escapeHtml, storeToday })
-  const activeRules = (fin.rules || []).filter((rule) => rule.active)
-  els.financeRecurringSummary.textContent = activeRules.length
-    ? `${activeRules.length} ${owner.lang === 'zh' ? '条规则' : 'rules'} · ${cadText(activeRules.reduce((sum, rule) => sum + rule.amountCents, 0))}/${owner.lang === 'zh' ? '月' : 'mo'}`
-    : (owner.lang === 'zh' ? '未设置' : 'None')
-  els.financeRecurringBody.innerHTML = `
-    ${(fin.rules || []).length ? (fin.rules || []).map((rule) => `
-      <div class="finance-rule-row ${rule.active ? '' : 'disabled'}">
-        <span><strong>${escapeHtml(rule.name)}</strong> · ${escapeHtml(rule.category)} · ${cadText(rule.amountCents)} · ${owner.lang === 'zh' ? `每月${rule.dayOfMonth}号` : `day ${rule.dayOfMonth}`}</span>
-        <button class="ghost slim" data-fin-rule-toggle="${escapeHtml(rule.id)}" data-fin-rule-next="${rule.active ? '0' : '1'}" type="button">${rule.active ? (owner.lang === 'zh' ? '停用' : 'Disable') : (owner.lang === 'zh' ? '启用' : 'Enable')}</button>
-      </div>`).join('') : `<p class="subtle">${owner.lang === 'zh' ? '还没有固定支出。房租、水电这类每月固定的,建一条规则后系统每月自动入账。' : 'No recurring expenses yet.'}</p>`}
-    <div class="finance-rule-add">
-      <input id="finRuleName" placeholder="${owner.lang === 'zh' ? '名称,如:店面房租' : 'Name'}">
-      <select id="finRuleCategory">${expenseOptions}</select>
-      <input id="finRuleAmount" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="${owner.lang === 'zh' ? '金额' : 'Amount'}">
-      <input id="finRuleDay" type="number" min="1" max="31" value="1" title="${owner.lang === 'zh' ? '每月几号' : 'Day of month'}">
-      <button class="primary slim" data-fin-rule-add type="button">${owner.lang === 'zh' ? '添加规则' : 'Add'}</button>
-    </div>
-  `
+  renderRecurringRules()
   const ledger = fin.ledger
   els.financeLedgerSummary.textContent = ledger
     ? (ledger.valid ? (owner.lang === 'zh' ? `完整 ✓ (${ledger.count} 笔)` : `Intact ✓ (${ledger.count})`) : (owner.lang === 'zh' ? '⚠ 校验失败' : '⚠ Broken'))
@@ -2949,7 +2950,7 @@ function renderStoreSettings() {
             <div class="special-date-row">
               <strong>${row.date}</strong>
               <span>${row.isClosed ? (owner.lang === 'zh' ? '休息' : 'Closed') : `${row.openTime}–${row.closeTime}`}</span>
-              <span class="subtle">${escapeHtml(row.note || '')}</span>
+              <span class="subtle">${!row.isClosed&&store.bookingAcceptance?.mode==='latest_start'?'最晚开始 '+escapeHtml(store.bookingAcceptance.special?.[row.date]||row.closeTime)+' · ':''}${escapeHtml(row.note || '')}</span>
               <button class="ghost slim" data-special-date-delete="${row.date}" type="button">✕</button>
             </div>`).join('')}
         </div>` : `<p class="subtle">${owner.lang === 'zh' ? '暂无特殊日期。' : 'None yet.'}</p>`}
@@ -2961,12 +2962,13 @@ function renderStoreSettings() {
         </select>
         <input type="time" id="specialDateOpen" value="12:00" class="hidden">
         <input type="time" id="specialDateClose" value="17:00" class="hidden">
+        ${store.bookingAcceptance?.mode==='latest_start'?'<label class="hidden" id="specialDateLatestWrap">最晚开始（留空跟随结束）<input type="time" id="specialDateLatest"></label>':''}
         <input type="text" id="specialDateNote" placeholder="${owner.lang === 'zh' ? '备注,如:圣诞节' : 'Note, e.g. Christmas'}">
         <button class="ghost slim" data-special-date-add type="button">${owner.lang === 'zh' ? '添加' : 'Add'}</button>
       </div>
     </div>`
   window.HoursSetup.mountSettings(document.querySelector('#hoursSettingsMount'), {
-    storeId: store.id, lang: owner.lang, rows: store.hours || [], txt: owner.hoursGateText || {}, escapeHtml, toast, request,
+    storeId: store.id,configRevision:store.configRevision, bookingAcceptance:store.bookingAcceptance,lang: owner.lang, rows: store.hours || [], txt: owner.hoursGateText || {}, escapeHtml, toast, request,
     afterSave: async () => {
       const refreshed = await request('/admin/business-hours')
       owner.businessHoursStores = refreshed.stores || []
@@ -2993,7 +2995,7 @@ async function addSpecialDate() {
   await request('/admin/special-dates', {
     method: 'POST',
     body: JSON.stringify({
-      storeId: store.id,
+      storeId: store.id,expectedConfigRevision:store.configRevision,latestStartTime:document.querySelector('#specialDateLatest')?.value||null,
       date,
       isClosed,
       openTime: document.querySelector('#specialDateOpen')?.value,
@@ -3010,7 +3012,7 @@ async function addSpecialDate() {
 async function deleteSpecialDate(date) {
   const store = (owner.businessHoursStores || [])[0]
   if (!store) return
-  await request(`/admin/special-dates/${date}?storeId=${encodeURIComponent(store.id)}`, { method: 'DELETE' })
+  await request(`/admin/special-dates/${date}?storeId=${encodeURIComponent(store.id)}&expectedConfigRevision=${encodeURIComponent(store.configRevision)}`, { method: 'DELETE' })
   const refreshed = await request('/admin/business-hours')
   owner.businessHoursStores = refreshed.stores || []
   renderStoreSettings()
@@ -3835,7 +3837,7 @@ function scheduleCellState(techId, day) {
     return { working: override.isWorking, start: override.startTime, end: override.endTime, source: 'override' }
   }
   // 无记录 = 跟随门店:店开则默认上班(门店时段)
-  return { working: !day.isClosed, start: day.openTime, end: day.closeTime, source: 'default' }
+  return { working: !day.isClosed, start: day.openTime, end: day.bookingAcceptance?.mode==='latest_start'?(day.bookingAcceptance.latestStartTime||day.closeTime):day.closeTime, source: 'default' }
 }
 
 function renderScheduleWeek() {
@@ -3854,7 +3856,7 @@ function renderScheduleWeek() {
   const weekdayNames = zh ? ['日', '一', '二', '三', '四', '五', '六'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const today = storeToday()
   const countFor = (techId, date) => (week.bookingCounts || []).find((row) => row.technicianId === techId && row.date === date)?.count || 0
-  const techs = (week.technicians || []).filter((tech) => tech.isActive)
+  const techs = (week.technicians || []).filter((tech) => tech.isActive||(week.carryovers||[]).some(b=>b.technicianId===tech.id))
   const header = `<div class="swg-row swg-head">
     <div class="swg-tech-col">${zh ? '技师' : 'Tech'}</div>
     ${week.days.map((day) => `
@@ -3868,17 +3870,17 @@ function renderScheduleWeek() {
     <div class="swg-tech-col"><strong>${escapeHtml(tech.name)}</strong><small>${escapeHtml(tech.title || '')}</small></div>
     ${week.days.map((day) => {
       const state = scheduleCellState(tech.id, day)
-      const bookings = countFor(tech.id, day.date)
+      const bookings = countFor(tech.id, day.date),carry=(week.carryovers||[]).filter(b=>b.technicianId===tech.id&&b.date===day.date),carryLabel=carry.length?`<small class="swg-count">前日延续至 ${escapeHtml(carry.map(b=>b.endTime).sort().at(-1))}</small>`:''
       const conflict = state.working && day.isClosed
       const classes = ['swg-cell', state.working ? 'is-working' : 'is-off', conflict ? 'is-conflict' : '', day.date === today ? 'is-today' : ''].filter(Boolean).join(' ')
       const body = state.working
         ? `<strong>${state.start}–${state.end}</strong>${bookings ? `<small class="swg-count">${bookings} ${zh ? '单' : ''}</small>` : ''}${conflict ? `<small class="swg-warn">⚠ ${zh ? '店休日' : 'closed day'}</small>` : ''}`
         : `<strong>${zh ? '休' : 'Off'}</strong>${bookings ? `<small class="swg-warn">⚠ ${bookings} ${zh ? '单已约' : 'booked'}</small>` : ''}`
       return isOwnerRole()
-        ? `<button class="${classes}" data-swg-tech="${escapeHtml(tech.id)}" data-swg-date="${day.date}" type="button">${body}</button>`
+        ? `<button class="${classes}" data-swg-tech="${escapeHtml(tech.id)}" data-swg-date="${day.date}" type="button">${body}${carryLabel}</button>`
         : tech.id === owner.auth?.admin?.technicianId
           ? `<button class="${classes}" data-swg-request-date="${day.date}" type="button" title="${zh ? '申请调整我的排班' : 'Request my shift change'}">${body}</button>`
-          : `<div class="${classes}" aria-label="${escapeHtml(tech.name)} · ${day.date} · ${zh ? '只读' : 'Read only'}">${body}</div>`
+          : `<div class="${classes}" aria-label="${escapeHtml(tech.name)} · ${day.date} · ${zh ? '只读' : 'Read only'}">${body}${carryLabel}</div>`
     }).join('')}
   </div>`).join('')
   if (!isOwnerRole()) els.scheduleGridHint.textContent = zh ? '团队排班只读；仅可点击自己的格子申请调整，老板批准后生效。' : 'Team shifts are read-only. Request changes only for your own shifts.'
@@ -3997,6 +3999,7 @@ function renderTechnicianPerformance() {
   const rows = technicianPerformanceRows()
   els.addTechnicianButton?.classList.toggle('hidden', !isOwnerRole())
   els.salaryPlanButton?.classList.toggle('hidden', !isOwnerRole())
+  if(window.RecordTables&&!window.SetupPreview){const roster=document.querySelector('#employeeRoster');roster.hidden=!isOwnerRole();if(isOwnerRole()&&owner.adminPage==='schedule')window.RecordTables.mount(roster,'technicians',{request,money,dateOnly})}
   applyStaffTab() // 员工管理四板块可见性(S4:技师业绩/薪资方案/技师排班/账号管理)
   // S4:承载技师卡的那张「本月趋势」卡已删 —— 元素不在就不渲染(业绩排行说的是同一件事)
   if (!els.technicianPerformance) return
@@ -4024,7 +4027,7 @@ function renderTechnicianPerformance() {
       ${!isOwnerRole() && owner.myCompEstimate ? `<p class="subtle comp-estimate-note">${zh ? `底薪 ${money(owner.myCompEstimate.baseSalaryCents)} + 提成 ${money(owner.myCompEstimate.commissionCents)}(${owner.myCompEstimate.pct || 0}%),以老板月结确认为准。` : 'Base + commission; final amount confirmed at monthly settlement.'}</p>` : ''}
       ${isOwnerRole() ? `
       <div class="tech-manage-row">
-        <button class="ghost slim" data-tech-edit="${escapeHtml(tech.id)}" type="button">${zh ? '编辑资料' : 'Edit'}</button>
+        <button class="ghost slim" data-record-manage="technicians" data-record-id="${escapeHtml(tech.id)}" type="button">${zh?'删除 / 办理离职':'Remove / offboard'}</button><button class="ghost slim" data-tech-edit="${escapeHtml(tech.id)}" type="button">${zh ? '编辑资料' : 'Edit'}</button>
         <button class="ghost slim ${inactive ? '' : 'danger-ghost'}" data-tech-toggle="${escapeHtml(tech.id)}" type="button">${inactive ? (zh ? '恢复在职' : 'Reactivate') : (zh ? '停用' : 'Deactivate')}</button>
       </div>` : ''}
     </article>
@@ -4138,10 +4141,12 @@ const rfmTierOf = (c) => window.CustomerTags.rfmTierOf(c, owner.lang)
 
 
 function renderCustomers() {
+  if(window.SetupPreview?.customers)return window.SetupPreview.customers({owner,els,request,renderCustomers})
   if (owner.selectedCustomerId) {
     renderCustomerDetail()
     return
   }
+  if(isOwnerRole()&&window.RecordTables){window.RecordTables.mount(els.customerList,'customers',{request,money,dateOnly,query:owner.customerSearch||'',customers:owner.customers,order:window.CustomerTags.applyFilter(sortedCustomers(),owner.lang).map(x=>x.id),leading:window.CustomerTags.tierBar(owner.customers||[],{lang:owner.lang,request,rerender:renderCustomers})});return}
   const search = (owner.customerSearch || '').trim().toLowerCase()
   const customers = sortedCustomers().filter((customer) => {
     if (!search) return true
@@ -4166,7 +4171,7 @@ function renderCustomers() {
         <div class="inline-actions compact-actions customer-card-actions">
           <button class="ghost slim" data-customer-detail="${customer.id}" type="button">${t('viewCustomerFile')}</button>
           ${/* N-5 v1.1 ③:退卡是财务动作 —— 员工连按钮都不渲染(理由见 account-adjust.js) */''}
-          ${owner.role === 'owner' ? `<button class="ghost slim" data-account-adjust="${customer.id}" type="button">${owner.lang === 'zh' ? '账户调整' : 'Adjust'}</button>` : ''}
+          ${owner.role === 'owner' ? `<button class="ghost slim" data-record-manage="customers" data-record-id="${customer.id}" type="button">${owner.lang === 'zh' ? '删除 / 归档' : 'Remove / archive'}</button><button class="ghost slim" data-account-adjust="${customer.id}" type="button">${owner.lang === 'zh' ? '账户调整' : 'Adjust'}</button>` : ''}
           <button class="ghost slim" data-write-note="${customer.id}" data-name="${escapeHtml(customerName(customer))}" type="button">${owner.lang === 'zh' ? '写服务小记' : 'Note'}</button>
           <button class="ghost slim" data-ai-customer="${customer.id}" type="button">${owner.aiLoading === `customer:${customer.id}` ? t('aiProcessing') : t('aiCustomerInsight')}</button>
           ${(() => { const tr = rfmTierOf(customer); return tr && tr.k === 's' ? `<button class="ghost slim" data-recall-copy="${customer.id}" type="button">✦ ${owner.lang === 'zh' ? 'AI 召回' : 'Recall'}</button>` : '' })()}
@@ -4184,7 +4189,7 @@ function renderCustomers() {
 }
 
 function renderCustomerDetail() {
-  const customer = owner.customers.find((item) => item.id === owner.selectedCustomerId)
+  const customer = owner.customers.find((item) => item.id === owner.selectedCustomerId) || (owner.archivedCustomer?.id===owner.selectedCustomerId?owner.archivedCustomer:null)
   if (!customer) {
     owner.selectedCustomerId = ''
     renderCustomers()
@@ -4192,7 +4197,7 @@ function renderCustomerDetail() {
   }
   const bookings = customerBookings(customer.id)
   els.customerList.innerHTML = `
-    <section class="customer-detail-page">
+    <section class="customer-detail-page">${customer.archived?'<p class="empty-state">已归档顾客 · 历史资料保留，办理新业务前请先恢复档案。</p>':''}
       <button class="ghost slim" data-customer-back type="button">← ${t('backToCustomers')}</button>
       <article class="customer-detail-hero card">
         <div class="customer-avatar large">${customerName(customer).slice(0, 1).toUpperCase()}</div>
@@ -4894,8 +4899,9 @@ function openImageLightbox(src) {
   const image = document.createElement('img')
   image.src = src
   image.alt = 'preview'
+  const closeButton=document.createElement('button');closeButton.type='button';closeButton.textContent='×';closeButton.setAttribute('aria-label','关闭');closeButton.style.cssText='position:absolute;top:20px;right:20px;min-width:44px;min-height:44px';closeButton.onclick=()=>overlay.remove();overlay.appendChild(closeButton)
   overlay.appendChild(image)
-  overlay.addEventListener('click', () => overlay.remove())
+  // Backdrop clicks preserve the open dialog.
   document.body.appendChild(overlay)
 }
 
@@ -5758,6 +5764,7 @@ els.businessHoursEditor.addEventListener('change', (event) => {
     const showHours = event.target.value === 'hours'
     document.querySelector('#specialDateOpen')?.classList.toggle('hidden', !showHours)
     document.querySelector('#specialDateClose')?.classList.toggle('hidden', !showHours)
+    document.querySelector('#specialDateLatestWrap')?.classList.toggle('hidden', !showHours)
     return
   }
 })
@@ -6121,7 +6128,7 @@ async function loadMembershipPage() {
   // 展开保留 mall/tab(原整体重赋值会把刚拉的 mall 和当前页签抹掉——顺手修)
   membershipData = { ...membershipData, packages: p.packages || [], coupons: c.coupons || [], prizes: z.prizes || [], categories: cat.categories || [], timecardSettings: tcs }
   // 屏 C3 自定义发放:整区仅老板;员工端连请求都不发(后端同样 403,不靠前端自觉)
-  couponGrantState.grants = isOwnerRole()
+  couponGrantState.grants = isOwnerRole() && !window.SetupPreview
     ? (await request('/admin/coupon-grants').catch(() => ({ grants: [] }))).grants || []
     : []
   renderMembership()
@@ -6149,6 +6156,7 @@ const couponGrantState = {
 
 function renderCouponGrantSection() {
   if (!els.couponGrantCard) return
+  if(window.SetupPreview){els.couponGrantCard.classList.add('hidden');return}
   // 员工登录整区隐藏(设计图规则⓪:首版仅老板可见可发)
   els.couponGrantCard.classList.toggle('hidden', !isOwnerRole())
   if (!isOwnerRole()) return
@@ -6280,18 +6288,13 @@ function renderMembership() {
   if (!rl || !tl) return
   const pkgs = membershipData.packages
   /* S2批① 页签①:充值套餐(充X赠Y+上架商城开关);赠送口径句常驻 */
-  const rec = pkgs.filter((p) => p.kind !== 'times')
-  rl.innerHTML = rec.length ? rec.map((p) => `
-    <div class="service-admin-item${p.isActive ? '' : ' inactive'}">
-      <div><strong>充 ${mMoney(p.priceCents)}${p.bonusCents ? ` 赠 ${mMoney(p.bonusCents)}` : ''}</strong> <span class="subtle">${escapeHtml(p.name)}${p.isActive ? '' : ' · 已下架'}</span>
-        <div class="subtle">${p.bonusCents ? `到账 ${mMoney(p.priceCents + p.bonusCents)}(实收 ${mMoney(p.priceCents)}+赠送 ${mMoney(p.bonusCents)} 分行入账)· ` : `购买后余额 +${mMoney(p.priceCents)} · `}上架商城 ${p.mallVisible ? '✓' : '✗'}${p.benefits ? ' · ' + escapeHtml(p.benefits) : ''}</div>
-      </div>
-      <div class="row-actions">
-        <button class="ghost slim" data-pkg-mall="${p.id}" type="button">${p.mallVisible ? '撤出商城' : '上架商城'}</button>
-        <button class="ghost slim" data-pkg-edit="${p.id}" type="button">编辑</button>
-        <button class="ghost slim" data-pkg-toggle="${p.id}" type="button">${p.isActive ? '下架' : '上架'}</button>
-      </div>
-    </div>`).join('') : '<div class="empty-state">还没有充值套餐,点右上角新建(金额+赠送额,赠送可为 0)</div>'
+  const rec = pkgs.filter((p) => ['recharge','stored_value'].includes(p.kind))
+  const unknownPackages = pkgs.filter(p=>!['recharge','stored_value','times'].includes(p.kind))
+  rl.innerHTML = rec.length ? `<div class="package-table-wrap"><table class="package-table"><thead><tr><th>套餐名称</th><th>充值本金</th><th>赠送卡金</th><th>赠品</th><th>默认折扣</th><th>状态</th><th>操作</th></tr></thead><tbody>${rec.map(p=>`<tr class="${p.isActive?'':'inactive'}">
+    <td><strong>${escapeHtml(p.name)}</strong>${p.benefits?`<div class="subtle">${escapeHtml(p.benefits)}</div>`:''}</td><td>${mMoney(p.priceCents)}</td><td>${mMoney(p.bonusCents||0)}</td><td>${escapeHtml((p.giftItems||[]).map(g=>g.name+' × '+g.quantity).join('、')||'—')}</td>
+    <td>${p.defaultPersonalDiscount?.rateBps==null?'沿用会员原折扣':p.defaultPersonalDiscount.rateBps===10000?'无折扣':p.defaultPersonalDiscount.rateBps/1000+' 折'}</td><td>${p.isActive?'在售':'已下架'}<div class="subtle">${p.mallVisible?'顾客端展示':'顾客端隐藏'}</div></td>
+    <td><div class="package-actions"><button class="ghost slim" data-pkg-edit="${escapeHtml(p.id)}" type="button">编辑</button><details><summary>更多</summary><div class="package-more"><button class="ghost slim" data-pkg-mall="${escapeHtml(p.id)}" type="button">${p.mallVisible?'撤出商城':'上架商城'}</button><button class="ghost slim" data-pkg-toggle="${escapeHtml(p.id)}" type="button">${p.isActive?'下架':'上架'}</button><button class="ghost slim" data-record-manage="packages" data-record-id="${escapeHtml(p.id)}" type="button">删除 / 归档</button></div></details></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">还没有充值套餐，点右上角新建（金额+赠送额，赠送可为 0）</div>'
+  if(unknownPackages.length)rl.insertAdjacentHTML('afterbegin',`<div class="empty-state">有 ${unknownPackages.length} 个套餐类型需要平台核对；原数据已保留。</div>`)
   /* 页签②:次卡(名称/次数/价格/关联项目组/有效期) */
   const tms = pkgs.filter((p) => p.kind === 'times')
   tl.innerHTML = tms.length ? tms.map((p) => `
@@ -6365,31 +6368,6 @@ function renderTimecardSettings() {
    fields: [{ key, label, type: 'text'|'number'|'select'|'checkbox', value, placeholder, options: [[v,label]], hint }] */
 function openFormModal(options) { return window.FormModal.open(options,{escapeHtml,toast}) }
 
-async function saveCoupon(existing) {
-  // D50:prompt 链 → 页内表单弹层
-  openFormModal({
-    title: existing ? '编辑优惠券' : '新建优惠券',
-    fields: [
-      { key: 'name', label: '券名称', type: 'text', value: existing ? existing.name : '', placeholder: '如 满200减30' },
-      { key: 'discountType', label: '类型', type: 'select', value: existing ? existing.discountType : 'amount', options: [['amount', '满减券(减固定金额)'], ['percent', '折扣券(立减百分比)']] },
-      { key: 'amount', label: '面额(满减券用)', type: 'number', value: existing && existing.discountType !== 'percent' ? existing.amountCents / 100 : '' },
-      { key: 'percent', label: '立减 %(折扣券用)', type: 'number', value: existing && existing.discountType === 'percent' ? existing.percentOff : '' },
-      { key: 'minSpend', label: '使用门槛(0=无门槛)', type: 'number', value: existing ? existing.minSpendCents / 100 : 0 },
-      { key: 'validDays', label: '有效天数', type: 'number', value: existing ? existing.validDays : 30 },
-      { key: 'totalQty', label: '发放总量(0=不限量)', type: 'number', value: existing && existing.totalQty ? existing.totalQty : 0 }
-    ],
-    onSave: async (v) => {
-      if (!String(v.name || '').trim()) { toast('券名称必填'); return false }
-      const body = { name: String(v.name).trim(), discountType: v.discountType === 'percent' ? 'percent' : 'amount', minSpendCents: mCents(v.minSpend || 0), validDays: Math.round(Number(v.validDays) || 30), totalQty: Math.round(Number(v.totalQty) || 0) }
-      if (body.discountType === 'amount') body.amountCents = mCents(v.amount)
-      else body.percentOff = Math.round(Number(v.percent) || 0)
-      if (existing) await request(`/admin/coupons/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
-      else await request('/admin/coupons', { method: 'POST', body: JSON.stringify(body) })
-      toast('已保存')
-      await loadMembershipPage()
-    }
-  })
-}
 // 2026-08-02 积分商城:奖品增改(奖品=券,可当场建券,流程参考小程序 points-mall 的 save())
 async function savePrize(existing) {
   // D50-c②(店主翻案):单弹层两态——「选现有券 / 当场新建券」,券字段就地展开(showIf),禁嵌套弹层
@@ -6850,7 +6828,7 @@ async function loadPricingPage() {
 function renderPricing() {
   if (!els.pricingPage) return
   /* S1(图=合同):一页两模块。模块①上架服务=顾客橱窗;模块②结算单目录=原价目表三子页签整体并入。 */
-  const mod = pricingState.module || 'storefront'
+  const mod = pricingState.module || 'storefront';const addonHost=document.querySelector('#bookingAddonsPanel');addonHost?.classList.toggle('hidden',mod!=='bookingAddons');if(mod==='bookingAddons')window.BookingAddons.mount(addonHost,{request,readOnly:!!window.SetupPreview||owner.auth?.admin?.role!=='owner'})
   document.querySelectorAll('[data-pricing-module]').forEach((btn) => btn.classList.toggle('active', btn.dataset.pricingModule === mod))
   document.querySelector('#storefrontPanel')?.classList.toggle('hidden', mod !== 'storefront')
   document.querySelector('#pricingTabs')?.classList.toggle('hidden', mod !== 'catalog')
@@ -7494,7 +7472,7 @@ if (els.storeSettingsPage) {
       if (event.target.closest('#dpSave')) {
         await request('/admin/deposit-config', {
           method: 'PUT',
-          body: JSON.stringify({ config: collectDepositForm() })
+          body: JSON.stringify({ config: {...collectDepositForm(),expectedConfigRevision:depositSettings.config.configRevision} })
         })
         await loadDepositSettings()
         toast(pzh() ? '定金规则已保存,顾客端与 AI 立即生效' : 'Saved')
@@ -7542,3 +7520,9 @@ if (els.storeSettingsPage) {
 }
 
 document.querySelector('#createCustomerButton').addEventListener('click', () => { if (isOwnerRole()) window.CustomerCreate.open({request,onSaved:async(c)=>{await loadAll();owner.selectedCustomerId=c.id;renderCustomers();toast('顾客档案已就绪')}}) })
+
+document.getElementById('setupOwnerReview')?.addEventListener('click',()=>window.SetupOwnerReview.open({request,escapeHtml}))
+
+if(!window.SetupPreview)window.ConfigSync.start({request,path:'/admin/config-revision',context:()=>ownerBearer()+'|'+owner.adminPage,enabled:()=>!!ownerBearer(),canRefresh:()=>['membership','pricing'].includes(owner.adminPage)&&pricingState.module!=='bookingAddons'&&!document.querySelector('.form-modal-overlay,.settlement-overlay'),refresh:async force=>{if(owner.adminPage==='membership')await loadMembershipPage();else if(owner.adminPage==='pricing')await loadPricingPage();else if(force)await loadAll()}})
+
+document.addEventListener('click',e=>{const b=e.target.closest('[data-record-manage]');if(b&&isOwnerRole())window.RecordLifecycle.open(b.dataset.recordManage,{request,refresh:loadAll,toast,recordId:b.dataset.recordId,openCustomer:async id=>{const d=await request('/admin/customers?archivedId='+encodeURIComponent(id));if(!d.customers[0])throw Error('本店没有这份档案');owner.archivedCustomer=d.customers[0];owner.selectedCustomerId=id;owner.selectedBookingId='';owner.adminPage='customers';render()}})})

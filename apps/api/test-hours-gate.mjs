@@ -167,7 +167,7 @@ const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error
     return {
       querySelector: (sel) => els[sel] || null,
       createElement: () => {
-        const el = { id: '', innerHTML: '', querySelectorAll: () => [], querySelector: () => null, remove() { delete els['#hoursSetupWall'] } }
+        const el = { id: '', innerHTML: '', addEventListener(){}, querySelectorAll: () => [], querySelector: () => null, remove() { delete els['#hoursSetupWall'] } }
         return el
       },
       body: { appendChild: (el) => { els['#' + el.id] = el } }
@@ -219,7 +219,7 @@ const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error
 {
   const ctx2 = { window: {}, document: (() => {
     const els = {}
-    return { querySelector: (sel) => els[sel] || null, createElement: () => ({ id: '', innerHTML: '', querySelectorAll: () => [], querySelector: () => null, remove() {} }), body: { appendChild: (el) => { els['#' + el.id] = el } } }
+    return { querySelector: (sel) => els[sel] || null, createElement: () => ({ id: '', innerHTML: '', addEventListener(){}, querySelectorAll: () => [], querySelector: () => null, remove() {} }), body: { appendChild: (el) => { els['#' + el.id] = el } } }
   })() }
   vm.createContext(ctx2)
   vm.runInContext(readFileSync(new URL('../web/hours-setup.js', import.meta.url), 'utf8'), ctx2)
@@ -255,8 +255,8 @@ const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error
 
 /* ===== 裁定2(08-30c)收敛锚点:营业时间表单=一份组件两处挂载,旧编辑器死净 ===== */
 {
-  const compJs = readFileSync(new URL('../../miniprogram/components/hours-form/index.js', import.meta.url), 'utf8')
-  const compWxml = readFileSync(new URL('../../miniprogram/components/hours-form/index.wxml', import.meta.url), 'utf8')
+  const compJs = readFileSync(new URL('../../miniprogram/pages/merchant/components/hours-form/index.js', import.meta.url), 'utf8')
+  const compWxml = readFileSync(new URL('../../miniprogram/pages/merchant/components/hours-form/index.wxml', import.meta.url), 'utf8')
   check('🔴 裁定2:hours-form 组件在(七行 switch+picker+save 事件)',
     compJs.includes("triggerEvent('save'") && compWxml.includes('<switch') && compWxml.includes('<picker'))
   const setupWxml = readFileSync(new URL('../../miniprogram/pages/merchant/hours-setup/index.wxml', import.meta.url), 'utf8')
@@ -267,7 +267,7 @@ const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error
   const hfTag = /<hours-form[\s/>]/
   check('🔴 裁定2:小程序两处挂载同一组件(强制页+门店设置,usingComponents 同路径)',
     hfTag.test(setupWxml) && hfTag.test(storeWxml)
-    && setupJson.includes('/components/hours-form/index') && storeJson.includes('/components/hours-form/index'))
+    && setupJson.includes('/pages/merchant/components/hours-form/index') && storeJson.includes('/pages/merchant/components/hours-form/index'))
   const storeJs = stripJs(readFileSync(new URL('../../miniprogram/pages/merchant/store/index.js', import.meta.url), 'utf8'))
   check('裁定2:门店设置旧编辑器死净(零 toggleDay/saveHours 旧手柄,零 10:00 前端预填编数)',
     !storeJs.includes('saveHours') && !storeJs.includes("openTime: h.openTime || '10:00'"))
