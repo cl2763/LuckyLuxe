@@ -90,7 +90,7 @@ const {SANDBOX_URL:SANDBOX}=await import('./test-need-sandbox.mjs')
 const { ensureSandbox } = await import('./test-need-sandbox.mjs')
 const sb = await ensureSandbox({ label: '[correction-reason]' })
 if (!sb.ok) {
-  console.log('   账本现测一律只打 4310(店主 03e:本机库 4128 对现测关门)')
+  throw new Error('纠错行为检查前置沙箱不可用；不得把未跑行为检查记为通过')
 } else {
   const H = { authorization: 'Bearer owner-demo-token', 'x-admin-tenant-id': 'lucky-luxe', 'content-type': 'application/json' }
   const probe = async (url) => {

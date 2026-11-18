@@ -23,7 +23,7 @@
       </view>
 
       <view wx:if="{{!member.profileComplete}}" class="profile-pending">
-        <view class="profile-pending-title">{{lang === 'en' ? 'Signed in with WeChat' : '微信身份已登录'}}</view>
+        <view class="profile-pending-title">{{lang === 'en' ? 'Signed in' : '已登录'}}</view>
         <view class="profile-pending-desc">{{lang === 'en' ? 'Avatar and nickname can be completed later. Member data and booking access are already available.' : '头像昵称可稍后完善，不影响查看会员资料、订单与预约。'}}</view>
         <button class="profile-pending-btn" bindtap="openProfilePanel">{{lang === 'en' ? 'Complete profile' : '完善头像昵称'}}</button>
       </view>
@@ -220,7 +220,7 @@
       <view wx:if="{{authModalMode === 'login'}}" class="simple-login-body">
         <img-placeholder class="simple-login-avatar" src="" img-class="simple-login-avatar" text="没有头像"></img-placeholder>
         <view class="simple-login-title">{{lang === 'en' ? 'Youji 有迹' : '有迹'}}</view>
-        <view class="simple-login-desc">{{lang === 'en' ? 'Sign in with WeChat to view orders and member benefits.' : '通过微信登录并授权绑定手机号后，可查看订单与会员权益。'}}</view>
+        <view class="simple-login-desc">{{lang === 'en' ? 'Sign in with your phone number to view orders and member benefits.' : '使用手机号快捷登录后，可查看订单与会员权益。'}}</view>
       </view>
 
       <view wx:else class="profile-edit-body">
@@ -232,16 +232,16 @@
           
           <view class="profile-avatar-copy">
             <text>{{authProfile.avatarUrl ? (lang === 'en' ? 'Avatar selected' : '已选择头像') : (lang === 'en' ? 'Avatar' : '头像')}}</text>
-            <text>{{lang === 'en' ? 'Use the native WeChat avatar picker.' : '使用微信原生头像选择器。'}}</text>
+            <text>{{lang === 'en' ? 'Choose an avatar for your profile.' : '选择用于个人资料展示的头像。'}}</text>
           </view>
         </view>
         <button class="native-avatar-button" open-type="chooseAvatar" bindtap="onAvatarTap" bindchooseavatar="onChooseAvatar">
-          {{authProfile.avatarUrl ? (lang === 'en' ? 'Choose another WeChat avatar' : '重新选择微信头像') : (lang === 'en' ? 'Choose WeChat avatar' : '选择微信头像')}}
+          {{authProfile.avatarUrl ? (lang === 'en' ? 'Choose another avatar' : '重新选择头像') : (lang === 'en' ? 'Choose avatar' : '选择头像')}}
         </button>
 
         <view class="profile-field">
-          <view class="profile-label">{{lang === 'en' ? 'WeChat nickname' : '微信昵称'}}</view>
-          <input class="profile-input" type="nickname" placeholder="{{lang === 'en' ? 'Tap to use nickname suggestions' : '点击输入，可使用微信昵称建议'}}" value="{{authProfile.nickname}}" bindinput="inputNickname" />
+          <view class="profile-label">{{lang === 'en' ? 'Nickname' : '昵称'}}</view>
+          <input class="profile-input" type="nickname" placeholder="{{lang === 'en' ? 'Tap to use nickname suggestions' : '点击输入，可使用昵称建议'}}" value="{{authProfile.nickname}}" bindinput="inputNickname" />
         </view>
       </view>
 
@@ -250,14 +250,14 @@
           <view class="privacy-box {{authProfile.privacyChecked ? 'checked' : ''}}">{{authProfile.privacyChecked ? '✓' : ''}}</view>
           <view class="privacy-copy">
             <text class="privacy-main">{{lang === 'en' ? 'I have read and agree to the Youji privacy policy.' : '我已阅读并同意「有迹」隐私政策'}}</text>
-            <text class="privacy-sub">{{lang === 'en' ? 'Authorize WeChat login for customer services.' : '授权使用微信登录顾客服务'}}</text>
+            <text class="privacy-sub">{{lang === 'en' ? 'Your phone number is used for sign-in and in-store service.' : '手机号用于登录和门店服务联系'}}</text>
           </view>
         </button>
         <view class="privacy-policy-link" hover-class="tap-feedback" bindtap="openPrivacyPolicy">{{lang === 'en' ? 'Read privacy policy' : '查看隐私保护指引'}}</view>
         <view wx:if="{{phoneStep}}" class="auth-desc">{{authProfile.phoneMessage}}</view>
-        <button wx:if="{{phoneStep}}" class="finish-button" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" disabled="{{phoneBusy}}">{{lang === 'en' ? 'Authorize phone and sign in' : '授权手机号并完成登录'}}</button>
+        <button wx:if="{{phoneStep}}" class="finish-button" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" disabled="{{phoneBusy}}">{{lang === 'en' ? 'Quick phone sign-in' : '手机号快捷登录'}}</button>
         <button wx:else class="finish-button {{canFinishLogin ? '' : 'disabled'}}" disabled="{{!canFinishLogin}}" bindtap="finishLogin">
-          {{authModalMode === 'profile' ? (lang === 'en' ? 'Save profile' : '保存资料') : (lang === 'en' ? 'WeChat one-tap login' : '微信一键登录')}}
+          {{authModalMode === 'profile' ? (lang === 'en' ? 'Save profile' : '保存资料') : (lang === 'en' ? 'Quick phone sign-in' : '手机号快捷登录')}}
         </button>
       </view>
     </view>

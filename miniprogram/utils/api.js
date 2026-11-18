@@ -426,7 +426,7 @@ function wxLoginCode() {
     wx.login({
       success(res) {
         if (res.code) resolve(res.code)
-        else reject(new Error('微信登录失败'))
+        else reject(new Error('登录失败，请重试'))
       },
       fail: reject
     })

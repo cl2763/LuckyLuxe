@@ -139,7 +139,7 @@ Page({
       : this.guestMember(lang)
     if (isLoggedIn && !member.profileComplete) {
       member = Object.assign({}, member, {
-        nickname: member.nickname || (lang === 'en' ? 'WeChat User' : '微信用户'),   // 假数回落红线:没昵称就落「微信用户」,**不许回落到库 id / 会员码**(那是两个别的语义)
+        nickname: member.nickname || (lang === 'en' ? 'Customer' : '顾客'),   // 假数回落红线:没昵称就落「顾客」,**不许回落到库 id / 会员码**(那是两个别的语义)
         avatarUrl: member.avatarUrl || DEFAULT_AVATAR
       })
     }

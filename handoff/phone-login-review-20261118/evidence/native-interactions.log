@@ -1,0 +1,11 @@
+Page pages/me/index logged in false
+PASS actual open/close 1
+PASS actual open/close 2
+PASS actual open/close 3
+PASS actual open/close 4
+PASS actual open/close 5
+PASS neutral actual render zh/light initial and staged phone-step; native entry and close
+PASS neutral actual render zh/dark initial and staged phone-step; native entry and close
+PASS neutral actual render en/light initial and staged phone-step; native entry and close
+PASS neutral actual render en/dark initial and staged phone-step; native entry and close
+PASS screenshot evidence saved; no production calls, no real phone permission simulated as verified

@@ -201,7 +201,7 @@
     "booking-subscriptions": 2,
     "store-navigation": 2,
     "hero-receipt": 2,
-    "native-phone-login": 3,
+    "native-phone-login": 4,
     "store-guide": 3,
     "subscription-scope": 2,
     "hero-upload": 1,
@@ -223,13 +223,14 @@
     "platform-setup-workflow": 53,
     "platform-setup-presentation": 15,
     "platform-recurring-date": 11,
-    "mini-package-feedback": 6
+    "mini-package-feedback": 6,
+    "config-write-lock": 8
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
     "说明": "棘轮双基线(店主 09-08 裁,05r 补三):预检取 min(上一提交行数, 这里记的历史最低)。只许写小不许写大 —— 写大预检自己红。治的是「红着提交一次,下一次基线跟着抬」那个口子。",
-    "apps/api/local-server.mjs": 16715,
-    "apps/web/admin.js": 7544
+    "apps/api/local-server.mjs": 16246,
+    "apps/web/admin.js": 7528
   },
   "小程序档_移出主档_2026-09-14": {
     "说明": "裁#91(店主 07l §四)选②:这三把刀移到**小程序自动化独立档**,单独跑单独报数。基线从主档移出。",

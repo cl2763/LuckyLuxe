@@ -96,8 +96,8 @@ Page({
       wx.showModal({
         title: this.data.lang === 'en' ? 'Sign in required' : '需要登录',
         content: this.data.lang === 'en'
-          ? 'Please sign in with WeChat before checkout and deposit payment.'
-          : '结算和支付定金前需要先完成微信登录。',
+          ? 'Please use quick phone sign-in before checkout or booking deposit arrangements.'
+          : '结算和处理预约定金前，请先完成手机号快捷登录。',
         confirmText: this.data.lang === 'en' ? 'Go sign in' : '去登录',
         cancelText: this.data.lang === 'en' ? 'Cancel' : '取消',
         confirmColor: '#C6A27E',
