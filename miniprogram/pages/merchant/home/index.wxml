@@ -78,7 +78,7 @@
       </view>
 
       <!-- AI 今日一句(只读已生成的,不为首页新起模型调用) -->
-      <view class="dh-card dh-ai" wx:if="{{dh.aiLine}}" data-dh-ai-line>{{dh.aiLine}}</view>
+      <view class="dh-card dh-ai" wx:if="{{dh.aiLine}}" data-dh-ai-line><view class="ai-generated-label">AI生成 · 请核对后使用</view><view>{{dh.aiLine}}</view></view>
       <view class="dh-card dh-ai" wx:else data-dh-ai-none>
         <view>{{briefLoading ? '正在生成今日简报…' : '今天还没有 AI 日报摘要'}}</view>
         <view class="dh-go" hover-class="tap-feedback" wx:if="{{!briefLoading && aiEnabled}}" bindtap="generateBrief">生成 AI 日报 ›</view>

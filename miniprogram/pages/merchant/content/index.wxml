@@ -16,6 +16,7 @@
 
   <block wx:if="{{result}}">
     <view class="card">
+      <view class="ai-generated-label">AI生成 · 请核对后使用</view>
       <view class="lab">标题</view>
       <view class="title">{{result.title}}</view>
       <view class="lab">正文</view>

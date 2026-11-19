@@ -577,7 +577,7 @@ Page({
     const items = this.data.digest.items
     if (!items.length) return
     const text = items.map((x) => `【${x.name}】${x.message}`).join('\n\n')
-    wx.setClipboardData({ data: text, success: () => wx.showToast({ title: `已复制 ${items.length} 条话术,粘微信逐个发`, icon: 'none', duration: 2200 }) ,
+    wx.setClipboardData({ data: 'AI生成\n' + text, success: () => wx.showToast({ title: `已复制 ${items.length} 条话术,粘微信逐个发`, icon: 'none', duration: 2200 }) ,
       fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
     })
   },

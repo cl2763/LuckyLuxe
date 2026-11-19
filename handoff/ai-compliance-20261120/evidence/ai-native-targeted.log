@@ -1,0 +1,20 @@
+PASS mini actual takeover/reply/release cycle 1
+PASS mini actual takeover/reply/release cycle 2
+PASS mini actual takeover/reply/release cycle 3
+PASS mini actual takeover/reply/release cycle 4
+PASS mini actual takeover/reply/release cycle 5
+PASS native rendered disclosure content light
+PASS no result no label content light
+PASS native rendered disclosure work-detail light
+PASS no result no label work-detail light
+PASS native rendered disclosure service-note light
+PASS native rendered disclosure customer-profile light
+PASS native rendered disclosure home light
+PASS native rendered disclosure content dark
+PASS no result no label content dark
+PASS native rendered disclosure work-detail dark
+PASS no result no label work-detail dark
+PASS native rendered disclosure service-note dark
+PASS native rendered disclosure customer-profile dark
+PASS native rendered disclosure home dark
+PASS customer home has no retired chatbot entry

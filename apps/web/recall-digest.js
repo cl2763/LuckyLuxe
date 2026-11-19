@@ -19,13 +19,13 @@ window.RecallDigest = (function () {
         <div class="recall-items hidden">
           ${(d.items || []).map((i) => `
             <div class="recall-item"><strong>${escapeHtml(i.name || '')}</strong> <span class="subtle">${i.lastVisitDays != null ? `${i.lastVisitDays} 天没来` : ''}</span>
-              <p>${escapeHtml(i.message || '')}</p>
+              <span class="ai-generated-label">AI生成 · 请核对后使用</span><p>${escapeHtml(i.message || '')}</p>
               <button class="ghost slim" data-rcd-copy="${escapeHtml(i.message || '')}" type="button">复制</button></div>`).join('')}
         </div>
       </div>`
     el.querySelector('[data-rcd-toggle]')?.addEventListener('click', () => el.querySelector('.recall-items').classList.toggle('hidden'))
     el.querySelectorAll('[data-rcd-copy]').forEach((b) => b.addEventListener('click', async () => {
-      try { await navigator.clipboard.writeText(b.dataset.rcdCopy); toast('话术已复制') } catch (e) { toast('复制失败') }
+      try { await navigator.clipboard.writeText('AI生成\n' + b.dataset.rcdCopy); toast('话术已复制') } catch (e) { toast('复制失败') }
     }))
   }
   return { mount }

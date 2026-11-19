@@ -108,7 +108,7 @@
       <button class="ai-btn" bindtap="analyzeReference" disabled="{{!referenceImages.length || isAnalyzingReference}}">
         {{isAnalyzingReference ? (lang === 'en' ? 'Analyzing' : '分析中') : (lang === 'en' ? 'Analyze' : 'AI 分析')}}
       </button>
-      <view wx:if="{{referenceAnalysis}}" class="ai-result">
+      <view wx:if="{{referenceAnalysis}}" class="ai-result"><view class="ai-generated-label">AI生成 · 请核对后使用</view>
         <view>{{lang === 'en' ? 'Complexity' : '复杂度'}}：{{referenceAnalysis.complexity || '-'}}</view>
         <view>{{lang === 'en' ? 'Suggested price' : '价格建议'}}：{{referencePriceText}}</view>
         <view>{{referenceMessage}}</view>

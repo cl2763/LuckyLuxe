@@ -66,8 +66,6 @@ Page({
 
   switchShop() { wx.navigateTo({ url: '/pages/shop-select/index' }) },
 
-  // AI 在线客服入口已下线(2026-08-04),页面保留备用;此处留空避免有残留调用导致跳转报错
-  goAiChat() {  },
 
 
   todayHoursOf(store, lang) {

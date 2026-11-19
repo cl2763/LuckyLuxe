@@ -151,9 +151,8 @@ check('⑤e 🔴 读不到那一行也必须拒(读不到 ≠ 没问题 —— �
 check(`⑤f 现状如实报:那个开关现在是 \`${checkUploadReady(readFileSync(join(ROOT, API_REL), 'utf8')).value}\`（今晚不改它——夜16-续 §二.1:不提审就不挡今晚）`,
   ['true', 'false'].includes(String(checkUploadReady(readFileSync(join(ROOT, API_REL), 'utf8')).value)))
 
-/* ══ ⑥ 分包白名单:`ai-chat` 由店主明写留主包(夜16-续 §二.7)══ */
-check('⑥ 🔴 `ai-chat` 留主包(店主 夜16-续 §二.7 明写,免得下次再有人犹豫)',
-  mainPages.has('pages/ai-chat/index'), '它跑进分包了')
+// 2026-11-20: user retired this surface; prevent old package tests from resurrecting it.
+check('⑥ 顾客旧客服已从正式包彻底移除', !JSON.stringify(app).includes('pages/ai-chat') && !existsSync(join(MP,'pages/ai-chat')))
 
 console.log(`\n[D208 主包体积] 代理量 ${(mainBytes / 1024).toFixed(1)} KB / 棘轮 ${(MAIN_CAP / 1024).toFixed(0)} KB · `
   + `上次真实打包 ${(REAL.mainBytes / 1024).toFixed(0)} KB(${REAL.at} ${REAL.by})· 黄线 ${WARN / 1024} · 闸 ${GATE / 1024}`)

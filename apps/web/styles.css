@@ -3328,129 +3328,6 @@ textarea:focus {
   max-width: 1180px;
 }
 
-.ai-assistant-widget {
-  position: fixed;
-  right: 22px;
-  bottom: 22px;
-  z-index: 30;
-}
-
-.ai-assistant-fab {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 54px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--black);
-  color: var(--heroink);
-  padding: 8px 16px 8px 8px;
-  box-shadow: 0 20px 46px rgba(47, 44, 42, 0.22);
-}
-
-.ai-assistant-fab span {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--tagmbg);
-  color: var(--black);
-  font-weight: 950;
-}
-
-.ai-assistant-fab strong {
-  font-size: 15px;
-}
-
-.ai-assistant-panel {
-  display: grid;
-  width: min(420px, calc(100vw - 28px));
-  max-height: min(680px, calc(100vh - 36px));
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--card);
-  box-shadow: 0 28px 72px rgba(47, 44, 42, 0.26);
-  overflow: hidden;
-}
-
-.ai-assistant-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--line);
-  padding: 14px;
-}
-
-.ai-assistant-head h2 {
-  margin: 2px 0 0;
-  font-size: 22px;
-}
-
-.ai-assistant-messages {
-  display: grid;
-  gap: 10px;
-  max-height: 360px;
-  overflow-y: auto;
-  padding: 14px;
-}
-
-.ai-message {
-  max-width: 86%;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--card);
-  padding: 10px 12px;
-}
-
-.ai-message.user {
-  justify-self: end;
-  background: var(--black);
-  color: var(--heroink);
-}
-
-.ai-message p {
-  margin: 0;
-  line-height: 1.48;
-  font-weight: 800;
-  white-space: pre-wrap;
-}
-
-.ai-message small {
-  display: block;
-  margin-top: 8px;
-  color: var(--brandd);
-  font-weight: 850;
-  line-height: 1.4;
-}
-
-.ai-assistant-quick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  border-top: 1px solid var(--line);
-  padding: 12px 14px 0;
-}
-
-.ai-assistant-quick button {
-  min-height: 34px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--card);
-  color: var(--muted);
-  padding: 6px 10px;
-  font-size: 13px;
-  font-weight: 850;
-}
-
-.ai-assistant-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: 12px 14px 14px;
-}
-
 .auth-layout {
   display: grid;
   grid-template-columns: minmax(320px, 0.82fr) minmax(420px, 1.18fr);
@@ -5400,8 +5277,7 @@ textarea:focus {
   }
 
   .customer-detail-hero,
-  .customer-record-row,
-  .ai-assistant-form {
+  .customer-record-row {
     grid-template-columns: 1fr;
   }
 
@@ -5410,21 +5286,8 @@ textarea:focus {
     height: 180px;
   }
 
-  .ai-assistant-widget {
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
-  }
 
-  .ai-assistant-fab {
-    width: 100%;
-    justify-content: center;
-  }
 
-  .ai-assistant-panel {
-    width: 100%;
-    max-height: calc(100vh - 20px);
-  }
 
   .member-code-card,
   .member-referral-row {
@@ -8119,3 +7982,6 @@ input[type="checkbox"], input[type="radio"] {
 .package-table-wrap{overflow:auto;padding-bottom:12px}.package-table{width:100%;border-collapse:collapse;text-align:left;min-width:850px}.package-table th,.package-table td{padding:18px 14px;border-bottom:1px solid var(--line);vertical-align:top}.package-table th{font-weight:600;white-space:nowrap}.package-table td:first-child{min-width:150px;max-width:240px;overflow-wrap:anywhere}.package-table td:nth-child(4){max-width:220px;overflow-wrap:anywhere}.package-table .subtle{margin-top:6px}.package-actions{display:flex;align-items:flex-start;gap:10px;min-width:120px}.package-actions summary{cursor:pointer;padding:8px 10px;white-space:nowrap}.package-more{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:8px}.package-more button{white-space:nowrap}
 
 .login-consent-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.login-consent-row label{margin:0}.login-consent-row a{padding:10px 0;text-decoration:underline}
+
+/* AI output disclosures: fixed visible text, never color-only. */
+.ai-generated-label{display:block;color:var(--ink);background:var(--wall);border:1px solid var(--line);font-size:13px;font-weight:600;line-height:1.5;padding:6px 10px;margin:0 0 8px;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere}.dh-ai>.ai-generated-label{flex-shrink:0;margin:0}

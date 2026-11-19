@@ -30,7 +30,7 @@
 
   <scroll-view scroll-y class="thread">
     <view wx:for="{{transcript}}" wx:key="index" class="row {{item.side}}">
-      <view class="bub {{item.side}}">{{item.content}}</view>
+      <view class="bub {{item.side}}"><view wx:if="{{item.role==='assistant'}}" class="ai-generated-label">AI生成 / 自动回复</view><view wx:elif="{{item.role==='staff'}}" class="reply-origin">人工回复</view>{{item.content}}</view>
     </view>
     <view wx:if="{{needsHuman}}" class="needbanner">此处需人工 · AI 已暂停</view>
   </scroll-view>

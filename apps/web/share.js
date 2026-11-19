@@ -62,7 +62,7 @@ async function loadCopy() {
     if (serial !== state.serial) return
     const copy = data.copy?.data || data.copy || {}
     $('shareCopyBox').value = [state.lang === 'en' ? copy.titleEn : copy.titleZh, state.lang === 'en' ? copy.captionEn : copy.captionZh, (copy.hashtags || []).join(' ')].filter(Boolean).join('\n\n')
-    $('shareCopyStatus').textContent = $('shareCopyBox').value.trim() ? tr('文案已生成，可修改后复制。','Caption ready. Edit before copying.') : tr('没有生成文案，请重试。','No caption returned. Please retry.')
+    $('shareCopyStatus').textContent = $('shareCopyBox').value.trim() ? tr('AI生成 · 请核对，可修改后复制。','AI-generated · Review and edit before copying.') : tr('没有生成文案，请重试。','No caption returned. Please retry.')
     $('retryCopy').hidden = !!$('shareCopyBox').value.trim()
   } catch (error) { if (serial === state.serial) { $('shareCopyStatus').textContent = error.status === 401 ? tr('登录已失效，请返回订单重新登录。','Session expired. Return to orders and sign in.') : error.message; $('retryCopy').hidden = false } }
   finally { if (serial === state.serial) { state.busy = false; $('shareCopyBox').disabled = false; syncCopyButton() } }
@@ -79,5 +79,5 @@ for (const lang of ['zh','en']) $('share' + (lang === 'zh' ? 'Zh' : 'En')).oncli
 document.querySelectorAll('[data-platform]').forEach(button => button.onclick = () => { if (state.platform === button.dataset.platform) return; state.platform = button.dataset.platform; applyLanguage(); loadCopy() })
 $('shareCopyBox').oninput = syncCopyButton
 $('retryCopy').onclick = loadCopy
-$('copyShareCaption').onclick = async () => { if ($('copyShareCaption').disabled) return; try { await navigator.clipboard.writeText($('shareCopyBox').value.trim()); toast(tr('文案已复制','Caption copied')) } catch { $('shareCopyBox').focus(); $('shareCopyBox').select(); toast(tr('复制未成功，请长按或使用复制快捷键。','Copy failed. Select the text and copy it manually.')) } }
+$('copyShareCaption').onclick = async () => { if ($('copyShareCaption').disabled) return; try { await navigator.clipboard.writeText(tr('AI生成\n','AI-generated\n') + $('shareCopyBox').value.trim()); toast(tr('文案已复制','Caption copied')) } catch { $('shareCopyBox').focus(); $('shareCopyBox').select(); toast(tr('复制未成功，请长按或使用复制快捷键。','Copy failed. Select the text and copy it manually.')) } }
 load()

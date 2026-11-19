@@ -31,7 +31,7 @@ window.loadCustomerNotes = function loadCustomerNotes(customerId) {
       const notes = data.notes || []
       target.innerHTML = `
         ${groups.length
-          ? `<div class="customer-tags" style="flex-wrap:wrap;gap:6px;margin-bottom:6px">${groups.map(([label, items, danger]) =>
+          ? `<span class="ai-generated-label">AI生成 · 请核对后使用 / AI-generated</span><div class="customer-tags" style="flex-wrap:wrap;gap:6px;margin-bottom:6px">${groups.map(([label, items, danger]) =>
               `<span class="subtle" style="margin:0 2px 0 6px${danger ? ';color:var(--bad);font-weight:700' : ''}">${label}</span>${items.map((x) => tag(x, danger)).join('')}`).join('')}</div>`
           : `<p class="subtle">${zh ? '还没有画像标签。技师写服务小记(小程序或网页「我的客人」)后,画像会自动生成。' : 'No profile yet — technicians add service notes (mini app, or "My Customers" on web) when completing orders.'}</p>`}
         ${stats.length ? `<p class="subtle">${stats.join(' · ')}</p>` : ''}

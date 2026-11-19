@@ -281,7 +281,7 @@ function renderTranscript() {
     return `
       <div class="wechat-bubble simulator-bubble ${role === 'customer' ? 'customer' : role === 'staff' ? 'staff' : 'assistant'} ${message.pending ? 'pending' : ''}">
         <span>${escapeHtml(roleLabel(message, conversation))}${message.correctedByOwner ? ' · 店主已修正' : ''}</span>
-        <p>${contentHtml}</p>
+        ${role === 'assistant' && !message.pending ? '<span class="ai-generated-label">AI生成 / 自动回复</span>' : ''}<p>${contentHtml}</p>
         ${renderMessageImages(message)}
         ${renderFeedbackEditor(message, index, transcript, conversation)}
       </div>

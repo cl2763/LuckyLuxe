@@ -12,8 +12,8 @@
       <view class="s"><text class="b">{{profile.avgIntervalDays || '—'}}{{profile.avgIntervalDays ? '天' : ''}}</text><text class="l">平均间隔</text></view>
       <view class="s"><text class="b">{{profile.topService || '—'}}</text><text class="l">最常做</text></view>
     </view>
-    <view class="ptags" wx:if="{{profile.safetyFlags.length || profile.personality.length || profile.preferences.length}}">
-      <view class="th">✦ AI 画像标签</view>
+    <view class="ptags" wx:if="{{profile.safetyFlags.length || profile.personality.length || profile.preferences.length || profile.styles.length || profile.companions.length}}">
+      <view class="th">画像标签</view><view class="ai-generated-label">AI生成 · 请核对后使用</view>
       <view class="chips">
         <text wx:for="{{profile.safetyFlags}}" wx:key="*this" class="chip warn">{{item}}</text>
         <text wx:for="{{profile.personality}}" wx:key="*this" class="chip">{{item}}</text>
@@ -75,7 +75,7 @@
     <view class="tcard">
       <view class="d">{{item.date}}{{item.technicianName ? ' · ' + item.technicianName : ''}}</view>
       <view class="s" wx:if="{{item.serviceName}}">{{item.serviceName}}</view>
-      <view class="n">{{item.structured.summary || item.rawText}}</view>
+      <view wx:if="{{item.structured.summary}}" class="ai-generated-label">AI生成 · 服务小记整理</view><view class="n">{{item.structured.summary || item.rawText}}</view>
       <!-- 小记图片(08-30f):无图=整块不出现(零占位假图) -->
       <view class="nimgs" wx:if="{{item.images.length}}">
         <block wx:for="{{item.images}}" wx:for-item="im" wx:key="*this"><image wx:if="{{im}}" class="nimg" src="{{im}}" mode="aspectFill" /></block>
