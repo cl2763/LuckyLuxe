@@ -1,7 +1,7 @@
 {
-  "candidateSourceSha256": "999731513140bc17d19004870edc6670123d678764853ed63dff6ecf258087f0",
+  "candidateSourceSha256": "7979b17d43dd3cfc53ba3ede8f1bcf6fe718cf23bec567c9d1c85dd4bc3f4f58",
   "sourceFiles": 861,
-  "checkedAt": "2026-11-19T08:16:14.206Z",
+  "checkedAt": "2026-11-19T08:18:44.593Z",
   "scope": "offline retained snapshot rehearsal; not a fresh production backup or a deployment",
   "runtime": "v22.11.0",
   "baselineCommit": "aed1f0087def5b348d3b966815bd0e56eec08a4e",
