@@ -24,7 +24,7 @@
   </block>
 
   <block wx:else>
-    <view class="done">✓ 已保存,AI 已整理</view>
+    <view class="done">✓ 已保存</view><view class="ai-generated-label">AI生成 · 请核对后使用</view>
     <view class="rescard" wx:if="{{result.summary}}"><view class="rh">摘要</view><view class="rs">{{result.summary}}</view></view>
     <view class="rescard">
       <view class="field" wx:if="{{result.safetyFlags.length}}"><text class="k">安全</text><view class="chips"><text wx:for="{{result.safetyFlags}}" wx:key="*this" class="chip warn">{{item}}</text></view></view>

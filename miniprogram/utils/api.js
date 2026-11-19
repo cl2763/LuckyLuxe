@@ -782,20 +782,6 @@ function getShops(includeDemo = EXPERIENCE) {
 }
 
 
-function clientChatId() {
-  let id = wx.getStorageSync('lucky_client_id')
-  if (!id) {
-    id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-    wx.setStorageSync('lucky_client_id', id)
-  }
-  return id
-}
-function aiCustomerService(message) {
-  return request('/ai/customer-service', 'POST', { message, lang: 'zh', clientId: clientChatId() })
-}
-
-
-
 function getDepositPolicy(qs) { return request(`/store/deposit-policy${qs ? `?${qs}` : ''}`) }
 function getMyCoupons() { return request('/my/coupons') }
 
@@ -1081,7 +1067,6 @@ module.exports = {
   hasTenant,
   currentTenantId: currentTenant,   // 租户唯一出口(app.js / 页面判空都读它)
   getServiceCatalog,
-  aiCustomerService,
   getDepositPolicy,
   getMyCoupons,
   getCardPack,

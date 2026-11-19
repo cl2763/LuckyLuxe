@@ -193,7 +193,7 @@ window.DashboardHome = (function () {
     const a = st.aiLine
     if (a && a.text) {
       return `<div class="dh-ai" data-dh-ai-line>
-        <span class="dh-ai-text">${esc(a.text)}</span>
+        <span class="ai-generated-label">AI生成 · 请核对后使用 / AI-generated</span><span class="dh-ai-text">${esc(a.text)}</span>
         ${a.at ? `<span class="dh-ai-at">${esc(a.at)}</span>` : ''}</div>`
     }
     return `<div class="dh-ai" data-dh-ai-none>

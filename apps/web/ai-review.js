@@ -69,7 +69,7 @@
       body.innerHTML = rows.map((it) => `
         <div class="admin-card ai-review-item" data-conv="${esc(it.conversationId)}" data-turn="${esc(it.turnIndex)}">
           <p class="subtle">顾客说:<b>${esc(it.customerMessage) || '(这一轮没抓到原话)'}</b></p>
-          <p>AI 答:${esc(it.reply)}</p>
+          <span class="ai-generated-label">AI生成 · 待人工审核 / AI-generated</span><p>AI 答:${esc(it.reply)}</p>
           <p class="subtle">intent: ${esc(it.intent) || '—'} · confidence: ${conf(it.confidence)}</p>
           <div class="row-actions">
             <button type="button" class="primary" data-verdict="ok">对</button>

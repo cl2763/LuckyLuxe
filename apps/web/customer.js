@@ -88,10 +88,6 @@ const state = {
   shareCopyByOrder: {},
   shareCopyHistory: readTenantJson('lucky-social-copy-history') || {},
   memberCodeOpen: false,
-  aiAssistantOpen: false,
-  aiAssistantLoading: false,
-  aiAssistantDraft: '',
-  aiAssistantMessages: readTenantJson('lucky-ai-assistant-messages') || [],
   pendingAuth: readTenantJson('lucky-web-pending-auth')
 }
 
@@ -105,7 +101,6 @@ const els = {
   cartBadge: document.querySelector('#cartBadge'),
   langZh: document.querySelector('#langZh'),
   langEn: document.querySelector('#langEn'),
-  aiAssistantWidget: document.querySelector('#aiAssistantWidget'),
   toast: document.querySelector('#toast')
 }
 
@@ -635,11 +630,6 @@ function bindGlobalEvents() {
   els.screen.addEventListener('click', handleScreenClick)
   els.screen.addEventListener('change', handleScreenChange)
   els.screen.addEventListener('input', handleScreenInput)
-  els.aiAssistantWidget.addEventListener('click', handleAssistantClick)
-  els.aiAssistantWidget.addEventListener('submit', handleAssistantSubmit)
-  els.aiAssistantWidget.addEventListener('input', (event) => {
-    if (event.target.matches('[data-ai-assistant-input]')) state.aiAssistantDraft = event.target.value
-  })
 }
 
 async function switchLang(lang) {
@@ -739,7 +729,6 @@ function render() {
   if (state.view === 'mall') renderMallWeb()
   if (state.view === 'pointsMall') renderPointsWeb()
   window.CustomerPublicShare.render({state,root:els.screen,tenant:TENANT_ID,toast})
-  renderAiAssistantWidget()
 }
 
 /* 🔴 D78(店主 2026-08-28 立案):轮播图**按租户出**,后端唯一出口(公开 /stores 下发)。
@@ -798,109 +787,7 @@ function renderHome() {
   startHeroCarousel()
 }
 
-// 2026-08-04 店主定:顾客端两个 AI 入口暂不上线。
-// ① AI 客服 —— 之后走企业微信外部客服,小程序/网页里这一环不需要了;
-// ② 参考图 AI 分析 —— 待升级后再放出,正式版先不显示。
-// 代码整段保留(改这两个开关即可复活),只是入口不渲染。
-const CUSTOMER_AI_CHAT_ENABLED = false
 const CUSTOMER_AI_REFERENCE_ENABLED = false
-
-function renderAiAssistantWidget() {
-  if (!els.aiAssistantWidget) return
-  if (!CUSTOMER_AI_CHAT_ENABLED) { els.aiAssistantWidget.classList.add('hidden'); els.aiAssistantWidget.innerHTML = ''; return }
-  els.aiAssistantWidget.classList.remove('hidden')
-  if (!state.aiAssistantOpen) {
-    els.aiAssistantWidget.innerHTML = `
-      <button class="ai-assistant-fab" data-ai-assistant-toggle type="button">
-        <span>AI</span>
-        <strong>${t('aiAssistant')}</strong>
-      </button>
-    `
-    return
-  }
-  const messages = state.aiAssistantMessages.length ? state.aiAssistantMessages : [{
-    role: 'assistant',
-    content: t('aiAssistantIntro'),
-    meta: ''
-  }]
-  els.aiAssistantWidget.innerHTML = `
-    <section class="ai-assistant-panel">
-      <div class="ai-assistant-head">
-        <div>
-          <p class="eyebrow">${brandName()}</p>
-          <h2>${t('aiAssistant')}</h2>
-        </div>
-        <button class="ghost slim" data-ai-assistant-toggle type="button">×</button>
-      </div>
-      <div class="ai-assistant-messages">
-        ${messages.map((message) => `
-          <article class="ai-message ${message.role}">
-            <p>${escapeHtml(message.content)}</p>
-            ${message.handoffRequired ? `<small>${t('aiHandoff')} · ${escapeHtml(message.handoffReason || t('aiHandoffHint'))}</small>` : ''}
-          </article>
-        `).join('')}
-      </div>
-      <div class="ai-assistant-quick">
-        <button type="button" data-ai-quick="${t('aiQuickPrice')}">${t('aiQuickPrice')}</button>
-        <button type="button" data-ai-quick="${t('aiQuickBooking')}">${t('aiQuickBooking')}</button>
-        <button type="button" data-ai-quick="${t('aiQuickPolicy')}">${t('aiQuickPolicy')}</button>
-      </div>
-      <form class="ai-assistant-form">
-        <input data-ai-assistant-input value="${escapeHtml(state.aiAssistantDraft)}" placeholder="${t('aiAssistantPlaceholder')}" ${state.aiAssistantLoading ? 'disabled' : ''}>
-        <button class="primary slim" type="submit" ${state.aiAssistantLoading ? 'disabled' : ''}>${state.aiAssistantLoading ? '...' : t('aiSend')}</button>
-      </form>
-    </section>
-  `
-}
-
-function handleAssistantClick(event) {
-  if (event.target.closest('[data-ai-assistant-toggle]')) {
-    state.aiAssistantOpen = !state.aiAssistantOpen
-    renderAiAssistantWidget()
-    return
-  }
-  const quick = event.target.closest('[data-ai-quick]')
-  if (quick) {
-    state.aiAssistantDraft = quick.dataset.aiQuick
-    sendAiAssistantMessage().catch((error) => toast(error.message))
-  }
-}
-
-function handleAssistantSubmit(event) {
-  event.preventDefault()
-  sendAiAssistantMessage().catch((error) => toast(error.message))
-}
-
-async function sendAiAssistantMessage() {
-  const message = state.aiAssistantDraft.trim()
-  if (!message || state.aiAssistantLoading) return
-  state.aiAssistantMessages.push({ role: 'user', content: message })
-  state.aiAssistantDraft = ''
-  state.aiAssistantLoading = true
-  renderAiAssistantWidget()
-  try {
-    const data = await request('/ai/customer-service', {
-      method: 'POST',
-      body: JSON.stringify({
-        lang: state.lang,
-        message,
-        history: state.aiAssistantMessages.slice(-10)
-      })
-    })
-    const reply = data.reply?.data || data.reply || {}
-    state.aiAssistantMessages.push({
-      role: 'assistant',
-      content: state.lang === 'en' ? reply.answerEn : reply.answerZh,
-      handoffRequired: Boolean(reply.handoffRequired),
-      handoffReason: state.lang === 'en' ? reply.handoffReasonEn : reply.handoffReasonZh
-    })
-    state.aiAssistantMessages = state.aiAssistantMessages.slice(-12)
-    writeTenantJson('lucky-ai-assistant-messages', state.aiAssistantMessages)
-  } finally {
-    state.aiAssistantLoading = false
-    renderAiAssistantWidget()
-  }
-}
 
 function startHeroCarousel() {
   stopHeroCarousel()
@@ -1203,7 +1090,7 @@ function renderReferenceAnalysis() {
   const clientMessage = state.lang === 'en' ? result.clientMessageEn : result.clientMessageZh
   const techNote = state.lang === 'en' ? result.technicianNotesEn : result.technicianNotesZh
   return `
-    <div class="ai-result-box">
+    <div class="ai-result-box"><span class="ai-generated-label">AI生成 · 请核对后使用 / AI-generated</span>
       ${isMock ? `<div class="ai-mock-banner"><strong>${t('aiMockBadge')}</strong><span>${t('aiMockNotice')}</span></div>` : ''}
       <p><span>${t('aiComplexity')}</span><strong>${result.complexity || '-'}</strong></p>
       <p><span>${t('aiExtraTime')}</span><strong>${result.estimatedExtraMinutes || 0}${t('minutes')}</strong></p>
@@ -1666,7 +1553,7 @@ function renderCustomerSharePanel(order, images) {
         ${platforms.map(([key, label]) => `<button class="${state.sharePlatform === key ? 'active' : ''}" data-order-share-platform="${key}" type="button">${label}</button>`).join('')}
       </div>
       ${shareCopy ? `
-        <div class="customer-share-copy">
+        <div class="customer-share-copy"><span class="ai-generated-label">AI生成 · 请核对后使用 / AI-generated</span>
           <strong>${escapeHtml(shareCopy.title)}</strong>
           <p>${escapeHtml(shareCopy.caption)}</p>
           <small>${shareCopy.hashtags.map(escapeHtml).join(' ')}</small>
@@ -2166,7 +2053,7 @@ async function handleScreenClick(event) {
     const order = state.orders.find((item) => item.id === copyCaption.dataset.copyOrderCaption)
     const shareCopy = order ? customerShareCopy(order) : null
     if (!shareCopy) return
-    await navigator.clipboard.writeText([shareCopy.title, shareCopy.caption, shareCopy.hashtags.join(' ')].filter(Boolean).join('\n\n'))
+    await navigator.clipboard.writeText([state.lang === 'en' ? 'AI-generated' : 'AI生成', shareCopy.title, shareCopy.caption, shareCopy.hashtags.join(' ')].filter(Boolean).join('\n\n'))
     toast(t('captionCopied'))
     return
   }

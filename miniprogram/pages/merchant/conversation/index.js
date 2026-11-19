@@ -83,7 +83,7 @@ Page({
     const s = stinfo(c.status)
     const transcript = (c.transcript || []).map((m) => ({
       side: m.role === 'customer' ? 'c' : (m.role === 'staff' ? 'staff' : 'a'),
-      content: m.content || ''
+      role: m.role || 'assistant', content: m.content || ''
     }))
     const name = c.linkedUserName || c.externalUserId || '顾客'
 

@@ -160,15 +160,6 @@ window.CustomerCopyFactory = ({ moneyY }) => ({
     draftUnavailable: '预约草稿暂不可用',
     depositPolicyTitle: '定金退改规则',
     depositPolicyText: '预约定金用于锁定技师时间。到店前 24 小时以上取消或改期，定金可退或可转；24 小时内取消或临时改期，定金会扣除一半；临时爽约定金不退。',
-    aiAssistant: 'AI 客服',
-    aiAssistantIntro: '我可以回答预约、价格、定金、取消改期和订单相关问题。',
-    aiAssistantPlaceholder: '输入你的问题...',
-    aiSend: '发送',
-    aiHandoff: '建议转人工',
-    aiHandoffHint: '这个问题需要人工确认，我可以先帮你整理要问的信息。',
-    aiQuickPrice: '美甲复杂款怎么报价？',
-    aiQuickBooking: '怎么预约？',
-    aiQuickPolicy: '取消改期规则？'
   },
   en: {
     ...((window.CustomerAuthCopy || {}).en || { registerTitle: 'Sign in with WeChat', registerText: 'Been to the salon? Scan the code below with WeChat.' }),
@@ -309,14 +300,5 @@ window.CustomerCopyFactory = ({ moneyY }) => ({
     draftUnavailable: 'Booking draft is unavailable.',
     depositPolicyTitle: 'Deposit Cancellation Policy',
     depositPolicyText: 'The deposit holds your technician time. Cancellations or rescheduling more than 24 hours before the appointment can be refunded or transferred. Within 24 hours, half of the deposit is kept. No-shows are non-refundable.',
-    aiAssistant: 'AI Concierge',
-    aiAssistantIntro: 'I can help with booking, pricing, deposits, cancellation policy, and order questions.',
-    aiAssistantPlaceholder: 'Type your question...',
-    aiSend: 'Send',
-    aiHandoff: 'Staff recommended',
-    aiHandoffHint: 'This needs staff confirmation. I can help organize the question first.',
-    aiQuickPrice: 'How are custom nails quoted?',
-    aiQuickBooking: 'How do I book?',
-    aiQuickPolicy: 'Cancellation policy?'
   }
 })

@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261119-consent-customer1'
+const ADMIN_BUILD = '20261120-ai-disclosure1'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -1155,7 +1155,7 @@ function renderTenantKb() {
     <button class="primary slim" data-kb-save-facts type="button">${owner.lang === 'zh' ? '保存店铺事实' : 'Save facts'}</button>
     <p class="subtle">${owner.lang === 'zh' ? '以上信息 AI 回答时实时读取，保存即生效。' : 'AI reads these facts live; changes apply immediately.'}</p>
     <div class="kb-entry-list">
-      <strong class="kb-entry-list-title">${owner.lang === 'zh' ? '自助 FAQ（命中关键词时 AI 用你的原文直接回答）' : 'Self-service FAQ (AI answers with your exact text on keyword match)'}</strong>
+      <strong class="kb-entry-list-title">${owner.lang === 'zh' ? '自助 FAQ（自由文本导入可能包含 AI生成内容，请核对）' : 'Self-service FAQ (free-text imports may contain AI-generated content; please review)' }</strong>
       ${entries.length ? entries.map((entry) => `
         <div class="kb-entry ${entry.enabled ? '' : 'disabled'}">
           <div class="kb-entry-main">
@@ -3703,7 +3703,7 @@ function renderBookingDetail(booking) {
 
 function renderBookingAiSummary(summary) {
   return `
-    <div class="ai-result-box">
+    <div class="ai-result-box"><span class="ai-generated-label">AI生成 · 请核对后使用 / AI-generated</span>
       <p><span>${t('aiBookingSummary')}</span><strong>${escapeHtml(owner.lang === 'en' ? summary.headlineEn : summary.headlineZh)}</strong></p>
       ${renderAiList(owner.lang === 'en' ? 'Preparation' : '准备事项', owner.lang === 'en' ? summary.preparationEn : summary.preparationZh)}
       ${renderAiList(owner.lang === 'en' ? 'Risks' : '风险', owner.lang === 'en' ? summary.risksEn : summary.risksZh)}
@@ -4292,7 +4292,7 @@ async function generateRecallCopy(customerId, btn) {
   if (btn) { btn.disabled = true; btn.textContent = zh ? 'AI 生成中…' : 'Generating…' }
   try {
     const data = await request('/admin/ai/recall-copy', { method: 'POST', body: JSON.stringify({ userIds: [customerId] }) })
-    const msg = data.messages?.[0]?.message || ''
+    const rawMsg = data.messages?.[0]?.message || ''; const msg = rawMsg ? (zh ? 'AI生成\n' : 'AI-generated\n') + rawMsg : ''
     if (!msg) throw new Error(zh ? '没有生成结果,稍后再试' : 'No result')
     let copied = false
     try { await navigator.clipboard.writeText(msg); copied = true } catch { /* 剪贴板被拒时降级为手动复制 */ }
@@ -4324,7 +4324,7 @@ function renderCustomerRecord(booking) {
 
 function renderCustomerInsight(insight) {
   return `
-    <div class="ai-result-box customer-ai-result">
+    <div class="ai-result-box customer-ai-result"><span class="ai-generated-label">AI生成 · 请核对后使用 / AI-generated</span>
       <p><span>${t('aiCustomerInsight')}</span><strong>${escapeHtml(owner.lang === 'en' ? insight.summaryEn : insight.summaryZh)}</strong></p>
       <p><span>${owner.lang === 'en' ? 'Recommendation' : '推荐'}</span><strong>${escapeHtml(owner.lang === 'en' ? insight.nextRecommendationEn : insight.nextRecommendationZh)}</strong></p>
       <small>${escapeHtml(owner.lang === 'en' ? insight.retentionActionEn : insight.retentionActionZh)}</small>
@@ -4528,7 +4528,7 @@ function renderSocialCopy(copy, key = '') {
   const title = owner.lang === 'en' ? copy.titleEn : copy.titleZh
   const caption = owner.lang === 'en' ? copy.captionEn : copy.captionZh
   return `
-    <div class="ai-copy-box">
+    <div class="ai-copy-box"><span class="ai-generated-label">AI生成 · 请核对后使用 / AI-generated</span>
       <strong>${escapeHtml(title || '')}</strong>
       <p>${escapeHtml(caption || '')}</p>
       <small>${(copy.hashtags || []).map(escapeHtml).join(' ')}</small>
@@ -4545,7 +4545,7 @@ async function copyCaptionByKey(key) {
   if (!copy) return
   const title = owner.lang === 'en' ? copy.titleEn : copy.titleZh
   const caption = owner.lang === 'en' ? copy.captionEn : copy.captionZh
-  const text = [title, caption, (copy.hashtags || []).join(' ')].filter(Boolean).join('\n\n')
+  const text = [owner.lang === 'en' ? 'AI-generated' : 'AI生成', title, caption, (copy.hashtags || []).join(' ')].filter(Boolean).join('\n\n')
   /* D31(丁之二·网页端 D26 同病):剪贴板被拒时原来静默无提示 —— 失败也要说话(四之九) */
   try { await navigator.clipboard.writeText(text); toast(t('copyCaption')) }
   catch { toast(owner.lang === 'zh' ? '复制失败,请手动选择文本复制' : 'Copy failed, select manually') }
@@ -5747,7 +5747,7 @@ els.storeSettingsPage.addEventListener('change', (event) => {
       if (result.mode === 'document') {
         toast(owner.lang === 'zh' ? '已存为知识文档，AI 回答时会参考它。' : 'Stored as knowledge document for AI reference.')
       } else {
-        toast(owner.lang === 'zh' ? `已导入 ${result.imported} 条 FAQ，AI 即刻可用。` : `Imported ${result.imported} FAQ entries.`)
+        toast(owner.lang === 'zh' ? `${result.mode === 'ai_entries' ? 'AI生成 · 请核对：' : ''}已导入 ${result.imported} 条 FAQ。` : `${result.mode === 'ai_entries' ? 'AI-generated · review: ' : ''}Imported ${result.imported} FAQ entries.`)
       }
     } catch (error) {
       toast(error.message)

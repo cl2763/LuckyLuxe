@@ -11,7 +11,7 @@
    ② **行为层同答**:同一店同一句,两条路各发一次(各自新会话),
       `intent` 与**回复文本**必须一模一样,并且两边**各自都在会话流水里留下两行**
       —— 「答得一样」还不够,得证明两条路都真的走了那套记账。 */
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
@@ -57,17 +57,12 @@ check('①d 顾客端那条是**薄壳**:自己不拼 knowledgeContext,只装 in
 check('①e 只回 `reply`,不把整份会话记录吐给公开接口(读那道闸)',
   /path === '\/ai\/customer-service'[\s\S]{0,1200}?json\(res, 200, \{ reply: result\.reply \}\)/.test(bare))
 
-/* 客户端不再带 history —— 记忆的唯一真相是会话流水 */
+// Customer chat UI retired; shared server/WeCom entry behavior below stays covered.
 const mpApi = readFileSync(join(ROOT, 'miniprogram/utils/api.js'), 'utf8')
-const mpChat = readFileSync(join(ROOT, 'miniprogram/pages/ai-chat/index.js'), 'utf8')
-/* 🔴 只看这个函数**自己的函数体**:第一版写成 `split(...)[1]` 取了文件后半截,
-   于是别处出现的 history 也算到它头上 —— 判据在没病时也红,和有病时也绿一样废。 */
-const aiFnBody = (mpApi.match(/function aiCustomerService\([\s\S]*?\n\}/) || [''])[0]
-check('②a 小程序不再把 history 带上来(第二处记忆 = 第二处真相,而且必然对不上)',
-  /function aiCustomerService\(message\)/.test(mpApi) && Boolean(aiFnBody) && !/history/.test(aiFnBody), aiFnBody.slice(0, 120))
-check('②b 聊天页不再自己攒 history', !/this\.hist/.test(mpChat))
-check('②c 没登录时带**存住的** clientId(后端靠它把同一个人的几句话归到同一通)',
-  /wx\.setStorageSync\('lucky_client_id'/.test(mpApi) && /clientId: clientChatId\(\)/.test(mpApi))
+const config = JSON.parse(readFileSync(join(ROOT, 'miniprogram/app.json'), 'utf8'))
+check('②a 已退役顾客客服不在正式主包或分包注册', !JSON.stringify(config).includes('pages/ai-chat'))
+check('②b 已退役顾客客服源文件不留在正式包', !existsSync(join(ROOT,'miniprogram/pages/ai-chat')))
+check('②c 小程序不留遗留顾客问答客户端调用', !/aiCustomerService|clientChatId/.test(mpApi))
 const identity = readFileSync(join(ROOT, 'apps/api/customer-chat.mjs'), 'utf8')
 check('②d 🔴 身份优先取**服务端解出来的**登录用户,访客走独立前缀(客户端伪造不到真实顾客头上)',
   /requireCustomer\(req\)/.test(identity) && /`mp:\$\{customer\.id\}`/.test(identity)

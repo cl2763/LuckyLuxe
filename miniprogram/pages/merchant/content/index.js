@@ -84,7 +84,7 @@ Page({
     const r = this.data.result
     if (!r) return
     const text = `${r.title}\n\n${r.caption}\n\n${r.hashtags}`
-    wx.setClipboardData({ data: text, success: () => wx.showToast({ title: '文案已复制,去粘贴发布', icon: 'none' }) ,
+    wx.setClipboardData({ data: 'AI生成\n' + text, success: () => wx.showToast({ title: '文案已复制,去粘贴发布', icon: 'none' }) ,
       fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
     })
   },

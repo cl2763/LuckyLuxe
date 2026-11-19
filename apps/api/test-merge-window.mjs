@@ -8,7 +8,7 @@
       「模型有没有照着说」由六通打分看 —— 那是人的判断,不是断言能定的事。
 
    还有一格 `guestIdUnsigned`:夜9 段1 起是**现测**(J-52)—— 这个进程还接不接受非服务端签发的顾客身份。 */
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
@@ -50,27 +50,14 @@ check('①c3 🔴 `/health` 报的是**实际生效**的窗长(被 MERGE_WINDOW_
   /MERGE_WINDOW_MS[\s\S]{0,200}?Math\.round\(forcedMs \/ 1000\)/.test(mwSrc))
 check('①d 合并出来的那条是**几句原文按顺序连起来**,不摘要不改写(D153 引用不重写同族)',
   /win\.parts\.join\(' '\)/.test(readFileSync(join(ROOT, 'apps/api/merge-window.mjs'), 'utf8')))
-const mpChat = readFileSync(join(ROOT, 'miniprogram/pages/ai-chat/index.js'), 'utf8')
-check('①e 小程序拿到 `reply: null` 时**什么都不画**(画「我没太明白」= 把等你说完演成听不懂)',
-  /if \(!r \|\| !r\.reply\) return/.test(mpChat))
-check('①f 🔴 小程序不许拿 `sending` 挡住第二句 —— 挡住的话窗永远合不到东西',
-  /if \(!text\) return/.test(mpChat) && !/this\.data\.sending\) return/.test(mpChat))
+check('①e 已下线顾客客服页面没有残留注册', !readFileSync(join(ROOT,'miniprogram/app.json'),'utf8').includes('pages/ai-chat'))
+check('①f 已下线顾客客服源目录已移除', !existsSync(join(ROOT,'miniprogram/pages/ai-chat')))
 
 /* ①g 补四 §四 两处小的 */
 const turnCls = readFileSync(join(ROOT, 'apps/api/turn-classify.mjs'), 'utf8')
 check('①g 中文全角括号后不加空格(「…周二) 可以」那个多余的空格,按值的结尾决定加不加)',
   /const gap = \(v\) => \(\/\[A-Za-z0-9\]\$\/\.test/.test(turnCls) && /\$\{v\}\$\{gap\(v\)\}可以/.test(turnCls))
-/* 欢迎语是**客户端写死**的页面壳,允许留在客户端(它不是答案);
-   但里面不许出现本店做不到的承诺 —— 现在那句「需要人工的话我也会帮你转接」成立,
-   因为出口真会转(D147/D155 之后消息真入库、真待人工)。 */
-check('①h 小程序欢迎语里不许承诺本店做不到的事(现有那句「帮你转接」成立,因为出口真会转)',
-  (() => {
-    const hello = (mpChat.match(/this\.push\('a', '([^']*)'/) || [])[1] || ''
-    if (!hello) return false
-    const promises = ['转接', '人工']
-    const canHandoff = /handoffRequired/.test(mpChat)   // 页面真的处理转人工
-    return promises.some((p) => hello.includes(p)) ? canHandoff : true
-  })())
+check('①h 商家接管/归还客服动作仍保留', /take-over/.test(readFileSync(join(ROOT,'miniprogram/pages/merchant/conversation/index.js'),'utf8')) && /release-to-ai/.test(readFileSync(join(ROOT,'miniprogram/pages/merchant/conversation/index.js'),'utf8')))
 
 /* ② 并句:两件事一句话里都要有 */
 for (const [zh, phone, must] of [
@@ -230,9 +217,7 @@ if (!up) {
 child.kill()
 rmSync(DATA_DIR, { recursive: true, force: true })   // 夹具收尾:临时库跑完就删
 
-check('①g 小程序那一行说的是「正在看你的消息…」(窗的意思是**我在等你说完**,不是「我已经在打字」)',
-  /正在看你的消息/.test(readFileSync(join(ROOT, 'miniprogram/pages/ai-chat/index.wxml'), 'utf8'))
-  && !/正在输入/.test(readFileSync(join(ROOT, 'miniprogram/pages/ai-chat/index.wxml'), 'utf8').replace(/<!--[\s\S]*?-->/g, '')))
+check('①g 网页顾客旧客服浮窗已移除', !/sendAiAssistantMessage|aiAssistantWidget/.test(readFileSync(join(ROOT,'apps/web/customer.js'),'utf8')))
 
 /* ═══ ⑥ D152 端到端那一半(段 7b):**没折扣就不许提折扣**,而且是闸上拦不是嘴上说 ═══
    上一批只做了「喂给模型的那句事实」—— 那是「请你别说」,不是「说了会被拦下来」。

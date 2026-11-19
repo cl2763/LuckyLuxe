@@ -187,7 +187,7 @@ function renderAiBrief() {
   els.aiBriefPanel.innerHTML = `
     <div class="section-row compact-row">
       <div>
-        <p class="eyebrow">${t('aiDailyBrief')}</p>
+        <p class="eyebrow">${t('aiDailyBrief')}</p>${data ? '<span class="ai-generated-label">AI生成 · 请核对后使用 / AI-generated</span>' : ''}
         <h2>${data ? escapeHtml(owner.lang === 'en' ? data.headlineEn : data.headlineZh) : t('aiDailyBrief')}</h2>
       </div>
       <button class="ghost slim" data-ai-brief type="button">${owner.aiLoading === 'brief' ? t('aiProcessing') : t('generateBrief')}</button>
@@ -267,7 +267,7 @@ function renderWechatTranscript(transcript = [], conversation = {}) {
     return `
       <div class="wechat-bubble ${role === 'customer' ? 'customer' : role === 'staff' ? 'staff' : 'assistant'}">
         <span>${escapeHtml(label)}${message.correctedByOwner ? ` · ${owner.lang === 'zh' ? '店主已修正' : 'Owner corrected'}` : ''}</span>
-        <p>${linkifyEscapedText(message.content || '')}</p>
+        ${role === 'assistant' ? '<span class="ai-generated-label">AI生成 / 自动回复 · AI-generated / automated reply</span>' : ''}<p>${linkifyEscapedText(message.content || '')}</p>
         ${renderMessageImages(message)}
         ${renderAiFeedbackEditor(message, index, transcript, conversation)}
       </div>
