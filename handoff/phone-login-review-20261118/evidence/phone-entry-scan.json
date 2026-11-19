@@ -1,0 +1,14 @@
+{
+  "nativePhoneEntries": [
+    {
+      "file": "miniprogram/pages/me/index.wxml",
+      "line": 258
+    }
+  ],
+  "customModalBrandWords": [],
+  "customModalImageNodes": [
+    "<img-placeholder class=\"simple-login-avatar\" src=\"\" img-class=\"simple-login-avatar\" text=\"没有头像\">",
+    "<img-placeholder class=\"profile-edit-avatar\" src=\"{{authProfile.avatarUrl}}\" img-class=\"profile-edit-avatar\" text=\"没有头像\">"
+  ],
+  "scanPurpose": "手机号快速验证自定义前置区域；不扫描或改写系统原生授权面板"
+}

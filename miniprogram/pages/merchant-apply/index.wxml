@@ -17,6 +17,8 @@
       <view class="frow col"><text class="lb">备注</text><textarea class="ta" value="{{note}}" placeholder="选填:门店规模、现有系统、想解决的问题…" bindinput="onNote" maxlength="300" /></view>
     </view>
 
+    <view class="consent-row"><view class="consent-choice" bindtap="toggleConsent" role="checkbox" aria-checked="{{consent}}"><text>{{consent ? '☑' : '□'}} 我已阅读并同意</text></view><navigator url="/pages/privacy/index">《隐私政策》</navigator></view>
+    <view class="note">联系方式仅用于本次商家入驻联系；未同意不会提交。</view>
     <view class="btn {{submitting?'off':''}}" bindtap="submit">{{submitting?'提交中…':'提交入驻申请'}}</view>
     <view class="note">我们只用于入驻联系,不会对外泄露。</view>
   </block>

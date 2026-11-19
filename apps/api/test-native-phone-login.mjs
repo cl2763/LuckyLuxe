@@ -28,3 +28,18 @@ console.log('ok 2 - new/returning customer, refusal, privacy denial, expired cre
 const wxml=readFileSync(new URL('../../miniprogram/pages/me/index.wxml',import.meta.url),'utf8'),js=readFileSync(new URL('../../miniprogram/pages/me/index.js',import.meta.url),'utf8')
 assert.ok(wxml.includes('open-type="getPhoneNumber"'));assert.ok(!js.includes('0312'));assert.ok(!js.includes('verifySmsCode()'))
 console.log('ok 3 - native binding entry exists and fake verification removed; real-device authorization still required')
+
+// Review regression: scope the custom phone-login pre-page, not factual privacy disclosures.
+const modal=wxml.split('<view wx:if="{{authModalVisible}}" class="auth-mask">')[1].split('<button wx:if="{{isLoggedIn}}"')[0]
+assert.ok(modal)
+assert.doesNotMatch(modal,/微信|腾讯|WeChat|Tencent/i)
+assert.equal((modal.match(/手机号快捷登录/g)||[]).length,3)
+assert.ok(modal.includes('Quick phone sign-in'))
+assert.ok(modal.includes('open-type="agreePrivacyAuthorization"'))
+assert.ok(modal.includes('bindtap="openPrivacyPolicy"'))
+assert.ok(modal.includes('disabled="{{!canFinishLogin}}"'))
+assert.ok(modal.includes('bindgetphonenumber="onGetPhoneNumber" disabled="{{phoneBusy}}"'))
+assert.ok(modal.includes('open-type="chooseAvatar"'))
+assert.ok(modal.includes('type="nickname"'))
+assert.ok(modal.includes('bindtap="closeLoginPanel"'))
+console.log('ok 4 - neutral phone-login copy retains privacy consent, native authorization, close and profile controls')

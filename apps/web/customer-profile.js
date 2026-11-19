@@ -1,6 +1,20 @@
 /* Profile photo editor shared with the mini-program /my/profile endpoint. */
 window.LLCustomerProfile = { bind({ request, onSaved, toast, isEnglish }) {
-  document.addEventListener('change', async event => {
+  document.addEventListener('click',event=>{
+    if(!event.target.closest('[data-profile-name]'))return
+    if(document.querySelector('[data-profile-name-dialog]'))return
+    const en=isEnglish(),d=document.createElement('dialog');d.className='card';d.dataset.profileNameDialog=''
+    d.innerHTML=`<form><h2>${en?'Edit nickname':'修改昵称'}</h2><label>${en?'Nickname (1–40 characters)':'昵称（1–40字）'}<input name="nickname" maxlength="40" required></label><p role="status"></p><button type="submit">${en?'Save':'保存'}</button><button type="button" data-cancel>${en?'Cancel':'取消'}</button></form>`
+    d.querySelector('input').value=event.target.closest('[data-profile-name]').dataset.currentName||''
+    document.body.append(d);d.showModal();d.oncancel=e=>e.preventDefault();d.onclose=()=>d.remove()
+    d.querySelector('[data-cancel]').onclick=()=>{if(!d.dataset.busy)d.close()}
+    d.querySelector('form').onsubmit=async e=>{e.preventDefault();if(d.dataset.busy)return;d.dataset.busy='1';const buttons=[...d.querySelectorAll('button,input')];buttons.forEach(b=>b.disabled=true)
+      try{const out=await request('/my/profile',{method:'PATCH',body:JSON.stringify({displayName:d.querySelector('input').value.trim()})});onSaved(out.user);d.close();toast(en?'Nickname saved':'昵称已保存')}
+      catch(err){d.querySelector('[role=status]').textContent=err.message}
+      finally{delete d.dataset.busy;buttons.forEach(b=>b.disabled=false)}
+    }
+  })
+  document.addEventListener('change' , async event => {
     const input = event.target.closest('[data-profile-avatar]')
     if (!input || !input.files?.[0]) return
     const en = isEnglish(), file = input.files[0]

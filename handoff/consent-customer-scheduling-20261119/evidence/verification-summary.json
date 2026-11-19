@@ -1,0 +1,12 @@
+{
+  "date": "2026-11-19",
+  "runtime": "22.11.0",
+  "mainSuites": 224,
+  "mainSkipped": 0,
+  "assertionBaselineBefore": 6850,
+  "assertionBaselineAfter": 6865,
+  "demoDisabledSuites": 44,
+  "fullRegressionExit": 0,
+  "nativeLayoutAssertions": 16,
+  "scope": "isolated regression; not deployment or audit approval"
+}

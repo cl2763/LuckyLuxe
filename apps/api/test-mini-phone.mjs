@@ -176,12 +176,12 @@ check('㋐13 头像昵称「跳过」**不许拦路**:没填资料时出的是�
   + '文案明说「不影响查看会员资料、订单与预约」,顾客可以直接往下用',
   pendingBlock && saysNoBlock && noModal, `卡=${pendingBlock} 文案=${saysNoBlock} 非弹层=${noModal}`)
 
-/* ㋐14 昵称兜底只许落「微信用户」——不许回落到库 id / 会员码(假数回落红线) */
+/* ㋐14 昵称兜底只许落「顾客」——不许回落到库 id / 会员码(假数回落红线) */
 const nickLine = (meJs.match(/nickname: member\.nickname[^\n]*/) || [''])[0]
-check('㋐14 🔴 假数回落红线:跳过头像昵称的顾客,名字兜底**只许**落「微信用户」—— '
+check('㋐14 🔴 假数回落红线:跳过头像昵称的顾客,名字兜底**只许**落「顾客」—— '
   + '不许回落到 `member.id` / `member.memberCode`(那是库主键和会员码,两个别的语义,'
   + '顾客会在自己的「我的」页上看到一串 `user_xxxx`)',
-  /微信用户/.test(nickLine) && !/member\.id/.test(nickLine) && !/member\.memberCode/.test(nickLine),
+  /顾客/.test(nickLine) && /Customer/.test(nickLine) && !/member\.id/.test(nickLine) && !/member\.memberCode/.test(nickLine),
   nickLine.trim())
 
 /* ㋐15 绑定失败不许打绿勾 */

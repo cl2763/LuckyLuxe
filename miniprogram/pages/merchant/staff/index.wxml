@@ -1,4 +1,4 @@
-<setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
+<setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" /><navigator class="hint" style="padding:24rpx" url="/pages/merchant/technician-services/index">技师服务分工（老板配置） ›</navigator>
 <view class="page {{themeClass}}">
 <navigator wx:if="{{!setupPreviewActive}}" url="/pages/merchant/record-management/index?kind=technicians" style="padding:24rpx;margin-bottom:20rpx;">删除 / 归档管理 ›</navigator>
   <view class="topbar">

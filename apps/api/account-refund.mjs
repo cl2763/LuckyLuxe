@@ -60,7 +60,8 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
       refundedCents: row.refunded, refundedText: money(row.refunded),
       balanceCents: row.balance, balanceText: money(row.balance),
       // 图上那句话:这四个数只是参考,退多少由商家按本店会员规则决定
-      hint: '这四个数只是给你参考。退多少由你按本店会员规则决定,系统不替你算。',
+      hint: '实付与赠送为累计记录（已扣除冲销），不等于当前余额。退卡、消费和转作预约定金会减少余额；历史流水保留。退多少由你按本店会员规则决定，系统不替你算。',
+      refundSummaryText: `已登记退卡 ${money(row.refunded)}（包含退回的赠送部分；线下退款请按门店实际核对）`,
       incomeImpactText: money(0)            // 「本店收入影响 $0.00」——后端出句,前端不许自己写 0
     }
   }

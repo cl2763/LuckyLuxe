@@ -15,7 +15,7 @@ async function beginLogin(page) {
     await api.loginWithWechat({nickname:profile.nickname||'',avatarUrl:profile.avatarUrl||''})
     if (api.phoneBindingRequired()) {
       page.setData({phoneStep:true})
-      message(page,page.data.lang==='en'?'Authorize your phone number to complete sign-in.':'请点击下方按钮，通过微信授权绑定手机号。')
+      message(page,page.data.lang==='en'?'Tap below and confirm your phone number to complete sign-in.':'请点击下方「手机号快捷登录」，确认手机号后完成登录。')
     } else await finish(page)
   } catch(e) { wx.showToast({title:e.message||'登录失败，请重试',icon:'none'}) }
   finally { page.setData({phoneBusy:false}) }

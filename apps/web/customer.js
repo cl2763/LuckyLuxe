@@ -1366,7 +1366,7 @@ function renderMe() {
           <div class="member-identity">
             <label class="profile-avatar-edit">${window.ImgPlaceholder.tag(user.avatarUrl || '', { className: 'avatar', alt: user.displayName, text: state.lang === 'en' ? 'No photo' : '没有头像', zh: state.lang !== 'en' })}<small data-avatar-status>${state.lang === 'en' ? 'Change photo' : '更换头像'}</small><input data-profile-avatar type="file" accept="image/jpeg,image/png,image/webp" aria-label="${state.lang === 'en' ? 'Change photo' : '更换头像'}"></label>
             <div class="member-copy">
-              <h1>${user.displayName}</h1>
+              <h1>${escapeHtml(user.displayName)}</h1><button class="ghost slim" data-profile-name data-current-name="${escapeHtml(user.displayName || '')}" type="button">${state.lang === 'en' ? 'Edit nickname' : '修改昵称'}</button>
               <div class="member-level-line">
                 <button class="web-level-pill" data-me-target="memberBenefits" type="button">
                   <span>${tierInfo.tier.label}</span>

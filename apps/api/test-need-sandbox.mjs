@@ -17,7 +17,7 @@ export const SANDBOX_DATA_DIR = process.env.SANDBOX_DATA_DIR || 'sandbox-data'
    拿 cwd 拼出来的路径当场打不开(`test-demo-mark` 单跑现场炸过,就是我这一版写的)。
    锚在**本文件所在目录**上,cwd 是什么都不影响。 */
 export const SANDBOX_DB_PATH = (() => {
-  if(process.env.TEST_SANDBOX_URL){if(!process.env.TEST_DB_PATH)throw Error('隔离目标必须给 TEST_DB_PATH');return process.env.TEST_DB_PATH}
+  if(process.env.TEST_SANDBOX_URL){const path=process.env.TEST_SANDBOX_DB_PATH || process.env.TEST_DB_PATH;if(!path)throw Error('隔离目标必须给 TEST_SANDBOX_DB_PATH 或 TEST_DB_PATH');return path}
   const here = localFilePath(new URL('.', import.meta.url))
   const dir = SANDBOX_DATA_DIR.startsWith('/') ? SANDBOX_DATA_DIR : `${here}${SANDBOX_DATA_DIR}`
   return `${dir.replace(/\/+$/, '')}/lucky-luxe.sqlite`

@@ -151,6 +151,15 @@ const rf2 = await request('/admin/stored-value/refund', {
 }, PLATFORM, H)
 check('② 幂等:同 requestId 重放不再扣一笔', (rf2.status === 200 || rf2.status === 201) && (rf2.data.duplicate === true || rf2.data.balanceAfterCents === rf.data.balanceAfterCents), JSON.stringify(rf2.data).slice(0, 120))
 
+
+// Regression: recharge/refund history must reconcile with the current balance.
+const listed = await request(`/admin/stored-value/txns?month=${new Date().toISOString().slice(0,7)}`, {}, PLATFORM, H)
+const ownRows = listed.data.txns.filter(t => t.userId === userId)
+check('② 账户流水包含退卡负数行，不再只显示历史充值', ownRows.some(t => t.type === 'refund' && t.amountCents === -15000))
+const afterFacts = (await request(`/admin/account-adjust/facts?userId=${userId}`, {}, PLATFORM, H)).data.facts
+check('② 充值/赠送/退卡流水之和与实时余额一致', ownRows.reduce((n,t)=>n+t.amountCents,0) === afterFacts.balanceCents)
+check('② 累计充值为历史发生额，退卡摘要单独说明', afterFacts.refundedCents === 15000 && /已登记退卡/.test(afterFacts.refundSummaryText))
+
 /* ===== ③ 权限:店员打这些口一律 403(接口层是最终闸) ===== */
 // 员工账号从技师建(staff-accounts 的口要 technicianId —— 与 admin-accounts 套件同法)
 const techMk = (await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: `店员${RUN}`, isActive: true }) }, PLATFORM, H)).data.technician
@@ -220,8 +229,8 @@ if (staffLg?.auth) {
   const tx3 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u3 && t.type === 'recharge')
   await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: u3, amountCents: 1000, payChannel: 'cash', reason: '动一分钱', requestId: `rv3-${RUN}` }) }, PLATFORM, H)
   const gate = await request(`/admin/stored-value/txns/${tx3.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:验业务闸(不是验事由闸)' }) }, PLATFORM, H)
-  check('🔴 ④ 裁定A 水位不足即拒(退 10 后实付水位 290 < 该笔 300)→ 新句「余额已不足以证明…」',
-    gate.status === 400 && gate.data?.error?.message === '余额已不足以证明这笔未消费,请走退卡。', JSON.stringify(gate.data).slice(0, 120))
+  check('🔴 ④ 裁定A 水位不足即拒(退 10 后实付水位 290 < 该笔 300)→ 解释消费/退卡/定金，禁止重复扣减',
+    gate.status === 400 && gate.data?.error?.code === 'CONSUMED_NO_REVERSAL' && gate.data.error.message === '当前本金或赠金余额不足，可能已消费、退卡或转作定金。请先核对完整流水，不能重复扣减。', JSON.stringify(gate.data).slice(0, 120))
 
   /* 裁定A 放宽生效证明:旧保守闸会拒(之后动过钱),双水位闸放行(两侧仍各自足额) */
   const made4 = await request('/admin/customers', { method: 'POST', body: JSON.stringify({ displayName: `放宽客${RUN}`, phone: `134${String(parseInt(RUN,36)).slice(-8)}`, requestId: `maa_create_4_${RUN}` }) }, PLATFORM, H)
@@ -249,7 +258,7 @@ if (staffLg?.auth) {
     VALUES (?, ?, ?, 'refund', -6000, 'cash', '夹具:吃赠送水位', 'suite', ?, 6000)`).run(`svfix-${RUN}`, tid, u5, new Date().toISOString())
   const sideGate = await request(`/admin/stored-value/txns/${tx5.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:验业务闸(不是验事由闸)' }) }, PLATFORM, H)
   check('🔴 ④ 裁定A 侧水位:总余额足(540)但赠送侧 40<100 → 拒(冲了赠送侧就打负)',
-    sideGate.status === 400 && /余额已不足以证明/.test(sideGate.data?.error?.message || ''), JSON.stringify(sideGate.data).slice(0, 120))
+    sideGate.status === 400 && sideGate.data?.error?.code === 'CONSUMED_NO_REVERSAL' && /当前本金或赠金余额不足/.test(sideGate.data?.error?.message || ''), JSON.stringify(sideGate.data).slice(0, 120))
 
   /* 权限:无 token → 401/403(requireRefundRight 同门) */
   check('④ 越权:未登录打冲销口 → 拒', (await request(`/admin/stored-value/txns/${rcRow.id}/reverse`, { method: 'POST' }, null, H)).status >= 401)

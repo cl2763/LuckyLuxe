@@ -1181,3 +1181,5 @@
   border:1rpx solid var(--herogrid);
 }
 .member-card .level-pill .level-more { color:var(--herogold); }
+
+.profile-edit-btn{padding:8rpx 0;margin:4rpx 0 8rpx;background:transparent;color:var(--heroink);font-size:24rpx;line-height:1.5;text-align:left;border:0}.profile-edit-btn::after{border:0}

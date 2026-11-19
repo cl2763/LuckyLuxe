@@ -20,6 +20,11 @@
     <text>保持登录 30 天</text>
   </view>
 
+  <view class="consent-row">
+    <view class="consent-choice" bindtap="toggleConsent" role="checkbox" aria-checked="{{consent}}" aria-label="我已阅读并同意隐私政策"><view class="box {{consent ? 'on' : ''}}">{{consent ? '✓' : ''}}</view><text>我已阅读并同意</text></view>
+    <navigator url="/pages/privacy/index" class="policy-link">《隐私政策》</navigator>
+  </view>
+  <view class="consent-note">由你自主选择；未同意也可返回浏览公开服务。</view>
   <button class="btn" loading="{{loading}}" bindtap="login">登录</button>
   <view class="hint" bindtap="toForgot">忘记密码</view>
   <navigator class="hint" url="/pages/privacy/index">隐私与个人信息</navigator>

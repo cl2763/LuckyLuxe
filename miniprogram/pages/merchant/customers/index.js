@@ -32,7 +32,7 @@ function vm(u, TH) {
   const tier = tierOf(u, TH)
   return {
     personalDiscount:u.personalDiscount,id: u.id,
-    name: u.displayName || '顾客',
+    name: u.merchantDisplayName || u.displayName || '顾客',
     av: (u.displayName || '?').slice(0, 1),
     phone: u.phone || '',
     tier, tierLabel: TIER_LABEL[tier] || '',
@@ -98,7 +98,7 @@ Page({
          分层(RFM)、消费额、储值全靠金额算,员工既拿不到也不该看,整块不出。 */
       if (r.scope === 'mine' || this.data.staffView) {
         const mine = (r.customers || []).map((u) => ({
-          id: u.id, name: u.displayName || '顾客', av: (u.displayName || '客')[0],
+          id: u.id, name: u.merchantDisplayName || u.displayName || '顾客', av: (u.displayName || '客')[0],
           phone: u.phoneMasked || '', visits: u.visitCount || 0,
           last: u.lastVisitDate || (u.lastVisitAt ? String(u.lastVisitAt).slice(0, 10) : '—'),
           tags: u.tags || [], memberCode: u.memberCode || ''

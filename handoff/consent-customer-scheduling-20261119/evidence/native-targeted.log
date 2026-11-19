@@ -1,0 +1,7 @@
+PASS merchant default/revoke actual taps cycle 1
+PASS reading privacy and returning does not consent
+PASS customer native consent, revoke and reopen default; no login/phone authorized
+PASS actual service assignment toggle/save with isolated backend
+DONE native targeted checks; screenshot export is a separate step
+PASS logged-in customer can reopen profile editor and persist nickname through real API
+PASS actual reason input + reversal button + real API refresh: principal and bonus reversed, original demo balance preserved; native confirm response simulated

@@ -1,0 +1,28 @@
+{
+  "command": "Node 22.11.0; NODE_OPTIONS=--experimental-sqlite LC_ALL=C MP_UI_CONTROL=recorded-evidence; TEST_SANDBOX_URL=http://127.0.0.1:4408 with separate TEST_SANDBOX_DB_PATH; bash apps/api/run-all-tests.sh",
+  "exitCode": 0,
+  "suitesPassed": 223,
+  "suitesNotRun": 0,
+  "nativeLayoutSuites": 3,
+  "nativeLayoutAssertions": 16,
+  "logSha256": "65ac87031b54e32aaa5c2c52ded0ca951d61230c97adc24a9894966e2417147d",
+  "localLog": "/tmp/phone-review-full-ci-final.log",
+  "tail": [
+    "",
+    "",
+    "⏱ 整跑 4 分 27 秒(其中套件 3 分 7 秒 · 夹具与起停服务 1 分 20 秒)",
+    "   最慢 5 套:",
+    "     user-write-auth                    77s",
+    "     merge-window                       20s",
+    "     auth-surface                       7s",
+    "     platform-bootstrap                 5s",
+    "     perf-base-migration                5s",
+    "",
+    "🧹 收摊自证:本机没有残留的跑机/造病进程(J-33)",
+    "⏳ 未跑 0 套 —— 本轮每一套都真跑起来了",
+    "主档本轮 223 个套件通过 · 主档未跑 0 套",
+    "✅ 发布回归三档全部通过",
+    "   [收尾自证] 演示门两档都跑过了:[true false ] ✔",
+    "   [收尾自证] 4310 合并窗 4s / 封顶 12s ✔ 与默认值一致 · 库 /Users/changliu/Desktop/有迹管家/Codex/LuckyLuxe_Claude_Handoff_2026-07-03/worktrees/feedback-release-20261117/apps/api/sandbox-data/lucky-luxe.sqlite"
+  ]
+}

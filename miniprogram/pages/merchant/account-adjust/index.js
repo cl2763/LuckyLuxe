@@ -151,7 +151,7 @@ Page({
       /* 裁定2(08-30d):储值行与账本行同列一表,两读口合流(与网页同刀) */
       const [tx, sv, bks] = await Promise.all([
         api.adminGet(`/admin/finance/transactions?month=${month}&userId=${encodeURIComponent(this.data.userId)}`),
-        api.adminGet(`/admin/stored-value/txns?month=${month}`).catch(() => ({ txns: [] })),
+        api.adminGet(`/admin/stored-value/txns?month=${month}`),
         this._bookingIds ? Promise.resolve(null) : api.adminGet('/admin/bookings')
       ])
       if (bks) this._bookingIds = new Set((bks.bookings || []).filter((b) => b.user && b.user.id === this.data.userId).map((b) => b.id))
@@ -169,7 +169,7 @@ Page({
         }))
       const SV_LABEL = { recharge: '储值充值', bonus: '充值赠送', reversal: '储值冲销单' }
       const svRows = (sv.txns || [])
-        .filter((t) => t.userId === this.data.userId && t.type !== 'consume')
+        .filter((t) => t.userId === this.data.userId)
         .map((t) => ({
           id: t.id, kind: 'sv', reversalFacts:t.reversalFacts, occurredOn: t.occurredOn,
           note: `${t.typeText || SV_LABEL[t.type] || '储值调整'}${t.note ? ' · ' + t.note : ''}`,
@@ -188,32 +188,34 @@ Page({
   },
   reverseTxn(e) {
     const { id, note, kind } = e.currentTarget.dataset
+    if(this.data.busy)return
     if(!this.data.reason.trim()){wx.showToast({title:'请填写冲销原因',icon:'none'});return}
     const row=this.data.txns.find(t=>t.id===id),facts=row?.reversalFacts,detail=kind==='sv'?'原本金：'+(facts?storeMoney(facts.principalCents,2):row.amountText)+'；关联赠金：'+(facts?.bonusLinkKnown?storeMoney(facts.bonusCents,2):'旧记录未留明确关联，请先核对原记录')+'；确认折扣：'+P.label(this.data.rateBps)+'；':''
     if(kind==='sv'&&this.data.pricing.active&&!this.data.discountConfirmed){wx.showToast({title:'请先重新确认冲销后的个人折扣',icon:'none'});return}
     if (this.data.busy) return
+    this.setData({busy:true})
     wx.showModal({
       title: '确认冲销?',
       content: `${detail}冲销原因：${this.data.reason.trim()}。将生成红字反向记录纠错，原始记录保留：${note || id}`,
       success: async (r) => {
-        if (!r.confirm) return
-        this.setData({ busy: true })
+        if (!r.confirm) { this.setData({busy:false}); return }
+        let committed=false
         try {
           const url = kind === 'sv'
             ? `/admin/stored-value/txns/${encodeURIComponent(id)}/reverse`
             : `/admin/finance/transactions/${encodeURIComponent(id)}/reverse`
           await this.pricingMutation(url, {reason:this.data.reason.trim(),...(kind==='sv'?this.pricingPayload({url}):{})})
+          committed=true
           wx.showToast({ title: '已冲销(红字反向记录已生成)', icon: 'none' })
-          this.setData({ busy: false })
-          const f = await api.adminGet(`/admin/account-adjust/facts?userId=${encodeURIComponent(this.data.userId)}`).catch(() => null)
+          const f = await api.adminGet(`/admin/account-adjust/facts?userId=${encodeURIComponent(this.data.userId)}`)
           if (f) this.setData({ facts: f.facts })   // 判据⑤:四参考数联动=真值重拉
-          const pricing=await api.adminGet('/admin/member-pricing/members/'+encodeURIComponent(this.data.userId));this._pricingRetry={};this.setData({pricing,rateBps:pricing.rateBps,discountConfirmed:false});this.loadTxns(this.data.month)
+          const pricing=await api.adminGet('/admin/member-pricing/members/'+encodeURIComponent(this.data.userId));this._pricingRetry={};this.setData({pricing,rateBps:pricing.rateBps,discountConfirmed:false});await this.loadTxns(this.data.month)
         } catch (err) {
           this.setData({ busy: false })
-          wx.showToast({ title: (err && err.message) || '冲销失败', icon: 'none' })
-        }
+          wx.showToast({ title: committed ? '冲销已成功，刷新失败，请重新进入查看，勿重复冲销' : (err && err.message) || '冲销失败', icon: 'none' })
+        } finally { this.setData({busy:false}) }
       },
-      fail: (err) => console.warn('[showModal fail]', err)
+      fail: (err) => { this.setData({busy:false}); wx.showToast({title:'未能打开确认框，请重试',icon:'none'}) }
     })
   },
 
@@ -228,7 +230,7 @@ Page({
   onAmount(e) { this.data.amount = e.detail.value; this.recalcSoon() },
   onTimes(e) { this.data.times = e.detail.value; this.recalcSoon() },
   onCardAmount(e) { this.data.cardAmount = e.detail.value },
-  onReason(e) { this.data.reason = e.detail.value },
+  onReason(e) { this.setData({reason:e.detail.value}) },
   fillAll() {
     const f = this.data.facts
     if (!f) return

@@ -54,7 +54,7 @@ Page({
     this._busy = true
     try {
       // 先验证微信，再认领本人确认的档案；不先创建第二份空档案。
-      const code = await new Promise((resolve,reject) => wx.login({success:r => r.code ? resolve(r.code) : reject(new Error('微信登录失败')),fail:reject}))
+      const code = await new Promise((resolve,reject) => wx.login({success:r => r.code ? resolve(r.code) : reject(new Error('登录失败，请重试')),fail:reject}))
       const out = await pub(`/bind-tokens/${encodeURIComponent(this.data.token)}/confirm`, 'POST', {code})
       if (out.conflict) {
         this.setData({ state: 'error', errText: '这个微信已绑定本店另一份档案。系统没有覆盖原档案，请联系门店核对。' })

@@ -73,7 +73,7 @@ window.AccountAdjust = (function () {
           <div class="aa-fact hi"><span>${zh ? '当前余额' : 'Balance'}</span><strong>${escapeHtml(f.balanceText)}</strong></div>
         </div>
         ${/* 🔴 图 v1.1 ①:当前余额下面那一行 —— 界限画到屏上(句子后端给,前端零拼串) */''}
-        <p class="aa-split">${escapeHtml(f.splitText || '')}</p>
+        <p class="aa-split">${escapeHtml(f.splitText || '')}</p><p class="aa-hint">${escapeHtml(f.refundSummaryText || '')}</p>
         ${f.depositTransferText?`<p class="aa-hint">${escapeHtml(f.depositTransferText)}</p>`:''}<p class="aa-hint">${escapeHtml(f.hint)}</p>` : `<p class="aa-hint">${zh ? '读取中…' : 'Loading…'}</p>`}
         <div class="aa-seg">${seg.map(([k, label]) => `<button class="aa-seg-btn${stateA.tab === k ? ' on' : ''}" data-aa-tab="${k}" type="button">${label}</button>`).join('')}</div>
         ${stateA.tab === 'refund' ? renderRefund() : (stateA.tab === 'reversal' ? renderReversal() : renderRecharge())}
@@ -130,14 +130,14 @@ window.AccountAdjust = (function () {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   }
-  async function loadTxns(month) {
+  async function loadTxns(month, propagateError = false) {
     stateA.month = month
     try {
       /* 裁定2(08-30d):储值行与账本行同列一表 —— 两读口合流,行尾同一个「冲销」钮。
          储值行冲的是「错记的充值」(合同①);账本行冲的是记错的收支(既有口)。 */
       const [r, sv] = await Promise.all([
         ctx.request(`/admin/finance/transactions?month=${month}&userId=${encodeURIComponent(stateA.userId)}`),
-        ctx.request(`/admin/stored-value/txns?month=${month}`).catch(() => ({ txns: [] }))
+        ctx.request(`/admin/stored-value/txns?month=${month}`)
       ])
       const all = r.transactions || []
       const reversedSet = new Set(all.filter((t2) => t2.reversalOf).map((t2) => t2.reversalOf))
@@ -146,10 +146,10 @@ window.AccountAdjust = (function () {
         .map((t2) => ({ id: t2.id, kind: 'fin', occurredOn: t2.occurredOn, note: t2.note || t2.category || t2.source, amountCents: t2.amountCents, negative: t2.amountCents < 0, isReversal: t2.source === 'reversal', reversed: reversedSet.has(t2.id), canReverse: t2.source !== 'reversal' && !reversedSet.has(t2.id) }))
       const SV_LABEL = { recharge: '储值充值', bonus: '充值赠送', reversal: '储值冲销单', consume: '储值消费' }
       const svRows = (sv.txns || [])
-        .filter((t2) => t2.userId === stateA.userId && t2.type !== 'consume')
+        .filter((t2) => t2.userId === stateA.userId)
         .map((t2) => ({ id: t2.id, kind: 'sv', reversalFacts:t2.reversalFacts, occurredOn: t2.occurredOn, note: `${t2.typeText || SV_LABEL[t2.type] || '储值调整'}${t2.note ? ' · ' + t2.note : ''}`, amountCents: t2.amountCents, negative: t2.amountCents < 0, isReversal: t2.type === 'reversal', reversed: Boolean(t2.reversed), canReverse: t2.type === 'recharge' && !t2.reversed }))
       stateA.txns = finRows.concat(svRows).sort((a, b2) => String(b2.occurredOn).localeCompare(String(a.occurredOn)))
-    } catch (e) { ctx.toast(e.message); stateA.txns = [] }
+    } catch (e) { stateA.txns = []; mount(); if (propagateError) throw e; ctx.toast(e.message) }
     mount()
   }
 
@@ -297,6 +297,8 @@ window.AccountAdjust = (function () {
     }
     const revBtn = event.target.closest('[data-aa-reverse]')
     if (revBtn) {
+      if (stateA.busy) return
+      let committed = false
       const row = stateA.txns.find((x) => x.id === revBtn.dataset.aaReverse)
       if (!await window.UIDialog.confirm(zh ? '确认冲销?' : 'Reverse this entry?', { hint: zh ? `将生成一条等额红字反向记录纠错,原始记录保留:${row ? row.note : ''}` : '', danger: true })) return
       stateA.busy = true; mount()
@@ -308,16 +310,17 @@ window.AccountAdjust = (function () {
         if (!aaWhy) { stateA.busy = false; mount(); return }
         const facts=row?.reversalFacts,summary=revBtn.dataset.kind==='sv'?'原充值本金：'+ctx.money(facts?.principalCents??row.amountCents,2)+'；关联赠金：'+(facts?.bonusLinkKnown?ctx.money(facts.bonusCents,2):'旧记录未留明确赠金关联，请先核对原记录')+'；原流水：'+row.id:'';const discount=revBtn.dataset.kind==='sv'?await window.MemberPricingMember.confirm({request,id:stateA.userId,escapeHtml:ctx.escapeHtml,title:'重新确认冲销后的个人折扣',summary,reasonValue:aaWhy}):{};if(discount===null){stateA.busy=false;mount();return}
         await mutate(url2, { reason: aaWhy,...discount,operationId:window.MemberPricingInput.retryKey(stateA.retry,{url2,aaWhy,discount}) })
+        committed = true
         toast(zh ? '已冲销(红字反向记录已生成)' : 'Reversed')
         ctx.onDone({ reversed: true })
         stateA.pricing = await window.MemberPricingMember.read(request,stateA.userId)
         stateA.rateBps = stateA.pricing.member.rateBps
         stateA.retry = {}
         stateA.busy = false
-        const f2 = await request(`/admin/account-adjust/facts?userId=${encodeURIComponent(stateA.userId)}`).catch(() => null)
+        const f2 = await request(`/admin/account-adjust/facts?userId=${encodeURIComponent(stateA.userId)}`)
         if (f2) stateA.facts = f2.facts   // 判据⑤:四参考数联动=真值重拉
-        loadTxns(stateA.month)
-      } catch (e) { stateA.busy = false; mount(); toast(e.message) }
+        await loadTxns(stateA.month, true)
+      } catch (e) { stateA.busy = false; mount(); toast(committed ? (zh ? '冲销已完成，但刷新失败。请重新打开核对，勿重复操作。' : 'Reversed, but refresh failed. Reopen to check; do not repeat.') : e.message) }
       return
     }
     if (event.target.closest('[data-aa-submit]')) {

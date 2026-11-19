@@ -47,7 +47,7 @@ Page({
     this._busy = true
     this.setData({state:'working'})
     try {
-      const code = await new Promise((resolve,reject) => wx.login({success:r => r.code ? resolve(r.code) : reject(new Error('微信登录失败')),fail:reject}))
+      const code = await new Promise((resolve,reject) => wx.login({success:r => r.code ? resolve(r.code) : reject(new Error('登录失败，请重试')),fail:reject}))
       const out = await scanRequest(`/scan/${this.data.scene}/claim`,'POST',{code})
       if (out.conflict) {
         if (this.data.card.kind === 'member') { this.setData({state:'member-conflict',message:'这个微信已绑定本店另一份档案。系统没有覆盖或合并，请让店员核对。'}); return }
