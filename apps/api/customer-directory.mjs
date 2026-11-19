@@ -64,4 +64,3 @@ export function listAdminCustomers({db,currentTenantId,lastCustomerVisitAt,custo
     })
   })
 }
-
