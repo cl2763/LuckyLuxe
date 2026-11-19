@@ -2505,7 +2505,7 @@ const main = async () => {
       check('㋊ D67① 全组签完回订单台面(老板/员工共用,非退一层)', readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/preview-signing.js'), 'utf8').includes("relaunch('/pages/merchant/orders/index')"))
       check('㋊ D59 提示句双端 wiring(mini rechargeNote+web rechargeUnassignedText)', readFileSync(join(ROOT42, 'miniprogram/utils/dailyclose.js'), 'utf8').includes('rechargeUnassignedText') && readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8').includes('p.rechargeNote') && ['admin.js','member-pricing-editors.js'].map(f=>readFileSync(join(ROOT42, 'apps/web',f), 'utf8')).join('\n').includes('p.rechargeUnassignedText'))
       // ㋋ 五裁 wiring:详情逐张卡双端+台面售后蓝徽标+到店计数三读方同一出口
-      const srvAll = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
+      const srvAll = ['local-server.mjs','customer-directory.mjs'].map(f=>readFileSync(join(ROOT42,'apps/api',f),'utf8')).join('\n')
       check('㋋ wiring 详情逐张卡双端(mini sheets 循环+组汇总;web 同构)', readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8').includes('order.pay.sheets') && readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8').includes('order.payment.sheets'))
       check('㋋ wiring 裁C 台面售后蓝徽标(mini as-blue)', readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8').includes('b.afterSalesTag'))
       check('㋋ wiring 裁A/E 三读方同一出口(visitDaysCount 三处调用)', (srvAll.match(/visitDaysCount\(/g) || []).length >= 4)

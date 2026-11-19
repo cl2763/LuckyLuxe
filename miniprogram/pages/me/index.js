@@ -188,7 +188,9 @@ Page({
       phoneStep: false,
       authProfile: Object.assign({}, this.data.authProfile, {
         avatarUrl: this.data.authProfile.avatarUrl || '',
-        nickname: this.data.authProfile.nickname || ''
+        nickname: this.data.authProfile.nickname || '',
+        privacyChecked: false,
+        privacyAuthorized: false
       })
     })
     this.syncAuthReady()
@@ -271,7 +273,7 @@ Page({
 
   onPrivacyTap(event) {
     this.debugAuth('privacy agreement tap', event && event.detail)
-    if (!wx.requirePrivacyAuthorize) {
+    if (this.data.authProfile.privacyChecked || !wx.requirePrivacyAuthorize) {
       this.setData({
         'authProfile.privacyChecked': !this.data.authProfile.privacyChecked,
         'authProfile.privacyAuthorized': true

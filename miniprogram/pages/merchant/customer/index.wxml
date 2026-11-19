@@ -10,6 +10,7 @@
     </view>
   </view>
 
+  <view class="card"><view class="ct">本店备注名</view><view class="ohint">仅本店商家端可见，不改变顾客昵称。</view><view class="ohint">顾客昵称：{{c.nickname}}</view><input class="remark-input" maxlength="40" value="{{remarkDraft}}" bindinput="onRemark" placeholder="最多40字，留空可清除" disabled="{{remarkSaving}}"/><button class="hbtn" bindtap="saveRemark" loading="{{remarkSaving}}" disabled="{{remarkSaving}}">保存备注名</button></view>
   <view class="stats">
     <view class="st"><view class="sv">{{c.visits}}</view><view class="sl">到店次数</view></view>
     <view class="st"><view class="sv">{{c.spend}}</view><view class="sl">累计消费</view></view>

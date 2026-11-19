@@ -277,6 +277,8 @@ async function main() {
   const STAFF_FIELD_ALLOW = {
     id: '主键,员工要拿它点进这位顾客',
     displayName: '顾客名 —— 干活要叫得出名字',
+    remarkName: '2026-11-19 店主要求：本店备注，仍限员工原有我的顾客范围',
+    merchantDisplayName: '本店备注优先的识别名称，不包含余额或其他财务信息',
     phoneMasked: '**已脱敏**的手机号(后端 maskPhone),用来对人不用来联系',
     visitCount: '到店次数 = 服务频次,不是钱',
     lastVisitAt: '最近到店时间,判断该不该回访',
@@ -285,7 +287,8 @@ async function main() {
     memberCode: '会员码 = 身份标识,不含余额',
     scope: '这批数据的口径标记(mine),前端据此渲染"只看我的"'
   }
-  const ALLOW_CAP = 9   // 2026-09-28 已批准的日期口径修复：仅新增 lastVisitAt 的店内日历投影，财务字段仍全部禁止
+  const ALLOW_CAP = 11   // 2026-11-19 增加已授权的顾客备注两字段；不扩大顾客集合或财务权限。
+  // 2026-09-28 已批准的日期口径修复：仅新增 lastVisitAt 的店内日历投影，财务字段仍全部禁止
   const staffKeys = [...new Set(staffList.flatMap((c) => Object.keys(c)))]
   const ownerKeys = [...new Set(ownerList.flatMap((c) => Object.keys(c)))]
   const notAllowed = staffKeys.filter((k) => !(k in STAFF_FIELD_ALLOW))

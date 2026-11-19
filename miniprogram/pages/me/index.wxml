@@ -5,6 +5,7 @@
         <img-placeholder class="avatar" src="{{member.avatarUrl}}" img-class="avatar" text="没有头像"></img-placeholder>
         <view>
           <view class="nickname">{{member.nickname}}</view>
+          <button class="profile-edit-btn" bindtap="openProfilePanel">{{lang === 'en' ? 'Edit avatar / nickname' : '修改头像 / 昵称'}}</button>
           <!-- 勘误:等级徽章恢复直达权益页(黑卡不许变哑) -->
           <button class="level-pill" bindtap="goMemberBenefits">
             <!-- D41+店主追加:不分级店 非会员=「成为会员」(CTA,点进权益页看成为会员的权益);会员=「会员」 -->
@@ -246,7 +247,14 @@
       </view>
 
       <view class="auth-footer simple-login-footer">
-        <button wx:if="{{authModalMode === 'login'}}" id="lucky-luxe-login" class="privacy-check" open-type="agreePrivacyAuthorization" bindtap="onPrivacyTap" bindagreeprivacyauthorization="onAgreePrivacyAuthorization">
+        <button wx:if="{{authModalMode === 'login' && !authProfile.privacyChecked}}" id="lucky-luxe-login" class="privacy-check" open-type="agreePrivacyAuthorization" bindtap="onPrivacyTap" bindagreeprivacyauthorization="onAgreePrivacyAuthorization">
+          <view class="privacy-box {{authProfile.privacyChecked ? 'checked' : ''}}">{{authProfile.privacyChecked ? '✓' : ''}}</view>
+          <view class="privacy-copy">
+            <text class="privacy-main">{{lang === 'en' ? 'I have read and agree to the Youji privacy policy.' : '我已阅读并同意「有迹」隐私政策'}}</text>
+            <text class="privacy-sub">{{lang === 'en' ? 'Your phone number is used for sign-in and in-store service.' : '手机号用于登录和门店服务联系'}}</text>
+          </view>
+        </button>
+        <button wx:if="{{authModalMode === 'login' && authProfile.privacyChecked}}" id="privacy-uncheck" class="privacy-check" bindtap="onPrivacyTap">
           <view class="privacy-box {{authProfile.privacyChecked ? 'checked' : ''}}">{{authProfile.privacyChecked ? '✓' : ''}}</view>
           <view class="privacy-copy">
             <text class="privacy-main">{{lang === 'en' ? 'I have read and agree to the Youji privacy policy.' : '我已阅读并同意「有迹」隐私政策'}}</text>

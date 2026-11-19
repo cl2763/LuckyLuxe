@@ -6,9 +6,10 @@ Page({
   data: {
     types: TYPES, typeIdx: 0,
     shopName: '', contactName: '', phone: '', wechatId: '', city: '', note: '',
-    submitting: false, done: false
+    consent: false, submitting: false, done: false
   },
 
+  toggleConsent() { this.setData({ consent: !this.data.consent }) },
   onShop(e) { this.setData({ shopName: e.detail.value }) },
   onContact(e) { this.setData({ contactName: e.detail.value }) },
   onPhone(e) { this.setData({ phone: e.detail.value }) },
@@ -19,6 +20,7 @@ Page({
 
   async submit() {
     if (this.data.submitting) return
+    if (!this.data.consent) { wx.showToast({ title: '请先阅读并自主同意隐私政策', icon: 'none' }); return }
     const { shopName, phone, wechatId } = this.data
     if (!shopName.trim()) { wx.showToast({ title: '请填店铺名称', icon: 'none' }); return }
     if (!phone.trim() && !wechatId.trim()) { wx.showToast({ title: '手机号/微信号至少留一个', icon: 'none' }); return }

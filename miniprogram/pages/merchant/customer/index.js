@@ -13,7 +13,7 @@ function money(c) { return storeMoney(c, 0) } // 门店币种,不写死 $
 function lastText(iso) { if (!iso) return '—'; const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000); if (d <= 0) return '今天'; if (d < 365) return `${d}天前`; return iso.slice(0, 10) }
 
 Page({
-  data: { c: null, orders: [], ordersLoaded: false },
+  data: { c: null, orders: [], ordersLoaded: false, remarkDraft: '', remarkSaving: false },
   onLoad(q) { this.id = decodeURIComponent((q && q.id) || '');this._archiveView=q?.archived==='1' },
   migrationArchive() { require('../../../utils/nav').to('/pages/merchant/migration-archive/index?userId='+encodeURIComponent(this.id)) },
   writeNote() {
@@ -38,8 +38,10 @@ Page({
       const u = (r.customers || r.data || r || []).find((x) => x.id === this.id)
       if (!u) { wx.showToast({ title: '客户不存在', icon: 'none' }); return }
       this.setData({
+        remarkDraft:u.remarkName || '',
         c: {id:this.id,archived:!!u.archived,
-          name: u.displayName || '顾客',
+          name: u.merchantDisplayName || u.displayName || '顾客',
+          nickname: u.displayName || '顾客', remarkName: u.remarkName || '',
           av: (u.displayName || '?').slice(0, 1),
           tier: tierCn(u.memberTier) || '会员',
           memberCode: u.memberCode || '',
@@ -58,6 +60,14 @@ Page({
     } catch (e) { wx.showToast({ title: '加载失败', icon: 'none' }) }
   },
   // 发券给该会员:选一张在售券 → 生成核销码
+  onRemark(e) { this.setData({remarkDraft:e.detail.value}) },
+  async saveRemark(){
+    if(this.data.remarkSaving)return
+    this.setData({remarkSaving:true})
+    try{await api.adminPatch('/admin/customers/'+encodeURIComponent(this.id)+'/remark-name',{remarkName:this.data.remarkDraft});await this.load();wx.showToast({title:'备注名已保存',icon:'success'})}
+    catch(e){wx.showToast({title:e.message||'保存失败，请重试',icon:'none'})}
+    finally{this.setData({remarkSaving:false})}
+  },
   async sendCoupon() {
     try {
       const r = await api.adminGet('/admin/coupons')

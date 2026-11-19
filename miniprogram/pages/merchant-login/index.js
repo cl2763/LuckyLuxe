@@ -4,13 +4,15 @@ Page({
   data: {
     username: '',
     password: '',
-    remember: true,
+    remember: false,
+    consent: false,
     loading: false,
     hidePwd: true
   },
 
   onUser(e) { this.setData({ username: e.detail.value }) },
   onPass(e) { this.setData({ password: e.detail.value }) },
+  toggleConsent() { this.setData({ consent: !this.data.consent }) },
   toggleRemember() { this.setData({ remember: !this.data.remember }) },
   togglePwd() { this.setData({ hidePwd: !this.data.hidePwd }) },
   toForgot() { wx.navigateTo({ url: '/pages/merchant-forgot/index' }) },
@@ -18,6 +20,7 @@ Page({
 
   async login() {
     if (this.data.loading) return
+    if (!this.data.consent) { wx.showToast({ title: '请先阅读并自主同意隐私政策', icon: 'none' }); return }
     const username = this.data.username.trim()
     const password = this.data.password
     if (!username || !password) {

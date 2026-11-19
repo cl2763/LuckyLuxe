@@ -11,7 +11,7 @@
       <view class="fact"><text class="fl">已消费</text><text class="fv">{{facts.consumedText}}</text></view>
       <view class="fact hi"><text class="fl">当前余额</text><text class="fv">{{facts.balanceText}}</text></view>
     </view>
-    <view class="split">{{facts.splitText}}</view>
+    <view class="split">{{facts.splitText}}</view><view class="hint">{{facts.refundSummaryText}}</view>
     <view wx:if="{{facts.depositTransferText}}" class="hint">{{facts.depositTransferText}}</view><view class="hint">{{facts.hint}}</view>
   </block>
   <view wx:else class="hint">读取中…</view>

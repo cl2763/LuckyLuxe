@@ -51,7 +51,7 @@ export function createStoredValueReversal({ db, apiError, insertStoredValueTrans
     const bonusRemaining = Math.max(0, Math.min(w.bonus - (w.bonus_refunded || 0) - depositBonusUsed, w.balance))
     const paidRefundable = Math.max(0, w.balance - bonusRemaining)
     if (paidRefundable < txn.amount_cents || bonusRemaining < (bonus ? bonus.amount_cents : 0)) {
-      throw apiError(400, 'CONSUMED_NO_REVERSAL', '余额已不足以证明这笔未消费,请走退卡。')
+      throw apiError(400, 'CONSUMED_NO_REVERSAL', '当前本金或赠金余额不足，可能已消费、退卡或转作定金。请先核对完整流水，不能重复扣减。')
     }
     db.exec('SAVEPOINT reverse_recharge')
     try {

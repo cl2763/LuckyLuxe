@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261117-feedback1'
+const ADMIN_BUILD = '20261119-consent-customer1'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -413,6 +413,8 @@ function applyLanguage() {
   applyLoginRoleUi()
   els.ownerPasswordLabel.textContent = t('password')
   els.ownerLoginButton.textContent = t('login')
+  document.querySelector('#loginConsentLabel').textContent = owner.lang === 'en' ? 'I have read and agree to the' : '我已阅读并同意'
+  document.querySelector('#loginConsentPolicy').textContent = owner.lang === 'en' ? 'Privacy Policy' : '《隐私政策》'
   els.ownerRegisterButton.textContent = t('registerOwner')
   els.ownerLogout.textContent = t('logout')
   els.dashboardEyebrow.textContent = t('dashboard')
@@ -640,9 +642,10 @@ function applyLoginRoleUi() {
 
 async function ownerLogin(event) {
   event.preventDefault()
+  if (!document.querySelector('#loginConsent')?.checked) { toast(owner.lang === 'en' ? 'Please read and agree to the privacy policy.' : '请先阅读并自主同意隐私政策'); return }
   const form = new FormData(event.target)
   const action = event.submitter?.dataset.authAction || 'login'
-  const remember = document.querySelector('#loginRemember')?.checked !== false
+  const remember = document.querySelector('#loginRemember')?.checked === true
   const data = await request(action === 'register' ? '/admin/auth/register' : '/admin/auth/login', {
     method: 'POST',
     public: true,
@@ -3884,7 +3887,7 @@ function renderScheduleWeek() {
     }).join('')}
   </div>`).join('')
   if (!isOwnerRole()) els.scheduleGridHint.textContent = zh ? '团队排班只读；仅可点击自己的格子申请调整，老板批准后生效。' : 'Team shifts are read-only. Request changes only for your own shifts.'
-  els.scheduleWeekGrid.innerHTML = header + (rows || `<div class="empty-state small-empty">${zh ? '暂无在职技师' : 'No active technicians'}</div>`) + renderScheduleRequestsPanel()
+  els.scheduleWeekGrid.innerHTML = (owner.role==='owner'?'<button class="ghost slim" type="button" data-tech-services>技师服务分工</button>':'') + header + (rows || `<div class="empty-state small-empty">${zh ? '暂无在职技师' : 'No active technicians'}</div>`) + renderScheduleRequestsPanel()
 }
 
 // 排班申请面板:员工看自己的申请与结果;老板看待处理队列并审批
@@ -4119,14 +4122,7 @@ function sortedCustomers() {
   })
 }
 
-function customerName(customer) {
-  return customer.displayName || customer.email || 'Lucky Member'
-}
-
-function dateOnly(value) {
-  if (!value) return '-'
-  return new Date(value).toISOString().slice(0, 10)
-}
+const {customerName,dateOnly} = window.CustomerDisplay
 
 const MEMBER_TIER_STYLES = {
   Silver: 'tier-silver',
@@ -4215,6 +4211,7 @@ function renderCustomerDetail() {
           <span>${owner.lang === 'zh' ? '储值余额' : 'Stored value'} <strong>${money(customer.storedValueBalanceCents || 0)}</strong></span>
         </div>
       </article>
+      <section class="card customer-profile-edit"><h2>${owner.lang === 'zh' ? '本店备注名' : 'Store remark name'}</h2><p class="subtle">${owner.lang === 'zh' ? '仅本店商家端可见，不改变顾客自己设置的昵称。顾客昵称：' : 'Visible to this store only. Customer nickname: '}${escapeHtml(customer.displayName || '')}</p><label><span>${owner.lang === 'zh' ? '备注名（最多40字，留空清除）' : 'Remark name (up to 40 characters; clear to remove)'}</span><input id="customerRemarkNameInput" maxlength="40" value="${escapeHtml(customer.remarkName || '')}"></label><button class="primary slim" data-customer-remark-save="${escapeHtml(customer.id)}" type="button">${owner.lang === 'zh' ? '保存备注名' : 'Save remark name'}</button></section>
       <div id="mpCustomerDiscount"></div>
       <section class="customer-profile-edit card">
         <div class="section-row compact-row">
@@ -7526,3 +7523,5 @@ document.getElementById('setupOwnerReview')?.addEventListener('click',()=>window
 if(!window.SetupPreview)window.ConfigSync.start({request,path:'/admin/config-revision',context:()=>ownerBearer()+'|'+owner.adminPage,enabled:()=>!!ownerBearer(),canRefresh:()=>['membership','pricing'].includes(owner.adminPage)&&pricingState.module!=='bookingAddons'&&!document.querySelector('.form-modal-overlay,.settlement-overlay'),refresh:async force=>{if(owner.adminPage==='membership')await loadMembershipPage();else if(owner.adminPage==='pricing')await loadPricingPage();else if(force)await loadAll()}})
 
 document.addEventListener('click',e=>{const b=e.target.closest('[data-record-manage]');if(b&&isOwnerRole())window.RecordLifecycle.open(b.dataset.recordManage,{request,refresh:loadAll,toast,recordId:b.dataset.recordId,openCustomer:async id=>{const d=await request('/admin/customers?archivedId='+encodeURIComponent(id));if(!d.customers[0])throw Error('本店没有这份档案');owner.archivedCustomer=d.customers[0];owner.selectedCustomerId=id;owner.selectedBookingId='';owner.adminPage='customers';render()}})})
+
+window.CustomerDisplay.bind({request,escapeHtml,loadAll,toast,isEnglish:()=>owner.lang==='en'})

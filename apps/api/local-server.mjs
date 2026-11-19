@@ -1,3 +1,4 @@
+import {listAdminCustomers} from './customer-directory.mjs'
 import {nextSettlementCode} from './settlement-code.mjs'
 import {createRecordLifecycle,activeRecords,assertRecordActive,recordIsArchived} from './record-lifecycle.mjs'
 import {createConfigRevision,configFingerprint} from './config-fingerprint.mjs'
@@ -84,6 +85,7 @@ import { fileURLToPath } from 'node:url'
 import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动日志给手机用的地址)
 import { storeCodeInfo } from './store-code.mjs'
 import { withStoreNavigation } from './store-navigation.mjs'; import { customerMessages, ensureCustomerMessageSchema } from './customer-messages.mjs'; import { createMerchantMessages } from './merchant-messages.mjs'; import { createBookingSubscriptions } from './booking-subscriptions.mjs'; import { createSubscribeSender } from './wechat-subscribe.mjs'
+import {createCustomerRemarks} from './customer-remarks.mjs'
 import { customerProfileRoute } from './customer-profile-route.mjs'
 import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
 import { inkToPng } from './ink-raster.mjs'
@@ -6427,67 +6429,7 @@ function cancelBooking(id, body) {
 }
 
 function getAdminCustomers(includeArchived=false) {
-  const tid = currentTenantId()
-  /* 🔴 D35(2026-08-12 核查二抓获):原来默认店(旗舰)不加任何过滤=全库所有租户用户大杂烩,
-     lucky-luxe 客户库能看到 jics 沙盒店手测建的「666/899」——单租户时代遗产,租户红线违例。
-     统一口径(所有租户同一条):本店档案(u.tenant_id=本店)∪ 在本店有预约/储值的档案。 */
-  const esc = tid.replace(/'/g, "''")
-  /* 口径与结算卡主门一致:严格 users.tenant_id = 本店(单一规则,三处同源:客户列表/排单校验/卡主校验)。
-     「本店有活动但档案挂别店」不再放行 —— 那正是串味的形状,该修档案归属而不是放行显示。 */
-  const activityFilter = `
-    WHERE u.tenant_id = '${esc}' ${includeArchived?'':"AND NOT EXISTS(SELECT 1 FROM record_lifecycle a WHERE a.tenant_id=u.tenant_id AND a.kind='customers' AND a.record_id=u.id AND a.status='archived')"}`
-  return db.prepare(`
-    SELECT
-      u.id,
-      u.display_name,
-      u.phone,
-      u.email,
-      u.tags_json,
-      u.notes,
-      u.birthday,
-      NULL AS created_at,
-      COUNT(b.id) AS visit_count,
-      COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN 1 ELSE 0 END), 0) AS completed_count,
-      MIN(CASE WHEN b.status = 'COMPLETED' THEN b.appointment_start END) AS first_visit_at,
-      MAX(CASE WHEN b.status = 'COMPLETED' THEN b.appointment_start END) AS last_completed_at
-    FROM users u
-    LEFT JOIN bookings b ON b.user_id = u.id AND b.tenant_id = ?
-    ${activityFilter}
-    GROUP BY u.id
-    ORDER BY LOWER(u.display_name) ASC
-  `).all(tid).map((row) => {
-    const lastVisitAt = lastCustomerVisitAt(db, row.id, tid)
-    const totalSpentCents = customerSpendCents(db, row.id, tid)
-    return ({
-    id: row.id,
-    displayName: row.display_name,
-    phone: row.phone,
-    email: row.email,
-    createdAt: row.created_at,
-    visitCount: visitDaysCount(row.id, tid), // 裁A/裁D:与顾客端同一出口(旧=COUNT 全部预约,取消也算到店)
-    lastVisitAt,
-    lastVisitDate: lastVisitAt ? localParts(new Date(lastVisitAt), tenantTimezone(tid)).date : null,
-    totalSpentCents,
-    // RFM 分层用(按完成单口径)
-    completedCount: row.completed_count || 0,
-    firstVisitAt: row.first_visit_at || null,
-    lastCompletedAt: row.last_completed_at || null,
-    tags: parseJson(row.tags_json) || [],
-    notes: row.notes || '',
-    birthday: row.birthday || '',
-    acquisitionSource: row.acquisition_source || '',
-    originalJoinedDate: row.original_joined_date || '',
-    storedValueBalanceCents: storedValueBalanceCents(row.id),
-    memberCode: memberCodeForUserId(row.id),
-    // 等级单源(F3)+D41:分级店按租户梯子;不分级店=充值即会员(member/guest),消费不算
-    isMember: isMemberOf(row.id, tid),
-    memberTier: (() => {
-      const ms = membershipForSpend(totalSpentCents, tid)
-      if (ms.memberTiers.length) return ms.memberTier
-      return isMemberOf(row.id, tid) ? 'member' : 'guest'
-    })()
-    })
-  })
+  return listAdminCustomers({db,currentTenantId,lastCustomerVisitAt,customerSpendCents,visitDaysCount,localParts,tenantTimezone,parseJson,storedValueBalanceCents,memberCodeForUserId,isMemberOf,membershipForSpend,customerRemarks},includeArchived)
 }
 
 function buildCustomerServiceContext(req, lang = 'zh') {
@@ -9997,6 +9939,7 @@ const marketingDefinitions=createMarketingDefinitions({db,apiError,readBody,json
 const recordLifecycle=createRecordLifecycle({db,apiError,json,readBody,currentTenantId,actorOf:a=>actorOf(a),todayOf:tid=>localParts(new Date(),tenantTimezone(tid)).date})
 const bookingAddons=createBookingAddons({db,apiError});const configRevision=createConfigRevision(db)
 const packageWrite=createPackageWrite({db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage,memberPricing})
+const customerRemarks = createCustomerRemarks({db,apiError})
 const createCustomer = createCustomerCreator({db,apiError,randomId,maskPhone})
 const completeVerifiedPhone = createVerifiedPhoneCompletion({db,apiError,claim:claimUserByOpenId,serialize:serializeUser,auth:miniAuthFor,unboundSql:notBoundByLoginIdentitySql})
 const scanEntryRoute = createScanEntryRoute({db,apiError,json,readBody,
@@ -11293,6 +11236,10 @@ async function route(req, res) {
   }
   if(await recordLifecycle.route(req,res,{path,query,adminSession}))return
   if(req.method==='GET'&&path==='/admin/config-revision')return json(res,200,configRevision(currentTenantId()),{'cache-control':'no-store'})
+  if(req.method==='PATCH'&&/^\/admin\/customers\/[^/]+\/remark-name$/.test(path)) {
+    const body=await readBody(req)
+    return json(res,200,customerRemarks.save(currentTenantId(),decodeURIComponent(path.split('/')[3]),body.remarkName,adminSession))
+  }
   if (req.method === 'POST' && path === '/admin/customers') return json(res,201,createCustomer({body:await readBody(req),tenantId:currentTenantId(),role:adminSession.role}))
   if (req.method === 'GET' && path === '/admin/customers') {
     /* 拍板②(店主 2026-08-10):员工「我的客户」——
@@ -11308,11 +11255,11 @@ async function route(req, res) {
       ).all(currentTenantId(), techId).map((r) => r.user_id))
       const rows = getAdminCustomers()
         .filter((c) => mineIds.has(c.id))
-        .filter((c) => !q0 || `${c.displayName || ''}`.toLowerCase().includes(q0) || `${maskPhone(c.phone)}`.includes(q0))
+        .filter((c) => !q0 || `${c.displayName || ''} ${c.remarkName || ''}`.toLowerCase().includes(q0) || `${maskPhone(c.phone)}`.includes(q0))
         .map((c) => ({
           // 白名单**正向构造**:只挑该给的字段,财务字段连键都不出现
           id: c.id,
-          displayName: c.displayName,
+          displayName: c.displayName, remarkName:c.remarkName, merchantDisplayName:c.merchantDisplayName,
           phoneMasked: maskPhone(c.phone),
           visitCount: c.visitCount,
           lastVisitAt: c.lastVisitAt,
@@ -11348,7 +11295,7 @@ async function route(req, res) {
     const mine = new Set(db.prepare('SELECT id FROM users WHERE tenant_id = ?').all(currentTenantId()).map((r) => r.id))
     const customers = all
       .filter((c) => mine.has(c.id))
-      .filter((c) => `${c.displayName || ''}`.toLowerCase().includes(q) || `${c.phone || ''}`.includes(q))
+      .filter((c) => `${c.displayName || ''} ${c.remarkName || ''}`.toLowerCase().includes(q) || `${c.phone || ''}`.includes(q))
       .slice(0, 20)
       .map(withRetain)
     return json(res, 200, { customers })
@@ -11394,6 +11341,13 @@ async function route(req, res) {
     const booking = row ? serializeBooking(row, body.lang || 'zh') : body.booking
     countAiUsage()
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, brandName: tenantKbFacts(currentTenantId()).brandName || '', platform: body.platform || 'xiaohongshu', audience: body.audience || 'staff', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
+  }
+  if(req.method==='GET'&&path==='/admin/technician-services') {
+    if(adminSession.role!=='owner')throw apiError(403,'FORBIDDEN','仅老板可配置技师服务分工。')
+    const tid=currentTenantId()
+    const technicians=activeRecords(db,tid,'technicians',db.prepare('SELECT id,name,is_active FROM technicians WHERE tenant_id=? ORDER BY name').all(tid)).filter(t=>t.is_active===1).map(t=>({...t,serviceIds:db.prepare('SELECT service_id FROM technician_services WHERE technician_id=?').all(t.id).map(r=>r.service_id)}))
+    const services=db.prepare('SELECT id,name_zh AS name,is_active AS isActive,type FROM services WHERE tenant_id=? ORDER BY sort_order,rowid').all(tid)
+    return json(res,200,{technicians,services},{'cache-control':'no-store'})
   }
   if (req.method === 'GET' && path === '/admin/technicians') {
     // roster=1:本店在职名单(结算开单要勾主/副技师,员工也得看得见同事)。
@@ -12733,7 +12687,7 @@ async function route(req, res) {
       FROM stored_value_transactions s
       LEFT JOIN users u ON u.id = s.user_id
       LEFT JOIN technicians t ON t.id = s.technician_id
-      WHERE s.tenant_id = ? AND s.type IN ('recharge', 'consume', 'bonus', 'reversal','deposit_hold','deposit_return') AND substr(s.created_at, 1, 7) = ?
+      WHERE s.tenant_id = ? AND s.type IN ('recharge', 'consume', 'bonus', 'reversal','refund','migrate_opening','deposit_hold','deposit_return') AND substr(s.created_at, 1, 7) = ?
       ORDER BY s.created_at DESC
     `).all(currentTenantId(), month)
     const tz = tenantTimezone(currentTenantId())

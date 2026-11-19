@@ -585,7 +585,7 @@ Page(Object.assign({
       // 快捷选人列表按图脱敏显示手机号(搜索仍用全号匹配);到店次数帮店员认人
       customers = (rc.customers || []).map((c) => ({
         id: c.id,
-        name: c.display_name || c.displayName || c.name || '顾客',
+        name: c.merchantDisplayName || c.display_name || c.displayName || c.name || '顾客',
         phone: c.phone || '',
         phoneMasked: c.phoneMasked || maskPhoneLocal(c.phone || ''),
         visits: c.visitCount || c.visit_count || 0

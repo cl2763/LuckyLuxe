@@ -20,3 +20,5 @@ page{background:var(--paper)}
 .okt{font-size:32rpx;font-weight:600;color:var(--ink)}
 .okd{font-size:24rpx;color:var(--sub);line-height:1.7;margin-top:12rpx}
 .ok .btn{background:var(--wall);color:var(--brandd);margin-top:40rpx}
+
+.consent-row{display:flex;align-items:center;flex-wrap:wrap;gap:8rpx;margin:24rpx 0;color:var(--ink);font-size:26rpx}.consent-choice,.consent-row navigator{padding:20rpx 8rpx}.consent-row navigator{color:var(--brandd);text-decoration:underline}

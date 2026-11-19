@@ -178,6 +178,12 @@ export function createServiceImport({ db, apiError, randomId, iso, categoryList,
         if (r.shareCents) priceRow('share', r.shareCents)
         if (r.memberCents) priceRow('member', r.memberCents)
         if (r.courseCents) priceRow('course', r.courseCents, r.courseTimes)
+        // 与手动新增主服务一致：仅给本店在职技师关联本次新增主项目。
+        // 不修改已有服务分工，不恢复停用技师，加项不占服务能力位。
+        if (!r.isAddon) {
+          const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
+          for (const tech of db.prepare('SELECT id FROM technicians WHERE tenant_id=? AND is_active=1').all(tenantId)) assign.run(tech.id, id)
+        }
         created += 1
       }
       db.exec('COMMIT')
