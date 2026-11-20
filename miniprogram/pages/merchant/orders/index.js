@@ -580,7 +580,7 @@ Page(Object.assign({
     const firstCat = cats[0] || { id: '' }
     const services = (byCat[firstCat.id] || [])
     let customers = this.data.directCustomers
-    if (!customers.length) {
+    { // Re-read labels each time the picker opens; remarks may change on another device.
       const rc = await api.adminGet('/admin/customers').catch(() => ({ customers: [] }))
       // 快捷选人列表按图脱敏显示手机号(搜索仍用全号匹配);到店次数帮店员认人
       customers = (rc.customers || []).map((c) => ({
@@ -653,8 +653,8 @@ Page(Object.assign({
       const result = await api.adminGet(`/admin/customers/lookup?memberCode=${encodeURIComponent(mc)}`)
       const hit = result.hit
       if (!hit) { wx.showModal({title:'本店未找到档案',content:result.reason || '请核对顾客当前选择的门店及会员码。',showCancel:false,fail:(e)=>console.warn('[showModal fail]',e)}); return }
-      this.setData({ selectedCustId: hit.id, selectedCustPhoneMasked:hit.phoneMasked||'', directContact:'', selectedCustName: hit.displayName, custQuery: hit.displayName, custMatches: [], pendingNewName: '', pendingNewPhone: '' })
-      wx.showToast({ title: `已带出 ${hit.displayName}`, icon: 'none' })
+      this.setData({ selectedCustId: hit.id, selectedCustPhoneMasked:hit.phoneMasked||'', directContact:'', selectedCustName: hit.merchantDisplayName || hit.displayName, custQuery: hit.merchantDisplayName || hit.displayName, custMatches: [], pendingNewName: '', pendingNewPhone: '' })
+      wx.showToast({ title: `已带出 ${hit.merchantDisplayName || hit.displayName}`, icon: 'none' })
     } catch (e) { wx.showToast({ title: '会员码解析失败', icon: 'none' }) }
     finally { wx.hideNavigationBarLoading({fail:()=>{}}) }
   },

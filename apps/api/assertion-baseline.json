@@ -46,7 +46,7 @@
     "sign-stability": 7,
     "noshow-aftersales": 761,
     "demo-seed-guard": 100,
-    "card-refund": 154,
+    "card-refund": 156,
     "amend-linkage": 34,
     "ledger-guards": 67,
     "backend-gate": 15,
@@ -226,7 +226,8 @@
     "mini-package-feedback": 6,
     "config-write-lock": 8,
     "consent-customer-20261119": 6,
-    "ai-disclosure-20261120": 6
+    "ai-disclosure-20261120": 6,
+    "customer-binding-remarks": 24
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

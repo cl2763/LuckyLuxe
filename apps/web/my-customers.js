@@ -17,9 +17,9 @@ window.MyCustomers = (function () {
         <p class="subtle">${escapeHtml(d.note || '')}</p>
         ${list.length ? list.map((c) => `
           <article class="customer-profile-card card" data-my-customer="${escapeHtml(c.id)}" style="cursor:pointer">
-            <div class="customer-avatar">${escapeHtml(String(c.displayName || '?').slice(0, 1).toUpperCase())}</div>
+            <div class="customer-avatar">${escapeHtml(String(c.merchantDisplayName || c.displayName || '?').slice(0, 1).toUpperCase())}</div>
             <div>
-              <h3>${escapeHtml(c.displayName)}</h3>
+              <h3>${escapeHtml(c.merchantDisplayName || c.displayName)}</h3>
               <p class="subtle">${escapeHtml(c.memberCode || '')}${c.phoneMasked ? ` · ${escapeHtml(c.phoneMasked)}` : ''}</p>
             </div>
             <div class="customer-stats">
@@ -47,7 +47,7 @@ window.MyCustomers = (function () {
       const c = d.customer
       box.innerHTML = `
         <button class="ghost slim" data-my-back type="button">← ${zh ? '我的客人' : 'Back'}</button>
-        <h2>${escapeHtml(c.displayName)}</h2>
+        <h2>${escapeHtml(c.merchantDisplayName || c.displayName)}</h2>
         <p class="subtle">${escapeHtml(c.memberCode || '')}${c.phoneMasked ? ` · ${escapeHtml(c.phoneMasked)}` : ''}</p>
         <p class="subtle">${escapeHtml(d.note || '')}</p>
         ${(c.tags || []).length ? `<div class="customer-tags">${c.tags.map((t) => `<span class="customer-tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}

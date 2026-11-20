@@ -42,7 +42,7 @@ Page({
         c: {id:this.id,archived:!!u.archived,
           name: u.merchantDisplayName || u.displayName || '顾客',
           nickname: u.displayName || '顾客', remarkName: u.remarkName || '',
-          av: (u.displayName || '?').slice(0, 1),
+          av: (u.merchantDisplayName || u.displayName || '?').slice(0, 1),
           tier: tierCn(u.memberTier) || '会员',
           memberCode: u.memberCode || '',
           phone: u.phone || '',
@@ -55,7 +55,7 @@ Page({
           notes: u.notes || ''
         }
       })
-      wx.setNavigationBarTitle({ title: u.displayName || '客户档案' })
+      wx.setNavigationBarTitle({ title: u.merchantDisplayName || u.displayName || '客户档案' })
       this.loadOrders()
     } catch (e) { wx.showToast({ title: '加载失败', icon: 'none' }) }
   },

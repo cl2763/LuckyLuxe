@@ -7,7 +7,7 @@
 
    判据取"这个人是不是他服务过的",不是"他是不是员工" ——
    问别人的客人一律 404:对他来说,那个人本来就不该存在。 */
-export function createStaffScope({ db, apiError, currentTenantId, memberCodeForUserId, bookingStatusText, storeTimeText }) {
+export function createStaffScope({ db, apiError, currentTenantId, memberCodeForUserId, bookingStatusText, storeTimeText, customerNames }) {
   const maskPhone = (p) => (p ? String(p).replace(/^(\d{0,3}).*(\d{2})$/, '$1****$2') : '')
 
   function myCustomers(adminSession, query = {}) {
@@ -20,7 +20,7 @@ export function createStaffScope({ db, apiError, currentTenantId, memberCodeForU
     return {
       customers: rows.map((r) => ({
         id: r.id,
-        displayName: r.display_name || memberCodeForUserId(r.id),
+        ...customerNames(currentTenantId(),r.id,r.display_name || memberCodeForUserId(r.id)),
         memberCode: memberCodeForUserId(r.id),
         phoneMasked: maskPhone(r.phone),
         visits: r.visits,
@@ -66,7 +66,7 @@ export function createStaffScope({ db, apiError, currentTenantId, memberCodeForU
     try { tags = JSON.parse(db.prepare('SELECT tags_json FROM users WHERE id = ?').get(u.id)?.tags_json || '[]') } catch { tags = [] }
     return {
       customer: {
-        id: u.id, displayName: u.display_name, memberCode: memberCodeForUserId(u.id),
+        id: u.id, ...customerNames(currentTenantId(),u.id,u.display_name), memberCode: memberCodeForUserId(u.id),
         phoneMasked: maskPhone(u.phone), tags
       },
       /* 状态词与时间都**后端出句**:前端零词典、零时区推算。

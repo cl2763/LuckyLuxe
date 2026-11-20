@@ -5,11 +5,12 @@ const TYPES={customers:{table:'users',name:'display_name',label:'顾客'},techni
 export function recordIsArchived(db,tid,kind,id){return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='record_lifecycle'").get()&&db.prepare('SELECT status FROM record_lifecycle WHERE tenant_id=? AND kind=? AND record_id=?').get(tid,kind,id)?.status==='archived'}
 export function assertRecordActive(db,apiError,tid,kind,id){if(id&&recordIsArchived(db,tid,kind,id))throw apiError(409,'RECORD_ARCHIVED','资料已归档，请先由老板恢复后办理新业务。')}
 export const activeRecords=(db,tid,kind,rows)=>rows.filter(r=>!recordIsArchived(db,tid,kind,r.id))
-export function createRecordLifecycle({db,apiError,json,readBody,currentTenantId,todayOf,actorOf}){
+export function createRecordLifecycle({db,apiError,json,readBody,currentTenantId,todayOf,actorOf,customerNames}){
  db.exec(`CREATE TABLE IF NOT EXISTS record_lifecycle(tenant_id TEXT NOT NULL,kind TEXT NOT NULL,record_id TEXT NOT NULL,status TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(tenant_id,kind,record_id));
  CREATE TABLE IF NOT EXISTS record_lifecycle_events(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,kind TEXT NOT NULL,record_id TEXT NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL,actor TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TRIGGER IF NOT EXISTS record_lifecycle_events_no_update BEFORE UPDATE ON record_lifecycle_events BEGIN SELECT RAISE(ABORT,'lifecycle audit is append-only');END;
  CREATE TRIGGER IF NOT EXISTS record_lifecycle_events_no_delete BEFORE DELETE ON record_lifecycle_events BEGIN SELECT RAISE(ABORT,'lifecycle audit is append-only');END;`)
+ const named=(tid,kind,row)=>{if(kind!=='customers')return row;const n=customerNames(tid,row.id,row.name);return {...row,...n,name:n.merchantDisplayName}}
  const state=(tid,kind,id)=>db.prepare('SELECT status FROM record_lifecycle WHERE tenant_id=? AND kind=? AND record_id=?').get(tid,kind,id)?.status||'active'
  const filter=(tid,kind,rows,archive=false)=>rows.filter(r=>archive?state(tid,kind,r.id)==='archived':state(tid,kind,r.id)!=='archived')
  function requireActive(tid,kind,id){if(state(tid,kind,id)==='archived')throw apiError(409,'RECORD_ARCHIVED','这份资料已归档，请先由老板在已归档列表恢复。')}
@@ -68,7 +69,7 @@ export function createRecordLifecycle({db,apiError,json,readBody,currentTenantId
   }
   if(kind==='categories')block('分类内仍有服务项目',count('SELECT count(*) n FROM services WHERE tenant_id=? AND category_id=?',tid,id))
   const status=state(tid,kind,id),actions=status==='archived'?['restore']:blockers.length?[]:refs.length?['archive']:['delete','archive']
-  const result={kind,id,name:row[spec.name],status,blockers,references:refs.map(r=>({label:({bookings:'预约记录',settlements:'服务单据',stored_value_transactions:'储值流水',member_timecards:'已发次卡',coupon_grants:'已发优惠券',legacy_recharge_unattributed:'存在未保留套餐编号的历史充值，无法确认未使用',admin_accounts:'关联登录账号',technician_services:'服务分工',technician_schedules:'排班记录',salary_payrolls:'薪酬记录',booking_addon_configuration:'预约附加服务配置'})[r.source]||'相关业务或配置记录',count:r.count})),actions,requiresSalaryReview:kind==='technicians'&&refs.length>0}
+  const result={kind,id,...named(tid,kind,{id,name:row[spec.name]}),status,blockers,references:refs.map(r=>({label:({bookings:'预约记录',settlements:'服务单据',stored_value_transactions:'储值流水',member_timecards:'已发次卡',coupon_grants:'已发优惠券',legacy_recharge_unattributed:'存在未保留套餐编号的历史充值，无法确认未使用',admin_accounts:'关联登录账号',technician_services:'服务分工',technician_schedules:'排班记录',salary_payrolls:'薪酬记录',booking_addon_configuration:'预约附加服务配置'})[r.source]||'相关业务或配置记录',count:r.count})),actions,requiresSalaryReview:kind==='technicians'&&refs.length>0}
   return {...result,summary:summary(tid,kind,id),reviewHash:configFingerprint([row,refs,blockers,status])}
  }
  function perform(tid,kind,id,body,actor){const action=body.action;if(!['delete','archive','restore'].includes(action))throw apiError(400,'BAD_ACTION','操作无效。');const reason=String(body.reason||'').trim();if(!reason||reason.length>200)throw apiError(400,'REASON_REQUIRED','请填写200字以内的操作原因。')
@@ -87,7 +88,7 @@ export function createRecordLifecycle({db,apiError,json,readBody,currentTenantId
   }catch(e){db.exec('ROLLBACK TO record_lifecycle_change; RELEASE record_lifecycle_change');throw e}
  }
  async function route(req,res,{path,query,adminSession}){const m=path.match(/^\/admin\/records\/(customers|technicians|packages|coupons|points-prizes|services|categories)(?:\/([^/]+))?$/);if(!m)return false;if(adminSession.role!=='owner')throw apiError(403,'FORBIDDEN','仅老板可管理资料归档与删除。');const tid=currentTenantId(),[,kind,encoded]=m,id=encoded?decodeURIComponent(encoded):null
-  if(req.method==='GET'&&!id){const spec=TYPES[kind],rows=db.prepare(`SELECT id,"${spec.name}" name FROM ${spec.table} WHERE tenant_id=? ORDER BY rowid DESC`).all(tid);json(res,200,{records:filter(tid,kind,rows,query.archived==='1').map(r=>({...r,status:state(tid,kind,r.id),...(query.summary==='1'?summary(tid,kind,r.id):{})})),kind});return true}
+  if(req.method==='GET'&&!id){const spec=TYPES[kind],rows=db.prepare(`SELECT id,"${spec.name}" name FROM ${spec.table} WHERE tenant_id=? ORDER BY rowid DESC`).all(tid);json(res,200,{records:filter(tid,kind,rows,query.archived==='1').map(r=>({...named(tid,kind,r),status:state(tid,kind,r.id),...(query.summary==='1'?summary(tid,kind,r.id):{})})),kind});return true}
   if(req.method==='GET'&&id){json(res,200,inspect(tid,kind,id));return true}
   if(req.method==='POST'&&id){json(res,200,perform(tid,kind,id,await readBody(req),actorOf(adminSession)));return true}
   throw apiError(405,'METHOD_NOT_ALLOWED','不支持此操作。')

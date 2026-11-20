@@ -14,5 +14,6 @@ export function createCustomerRemarks({db,apiError}) {
       .run(tenantId,userId,name,at,actor.accountId||actor.email||'owner')
     return {remarkName:name}
   }
-  return {read,save}
+  function names(tenantId,userId,displayName) { const remarkName=read(tenantId,userId); return {displayName,remarkName,merchantDisplayName:remarkName || displayName} }
+  return {read,save,names}
 }
