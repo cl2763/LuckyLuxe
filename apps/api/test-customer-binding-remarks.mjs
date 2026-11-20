@@ -1,6 +1,6 @@
 import{mkdtempSync,openSync,closeSync,rmSync,writeFileSync}from'node:fs';import{spawn}from'node:child_process';import{fileURLToPath}from'node:url';import{DatabaseSync}from'node:sqlite';
 const dir=mkdtempSync('/tmp/ll-ci-data.customer-links-'),port=4377,base=`http://127.0.0.1:${port}`,owner='isolated-customer-links-only',fd=openSync(dir+'/server.log','w'),checks=[];
-const server=spawn(process.execPath,['--experimental-sqlite','local-server.mjs'],{cwd:fileURLToPath(new URL('.',import.meta.url)),env:{PATH:process.env.PATH,HOME:process.env.HOME,DATA_DIR:dir,PORT:String(port),HOST:'127.0.0.1',OWNER_TOKEN:owner,WECHAT_MINI_TOKEN_SECRET:'binding-isolated-test-only',WECHAT_APP_SECRET:'configured-test-only',ALLOW_DEMO_ADMIN_LOGIN:'false',NOTIFY_TICK:'off'},stdio:['ignore',fd,fd]});let db;
+const server=spawn(process.execPath,['--experimental-sqlite','local-server.mjs'],{cwd:fileURLToPath(new URL('.',import.meta.url)),env:{PATH:process.env.PATH,HOME:process.env.HOME,DATA_DIR:dir,PORT:String(port),HOST:'127.0.0.1',OWNER_TOKEN:owner,WECHAT_MINI_TOKEN_SECRET:'binding-isolated-test-only',WECHAT_APP_SECRET:'configured-test-only',CUSTOMER_BINDING_REMARKS_TENANTS:'first-use-a',ALLOW_DEMO_ADMIN_LOGIN:'false',NOTIFY_TICK:'off'},stdio:['ignore',fd,fd]});let db;
 const check=(name,ok,detail)=>{checks.push({name,ok,detail});console.log((ok?'ok ':'FAIL ')+name+(ok?'':' '+JSON.stringify(detail)))};
 async function req(path,{body,token=owner,tid='first-use-a',method=body?'POST':'GET'}={}){const r=await fetch(base+path,{method,headers:{'content-type':'application/json','x-admin-tenant-id':tid,'x-tenant-id':tid,...(token?{authorization:'Bearer '+token}:{})},body:body?JSON.stringify(body):undefined});return{status:r.status,data:await r.json()}}
 const publicPost=(path,body)=>req(path,{body,token:null});
@@ -20,6 +20,10 @@ try{
  check('原顾客字段未改写',JSON.stringify(original)===JSON.stringify(db.prepare('select * from users where id=?').get(uid)));
  const outside=(await req('/admin/records/customers?summary=1',{tid:'first-use-b'})).data.records;
  check('其他门店无备注泄漏',outside.find(x=>x.id===otherId).name==='未命名'&&!outside.some(x=>x.id===uid));
+ await req('/admin/customers/'+otherId+'/remark-name',{tid:'first-use-b',method:'PATCH',body:{remarkName:'未启用店备注'}});
+ const offList=(await req('/admin/records/customers?summary=1',{tid:'first-use-b'})).data.records.find(c=>c.id===otherId),offDetail=(await req('/admin/customers',{tid:'first-use-b'})).data.customers.find(c=>c.id===otherId),offLookup=(await req('/admin/customers/lookup?userId='+otherId,{tid:'first-use-b'})).data.hit;
+ check('非试点门店目录保持旧行为',offList.name==='未命名'&&!('remarkName' in offList));
+ check('非试点门店保留原备注功能但不出现绑定入口',offDetail.remarkName==='未启用店备注'&&offDetail.customerBindingEnabled===false&&!('merchantDisplayName' in offLookup));
  const review=(await req('/admin/records/customers/'+uid)).data;
  check('归档成功',(await req('/admin/records/customers/'+uid,{body:{action:'archive',reason:'隔离测试',reviewHash:review.reviewHash}})).status===200);
  check('归档目录仍显示备注',(await req('/admin/records/customers?archived=1')).data.records.find(x=>x.id===uid).name==='美团顾客 4');

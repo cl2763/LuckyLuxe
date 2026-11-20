@@ -2,7 +2,7 @@
 window.CustomerBinding=(()=>{
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
  function mount(el,customer,{request,zh=true}){
-  if(!el||customer.archived)return
+  if(!el||customer.archived||!customer.customerBindingEnabled)return
   let hit=null,ticket=null,busy=false,timer=null
   el.className='card customer-binding'
   el.innerHTML=`<h2>${zh?'小程序绑定':'Mini-program binding'}</h2><p data-bind-status role="status">${zh?'正在核对绑定状态…':'Checking binding…'}</p><p class="subtle">${zh?'请顾客用自己的微信扫码，核对门店与档案后确认本人。绑定沿用原档案，不改变余额或历史记录。':'Ask the customer to scan with their own WeChat and confirm their profile. Existing records are retained.'}</p><div class="inline-actions"><button class="primary slim" data-bind-create disabled>${zh?'出示绑定码':'Show binding code'}</button><button class="ghost slim" data-bind-refresh>${zh?'刷新绑定状态':'Refresh status'}</button></div><div data-bind-code hidden></div><p data-bind-error role="alert"></p>`

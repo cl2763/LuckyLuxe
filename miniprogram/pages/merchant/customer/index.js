@@ -40,7 +40,7 @@ Page({
       this.setData({
         remarkDraft:u.remarkName || '',
         c: {id:this.id,archived:!!u.archived,
-          name: u.merchantDisplayName || u.displayName || '顾客',
+          customerBindingEnabled: u.customerBindingEnabled === true, name: u.merchantDisplayName || u.displayName || '顾客',
           nickname: u.displayName || '顾客', remarkName: u.remarkName || '',
           av: (u.merchantDisplayName || u.displayName || '?').slice(0, 1),
           tier: tierCn(u.memberTier) || '会员',

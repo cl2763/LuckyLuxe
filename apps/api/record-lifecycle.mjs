@@ -10,7 +10,7 @@ export function createRecordLifecycle({db,apiError,json,readBody,currentTenantId
  CREATE TABLE IF NOT EXISTS record_lifecycle_events(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,kind TEXT NOT NULL,record_id TEXT NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL,actor TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TRIGGER IF NOT EXISTS record_lifecycle_events_no_update BEFORE UPDATE ON record_lifecycle_events BEGIN SELECT RAISE(ABORT,'lifecycle audit is append-only');END;
  CREATE TRIGGER IF NOT EXISTS record_lifecycle_events_no_delete BEFORE DELETE ON record_lifecycle_events BEGIN SELECT RAISE(ABORT,'lifecycle audit is append-only');END;`)
- const named=(tid,kind,row)=>{if(kind!=='customers')return row;const n=customerNames(tid,row.id,row.name);return {...row,...n,name:n.merchantDisplayName}}
+ const named=(tid,kind,row)=>{if(kind!=='customers')return row;const n=customerNames(tid,row.id,row.name);return n.customerBindingEnabled ? {...row,...n,name:n.merchantDisplayName} : row}
  const state=(tid,kind,id)=>db.prepare('SELECT status FROM record_lifecycle WHERE tenant_id=? AND kind=? AND record_id=?').get(tid,kind,id)?.status||'active'
  const filter=(tid,kind,rows,archive=false)=>rows.filter(r=>archive?state(tid,kind,r.id)==='archived':state(tid,kind,r.id)!=='archived')
  function requireActive(tid,kind,id){if(state(tid,kind,id)==='archived')throw apiError(409,'RECORD_ARCHIVED','这份资料已归档，请先由老板在已归档列表恢复。')}

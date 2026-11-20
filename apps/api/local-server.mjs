@@ -6627,7 +6627,7 @@ const { MEMBER_QUALIFY_MODES, DEFAULT_MEMBERSHIP_CONFIG, getMembershipConfig, se
 const onboardingSteps = createOnboardingSteps({ db, json, apiError, localParts, localDateTime, iso })   // D197 第一段:五步灯(灯与句子都在后端出)
 const platformTenantConfig = createPlatformTenantConfig({ currencyOf:tenantCurrencyCodeOrNull,previewWechat:{appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET},db, json, apiError, readBody, wecomRouting, aiRetouchGate, getMembershipConfig, setMembershipConfig, MEMBER_QUALIFY_MODES, getEntitlements,tenantContext,platformOperator:req=>platformAuth.fromSession(String(req.headers.authorization||'').replace(/^Bearer /,''))?.username||(req.headers.cookie?'platform-device:'+createHash('sha256').update(req.headers.cookie).digest('hex').slice(0,12):'platform-api'),getSetupAdapters:()=>createSetupAdapters({db,apiError,bookingAddons,pricingRules:{read:getPricingRules,write:(tid,b)=>configurePricingRules({db,apiError,getPricingRules,putPricingRule},tid,b)},currentTenantId,scheduleWrite,scheduleBoard,operationalSetupRules,recurringSetup,staffAccountSetup,staffSetupDefinitions,kbRoutes,setupRulePresentation,storeSetupDefinitions,businessHoursRoutes,storeGuideApi,heroSlidesApi,notifyScheduler,marketingDefinitions,packageWrite,serviceEditRoutes,serializeMembershipPackage,memberPricing,getDepositConfig,setDepositConfig,getMembershipConfig,setMembershipConfig}) })
 const staffScope = createStaffScope({
-  db, apiError, currentTenantId, bookingStatusText, customerNames:(...args)=>customerRemarks.names(...args),
+  db, apiError, currentTenantId, bookingStatusText, customerNames:(...args)=>customerRemarks.trialNames(...args),
   memberCodeForUserId: (id) => memberCodeForUserId(id),
   storeTimeText: (at) => { const p = localParts(new Date(at), tenantTimezone(currentTenantId())); return `${p.date} ${p.time.slice(0, 5)}` }
 })
@@ -9937,12 +9937,12 @@ const materializeRecurringTransactions=()=>recurringSetup.materialize()
 const staffSetupDefinitions=createStaffSetupDefinitions({db,apiError,readBody,json,currentTenantId,defaultStoreId,randomId})
 const storeSetupDefinitions=createStoreSetupDefinitions({db,apiError,readBody,json,currentTenantId,defaultStoreId,iso,parseJson2,specialDateInput,getDepositConfig,setDepositConfig})
 const marketingDefinitions=createMarketingDefinitions({db,apiError,readBody,json,currentTenantId,randomId,iso,serializeCoupon,serializePrize,assertCouponValueOk})
-const recordLifecycle=createRecordLifecycle({db,apiError,json,readBody,currentTenantId,actorOf:a=>actorOf(a),customerNames:(...args)=>customerRemarks.names(...args),todayOf:tid=>localParts(new Date(),tenantTimezone(tid)).date})
+const recordLifecycle=createRecordLifecycle({db,apiError,json,readBody,currentTenantId,actorOf:a=>actorOf(a),customerNames:(...args)=>customerRemarks.trialNames(...args),todayOf:tid=>localParts(new Date(),tenantTimezone(tid)).date})
 const bookingAddons=createBookingAddons({db,apiError});const configRevision=createConfigRevision(db)
 const packageWrite=createPackageWrite({db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage,memberPricing})
 const customerRemarks = createCustomerRemarks({db,apiError})
 const createCustomer = createCustomerCreator({db,apiError,randomId,maskPhone})
-const customerBindTicket=createCustomerBindTicket({db,apiError,currentTenantId,isUserBound,iso,randomBytes,publicAppUrl,sceneForToken,WECHAT_MINI_APPID,WECHAT_MINI_SECRET,json,requireActive:recordLifecycle.requireActive})
+const customerBindTicket=createCustomerBindTicket({db,apiError,currentTenantId,isUserBound,iso,randomBytes,publicAppUrl,sceneForToken,WECHAT_MINI_APPID,WECHAT_MINI_SECRET,json,requireActive:(tid,...args)=>{if(customerRemarks.trialEnabled(tid))recordLifecycle.requireActive(tid,...args)}})
 const completeVerifiedPhone = createVerifiedPhoneCompletion({db,apiError,claim:claimUserByOpenId,serialize:serializeUser,auth:miniAuthFor,unboundSql:notBoundByLoginIdentitySql})
 const scanEntryRoute = createScanEntryRoute({db,apiError,json,readBody,
   fetchJsCode2Session: options => fetchJsCode2Session({...options, scopeName: WECHAT_AUTH_SCOPE_NAME}),claimUserByOpenId,serializeUser,miniAuthFor,userIdFromMemberCode,
@@ -14088,7 +14088,7 @@ async function route(req, res) {
     const userId = String(query.userId || '').trim()
     // 屏 S2 用这条拿徽标状态(不为一个徽标再开一个接口)。文案在这里拼,前端只显示。
     const shapeHit = (u) => ({
-      id: u.id, ...customerRemarks.names(currentTenantId(),u.id,u.display_name || ''), ...(adminSession.role === 'owner' ? {phone:u.phone||''} : {}),
+      id: u.id, ...customerRemarks.trialNames(currentTenantId(),u.id,u.display_name || ''), ...(adminSession.role === 'owner' ? {phone:u.phone||''} : {}),
       phoneMasked: maskPhone(u.phone), bound: isUserBound(u.id), memberCode: memberCodeForUserId(u.id),
       badgeText: bindingBadgeText(isUserBound(u.id)),
       hintText: isUserBound(u.id) ? '' : '请将签署链接交给顾客核对；网页签字不自动绑定微信，绑定需真实授权。'
