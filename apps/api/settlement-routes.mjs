@@ -7,7 +7,7 @@
 export function createSettlementRoutes({ apiError, json, readBody, db, currentTenantId, computeSettlement, createSettlementGroup, serializeSettlement, isUserBound, storedValueBalanceDetail, tenantTimezone, localParts, formatMoneyCents, groupMainItemCount, assertStaff, memberPricing }) {
   async function route(req, res, ctx) {
     const { path, query, adminSession } = ctx
-    if(req.method==='POST'&&['/admin/settlements','/admin/settlements/preview'].includes(path)&&memberPricing?.config(currentTenantId()).active)throw apiError(409,'PERSON_PRICING_REQUIRED','本店已启用个人会员折扣，请使用新版按人开单接口。')
+    if(req.method==='POST'&&['/admin/settlements','/admin/settlements/preview'].includes(path)&&memberPricing?.config(currentTenantId()).active)throw apiError(409,'PERSON_PRICING_REQUIRED','本店已启用个人会员折扣。请在网页版开单；新版小程序发布后也可办理。')
   if (req.method === 'POST' && path === '/admin/settlements/preview') {
     // 技师端表单实时试算:不落库,金额口径与正式开单完全一致
     const body = await readBody(req)

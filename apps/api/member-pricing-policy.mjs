@@ -46,7 +46,7 @@ export function ensureMemberPricingSchema(db) {
       BEGIN SELECT RAISE(ABORT,'discount history is immutable'); END;
   `)
 }
-export function createMemberPricingPolicy({db, apiError, isMemberOf, getMembershipConfig, balanceOf, formatCreatedAt = value => value, clock = () => new Date().toISOString()}) {
+export function createMemberPricingPolicy({db, apiError, isMemberOf, getMembershipConfig, balanceOf, formatCreatedAt = value => value, allStoresEnabled = process.env.MEMBER_PRICING_ALL_STORES === '1', clock = () => new Date().toISOString()}) {
   const fail = (status, code, message) => { throw apiError(status, code, message) }
   const objectInput=v=>{if(!v||typeof v!=='object'||Array.isArray(v))fail(400,'INVALID_PRICING_VALUE','价格设置格式无效。')}
   const integer = (v, max, label) => {
@@ -72,10 +72,11 @@ export function createMemberPricingPolicy({db, apiError, isMemberOf, getMembersh
   function config(tid) {
     const row=db.prepare('SELECT * FROM member_pricing_settings WHERE tenant_id=?').get(tid)
     const c=row ? JSON.parse(row.config_json) : { active:false, membershipEnabled:true, displayTypes:[...PRICE_SYSTEM_TYPES], settlementTypes:[...PRICE_SYSTEM_TYPES] }
-    return {...c,revision:row?.revision||0,settlementTypes:[...new Set(['list',...(c.membershipEnabled?['member']:[]),...c.settlementTypes])]}
+    return {...c,active:allStoresEnabled||c.active,revision:row?.revision||0,settlementTypes:[...new Set(['list',...(c.membershipEnabled?['member']:[]),...c.settlementTypes])]}
   }
   function setConfig(tid,input) {
     objectInput(input)
+    if(allStoresEnabled&&input.active===false)fail(409,'PRICING_RELEASE_REQUIRED','新版个人折扣已全店启用，不能单独切回旧版。')
     const old=config(tid);revision(input.expectedRevision,old.revision)
     const out={...old,...input};delete out.expectedRevision;delete out.revision
     for (const key of ['active','membershipEnabled']) if(typeof out[key]!=='boolean') fail(400,'INVALID_PRICING_VALUE',`${key}须为布尔值。`)

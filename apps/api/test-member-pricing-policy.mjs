@@ -99,4 +99,23 @@ p.setPrices('a','s','settlement',{expectedRevision:2,prices:{list:{priceCents:32
 assert.throws(()=>docs.sign(changed.id,{...signature,confirmationHash:changed.confirmationHash},{headers:{}}),{code:'PRICING_CHANGED'})
 assert.equal(ledgerCalls,1)
 console.log('ok 4 - old unsigned documents have no age expiry; display changes do not invalidate settlement; settlement price changes do')
+// Global rollout is an effective policy, not a destructive rewrite of merchant settings.
+const rollout=createMemberPricingPolicy({db,apiError,isMemberOf:()=>true,balanceOf:()=>10000,getMembershipConfig:()=>({}),allStoresEnabled:true})
+p.setConfig('b',{expectedRevision:0,active:false,membershipEnabled:false,displayTypes:['list'],settlementTypes:['list']})
+const retainedTables=['member_pricing_settings','service_price_systems','member_personal_discounts','member_discount_events','member_pricing_operations','service_prices']
+const retained=()=>retainedTables.map(t=>db.prepare('SELECT * FROM '+t).all())
+const beforeRollout=retained()
+for(let i=0;i<2;i++){
+ assert.equal(rollout.config('a').active,true)
+ assert.equal(rollout.config('b').active,true)
+ assert.equal(rollout.config('new-store').active,true)
+ assert.equal(rollout.config('b').membershipEnabled,false)
+ assert.deepEqual(rollout.config('b').displayTypes,['list'])
+ assert.deepEqual(rollout.config('b').settlementTypes,['list'])
+ assert.deepEqual(rollout.prices('a','s','settlement'),p.prices('a','s','settlement'))
+ assert.throws(()=>rollout.setConfig('a',{expectedRevision:p.config('a').revision,active:false}),{code:'PRICING_RELEASE_REQUIRED'})
+}
+assert.deepEqual(retained(),beforeRollout)
+assert.equal(p.config('b').active,false, 'switching rollout off restores the retained prior setting')
+console.log('ok 5 - all-store rollout covers existing/off/missing/new stores without rewriting retained fields')
 db.close()

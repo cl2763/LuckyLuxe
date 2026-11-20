@@ -1,0 +1,388 @@
+[
+  {
+    "page": "schedule",
+    "width": 1280,
+    "scroll": 1280,
+    "overflow": []
+  },
+  {
+    "page": "schedule",
+    "width": 768,
+    "scroll": 768,
+    "overflow": [
+      {
+        "tag": "BUTTON",
+        "id": "sidebarSchedule",
+        "c": "sidebar-link active"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarPricing",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarMembership",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarWechatMock",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "SPAN",
+        "id": "sidebarWechatMockLabel",
+        "c": ""
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarAiGallery",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarStoreSettings",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarGeneralSettings",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "SPAN",
+        "id": "sidebarVersion",
+        "c": "sidebar-version"
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "c": ""
+      }
+    ]
+  },
+  {
+    "page": "schedule",
+    "width": 390,
+    "scroll": 390,
+    "overflow": [
+      {
+        "tag": "TD",
+        "id": "",
+        "c": ""
+      },
+      {
+        "tag": "TD",
+        "id": "",
+        "c": ""
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "inline-actions compact-actions"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "c": "ghost slim"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "c": "ghost slim"
+      },
+      {
+        "tag": "TR",
+        "id": "",
+        "c": ""
+      },
+      {
+        "tag": "TD",
+        "id": "",
+        "c": ""
+      },
+      {
+        "tag": "TD",
+        "id": "",
+        "c": ""
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "inline-actions compact-actions"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "c": "ghost slim"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "c": "ghost slim"
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "c": ""
+      }
+    ]
+  },
+  {
+    "page": "pricing",
+    "width": 1280,
+    "scroll": 1280,
+    "overflow": []
+  },
+  {
+    "page": "pricing",
+    "width": 768,
+    "scroll": 768,
+    "overflow": [
+      {
+        "tag": "BUTTON",
+        "id": "sidebarSchedule",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarPricing",
+        "c": "sidebar-link active"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarMembership",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarWechatMock",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "SPAN",
+        "id": "sidebarWechatMockLabel",
+        "c": ""
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarAiGallery",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarStoreSettings",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarGeneralSettings",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "SPAN",
+        "id": "sidebarVersion",
+        "c": "sidebar-version"
+      }
+    ]
+  },
+  {
+    "page": "pricing",
+    "width": 390,
+    "scroll": 390,
+    "overflow": [
+      {
+        "tag": "BUTTON",
+        "id": "sidebarFinance",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarCustomers",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarSchedule",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarPricing",
+        "c": "sidebar-link active"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarMembership",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarWechatMock",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "SPAN",
+        "id": "sidebarWechatMockLabel",
+        "c": ""
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarAiGallery",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarStoreSettings",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarGeneralSettings",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "SPAN",
+        "id": "sidebarVersion",
+        "c": "sidebar-version"
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "c": ""
+      }
+    ]
+  },
+  {
+    "page": "bookings",
+    "width": 1280,
+    "scroll": 1280,
+    "overflow": [
+      {
+        "tag": "SPAN",
+        "id": "",
+        "c": ""
+      }
+    ]
+  },
+  {
+    "page": "bookings",
+    "width": 768,
+    "scroll": 768,
+    "overflow": [
+      {
+        "tag": "BUTTON",
+        "id": "sidebarSchedule",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarPricing",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarMembership",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarWechatMock",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "SPAN",
+        "id": "sidebarWechatMockLabel",
+        "c": ""
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarAiGallery",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarStoreSettings",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "sidebarGeneralSettings",
+        "c": "sidebar-link"
+      },
+      {
+        "tag": "SPAN",
+        "id": "sidebarVersion",
+        "c": "sidebar-version"
+      }
+    ]
+  },
+  {
+    "page": "bookings",
+    "width": 390,
+    "scroll": 390,
+    "overflow": [
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "tb-col"
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "tb-line "
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "tb-line "
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "tb-line "
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "tb-line "
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "tb-line "
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "tb-line "
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "tb-line "
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "tb-line "
+      },
+      {
+        "tag": "DIV",
+        "id": "",
+        "c": "tb-line "
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "c": "tb-blk free"
+      },
+      {
+        "tag": "SPAN",
+        "id": "",
+        "c": ""
+      }
+    ]
+  }
+]

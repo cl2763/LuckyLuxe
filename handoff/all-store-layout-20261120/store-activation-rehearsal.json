@@ -1,0 +1,77 @@
+{
+  "snapshot": "e7f12d3a0cff4854b52390ed0f9a75810482e33b70ce2680ef3dcee8840d1ffd",
+  "rows": [
+    {
+      "id": "demo-ai",
+      "name": "星野美甲(演示·AI版)",
+      "kind": "real",
+      "before": true,
+      "after": true,
+      "membershipEnabled": true,
+      "revision": 1
+    },
+    {
+      "id": "demo-basic",
+      "name": "悦容美甲(演示·基础版)",
+      "kind": "real",
+      "before": false,
+      "after": true,
+      "membershipEnabled": true,
+      "revision": 0
+    },
+    {
+      "id": "demo-jienail",
+      "name": "屿见美睫(演示店)",
+      "kind": "demo",
+      "before": false,
+      "after": true,
+      "membershipEnabled": true,
+      "revision": 0
+    },
+    {
+      "id": "demo-lucky-luxe",
+      "name": "云栖美甲(演示店)",
+      "kind": "demo",
+      "before": false,
+      "after": true,
+      "membershipEnabled": true,
+      "revision": 0
+    },
+    {
+      "id": "jics-nail",
+      "name": "Jic's Nail 小婕",
+      "kind": "real",
+      "before": false,
+      "after": true,
+      "membershipEnabled": true,
+      "revision": 0
+    },
+    {
+      "id": "lucky-luxe",
+      "name": "LUVIA 半径",
+      "kind": "real",
+      "before": false,
+      "after": true,
+      "membershipEnabled": true,
+      "revision": 0
+    },
+    {
+      "id": "luvia-bj",
+      "name": "LUVIA 半径 (北京国贸店）",
+      "kind": "real",
+      "before": false,
+      "after": true,
+      "membershipEnabled": true,
+      "revision": 0
+    },
+    {
+      "id": "nange-nail",
+      "name": "NanGe Nail",
+      "kind": "real",
+      "before": false,
+      "after": true,
+      "membershipEnabled": true,
+      "revision": 10
+    }
+  ]
+}

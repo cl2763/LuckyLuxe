@@ -521,7 +521,8 @@ assert.equal((await call(refPath,{...refBody,tierKey:'member'})).data.error.code
 assert.equal((await call(refPath,{...refBody,userId:uid})).data.error.code,'REFERENCE_ONLY')
 assert.equal((await call(refPath,{...refBody,rechargeAmountCents:10000})).data.error.code,'REFERENCE_ONLY')
 assert.equal((await call(refPath,{...refBody,items:[{serviceId:svc.id,qty:0}]})).status,400)
-assert.equal((await call(refPath,refBody,'POST',other.token)).status,409)
+const otherPricingActive=(await request('/admin/member-pricing/config',{},other.token)).data.config.active
+assert.equal((await call(refPath,refBody,'POST',other.token)).status,otherPricingActive?404:409)
 const refConfig=(await request('/admin/member-pricing/config',{},shop.token)).data.config
 await ok('/admin/member-pricing/config',{expectedRevision:refConfig.revision,displayTypes:['list','share']},'PUT')
 assert.equal((await call(refPath,{...refBody,tierKey:'share'})).data.error.code,'PRICE_NOT_CONFIGURED')
