@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-20T15:20:50.441Z",
+  "checkedAt": "2026-11-20T15:46:01.793Z",
   "checks": [
     "保存→返回→备注搜索 0",
     "保存→返回→备注搜索 1",
@@ -18,7 +18,7 @@
   ],
   "fixture": {
     "tenant": "demo-ai-acceptance",
-    "uid": "user_mwp4lzoq_keyl9b"
+    "uid": "user_mwp5ic2q_cf6zqz"
   },
   "productionTouched": false
 }
