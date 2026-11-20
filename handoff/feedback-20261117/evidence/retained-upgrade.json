@@ -1,20 +1,22 @@
 {
-  "candidateSourceSha256": "51997e97850f9f4cdc636a4ec7dfff835b4fdb1f2246574677f5530452835b45",
-  "sourceFiles": 857,
-  "checkedAt": "2026-11-19T18:52:19.642Z",
+  "candidateSourceSha256": "ca8666b28a2f1c909c979ccf580908db4545dbfa2c08e5b75a8b747a6dfcfeec",
+  "sourceFiles": 858,
+  "checkedAt": "2026-11-20T13:16:56.845Z",
   "scope": "offline retained snapshot rehearsal; not a fresh production backup or a deployment",
   "runtime": "v22.11.0",
-  "baselineCommit": "4a16a933b241b9a2ebf3e300f861148aa4d082b2",
-  "snapshotSha256": "4d8d98a9fab81dc01d5d8f75565f7e9e64346739ea4cb39ee405f8bd903a4acc",
+  "baselineCommit": "ca69bc1a716c22b8ff0878930d15bef83c103c63",
+  "snapshotSha256": "e7f12d3a0cff4854b52390ed0f9a75810482e33b70ce2680ef3dcee8840d1ffd",
   "checks": [
     "production-code control retains every original row and column; candidate seeded from verified control",
     "candidate startup 1: all original columns match baseline control; original triggers retained",
     "candidate startup 2: all original columns match baseline control; original triggers retained"
   ],
   "originalTables": 141,
-  "originalRows": 12488,
+  "originalRows": 12512,
   "originalTriggers": 55,
-  "baselineExistingStartupChanges": [],
+  "baselineExistingStartupChanges": [
+    "user_identities"
+  ],
   "newTables": [],
   "repeatStartupStable": true,
   "sourceUnchanged": true

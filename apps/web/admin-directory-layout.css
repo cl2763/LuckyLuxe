@@ -1,0 +1,49 @@
+/* Shared merchant directory layout. Theme colours stay in design-tokens.css. */
+.admin-shell .topbar { flex-wrap: wrap; }
+.admin-shell .topbar > .brand { min-width: 0; }
+.admin-shell .top-actions { min-width: 0; max-width: 100%; }
+.admin-page > .back-btn { justify-self: start; width: auto; min-height: 40px; }
+.admin-shell .section-row { flex-wrap: wrap; }
+.admin-shell .section-row > * { min-width: 0; max-width: 100%; }
+.admin-shell .schedule-week-nav { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.admin-shell .schedule-week-nav input { max-width: 100%; }
+#customersPage { container-type: inline-size; align-content: start; gap: 20px; }
+.directory-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin: 0; }
+.directory-heading h1, .directory-heading h2 { margin: 0; }
+.directory-primary-actions, .directory-tabs { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.directory-primary-actions button, .directory-tabs button, .directory-table button { min-height: 44px; white-space: nowrap; }
+#customersPage .customer-toolbar { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
+#customersPage .customer-search { flex: 1 1 260px; width: auto; min-width: 0; min-height: 44px; margin: 0; }
+#customersPage .customer-sort { flex: 0 1 auto; margin: 0; }
+#customersPage .customer-sort select { min-height: 44px; margin: 0; }
+.admin-shell .admin-list { grid-template-columns: minmax(0, 1fr); }
+.admin-shell .admin-list > * { min-width: 0; }
+#customerList { align-content: start; gap: 16px; }
+#customerList .rfm-bar { margin: 0; gap: 8px; }
+#customerList .rfm-bar > .small { flex-basis: 100%; font-weight: 400; line-height: 1.5; }
+#customerList .rfm-chip { min-height: 36px; }
+.directory-tabs { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.directory-tabs [aria-pressed="true"] { color: var(--heroink); background: var(--black); border-color: var(--black); }
+.directory-scroll { overflow-x: auto; max-width: 100%; }
+.directory-scroll:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.directory-table { font-size: 14px; }
+.directory-table td { overflow-wrap: anywhere; vertical-align: middle; }
+.directory-table .compact-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.directory-table + .subtle { margin: 12px 0 0; font-weight: 400; }
+@container (max-width: 680px) {
+  .directory-heading { align-items: flex-start; }
+  .directory-primary-actions { flex-basis: 100%; }
+  #customersPage .customer-toolbar { gap: 12px; }
+  #customersPage .customer-search { flex-basis: 100%; }
+  #customersPage .customer-sort { width: 100%; justify-content: space-between; }
+  #customersPage .customer-sort select { flex: 1; max-width: 240px; }
+}
+@media (max-width: 720px) {
+  .admin-shell .top-actions { justify-content: flex-start; }
+  .directory-primary-actions { flex-wrap: wrap; }
+}
+@media (max-width: 720px) {
+  #schedulePage .progrow { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+  #schedulePage .progrow .tag-none { grid-column: 2 / -1 !important; overflow-wrap: anywhere; }
+  #schedulePage .progrow .pct { white-space: normal; overflow-wrap: anywhere; }
+}

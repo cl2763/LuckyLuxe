@@ -12,9 +12,9 @@ export function createMemberPricingTransactions({db,policy,apiError}) {
     if(source!=='recharge' && admin?.role!=='owner') throw apiError(403,'FORBIDDEN','退款折扣由老板重新确认。')
     if(!['owner','staff'].includes(admin?.role)) throw apiError(403,'FORBIDDEN','需要门店操作权限。')
     const id=String(body.operationId||body.requestId||'').trim()
-    if(!/^[\w-]{1,64}$/.test(id)) throw apiError(400,'OPERATION_ID_REQUIRED','请提供本次操作编号。')
+    if(!/^[\w-]{1,64}$/.test(id)) throw apiError(400,'OPERATION_ID_REQUIRED','本店已启用新版会员折扣。请在网页版办理充值、退款或冲销；新版小程序发布后也可办理。')
     const confirmation=body.discountConfirmation
-    if(!confirmation || !Object.hasOwn(confirmation,'rateBps')) throw apiError(400,'DISCOUNT_CONFIRMATION_REQUIRED','请重新确认本次操作后的会员折扣。')
+    if(!confirmation || !Object.hasOwn(confirmation,'rateBps')) throw apiError(400,'DISCOUNT_CONFIRMATION_REQUIRED','请在新版网页确认本次操作后的会员折扣，再办理充值、退款或冲销。')
     policy.rate(confirmation.rateBps)
     const actor=actorOf(admin)
     // Canonical property ordering keeps a retry independent of JSON key order.
