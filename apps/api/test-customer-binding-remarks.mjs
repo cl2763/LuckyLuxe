@@ -1,3 +1,4 @@
+import {customerBindingTrialEnabled} from './customer-remarks.mjs';
 import{mkdtempSync,openSync,closeSync,rmSync,writeFileSync}from'node:fs';import{spawn}from'node:child_process';import{fileURLToPath}from'node:url';import{DatabaseSync}from'node:sqlite';
 const dir=mkdtempSync('/tmp/ll-ci-data.customer-links-'),port=4377,base=`http://127.0.0.1:${port}`,owner='isolated-customer-links-only',fd=openSync(dir+'/server.log','w'),checks=[];
 const server=spawn(process.execPath,['--experimental-sqlite','local-server.mjs'],{cwd:fileURLToPath(new URL('.',import.meta.url)),env:{PATH:process.env.PATH,HOME:process.env.HOME,DATA_DIR:dir,PORT:String(port),HOST:'127.0.0.1',OWNER_TOKEN:owner,WECHAT_MINI_TOKEN_SECRET:'binding-isolated-test-only',WECHAT_APP_SECRET:'configured-test-only',CUSTOMER_BINDING_REMARKS_TENANTS:'first-use-a',ALLOW_DEMO_ADMIN_LOGIN:'false',NOTIFY_TICK:'off'},stdio:['ignore',fd,fd]});let db;
@@ -5,6 +6,10 @@ const check=(name,ok,detail)=>{checks.push({name,ok,detail});console.log((ok?'ok
 async function req(path,{body,token=owner,tid='first-use-a',method=body?'POST':'GET'}={}){const r=await fetch(base+path,{method,headers:{'content-type':'application/json','x-admin-tenant-id':tid,'x-tenant-id':tid,...(token?{authorization:'Bearer '+token}:{})},body:body?JSON.stringify(body):undefined});return{status:r.status,data:await r.json()}}
 const publicPost=(path,body)=>req(path,{body,token:null});
 try{
+ check('生产默认只开放星野',customerBindingTrialEnabled('demo-ai',{NODE_ENV:'production'})&&!customerBindingTrialEnabled('nange-nail',{NODE_ENV:'production'}));
+ check('生产Railway环境也限制门店',!customerBindingTrialEnabled('luvia-bj',{RAILWAY_ENVIRONMENT:'production'}));
+ check('显式空名单关闭所有门店',!customerBindingTrialEnabled('demo-ai',{NODE_ENV:'production',CUSTOMER_BINDING_REMARKS_TENANTS:''}));
+ check('明确推广开关才开放全店',customerBindingTrialEnabled('nange-nail',{NODE_ENV:'production',CUSTOMER_BINDING_REMARKS_TENANTS:'*'}));
  for(let n=0;n<100;n++){try{if((await fetch(base+'/health')).ok)break}catch{}await new Promise(r=>setTimeout(r,100))}
  db=new DatabaseSync(dir+'/lucky-luxe.sqlite');
  for(const id of ['first-use-a','first-use-b'])check('建立隔离店 '+id,(await req('/platform/tenants',{body:{id,name:id,plan:'chain',currency:'CNY',timezone:'Asia/Shanghai'}})).status===201);

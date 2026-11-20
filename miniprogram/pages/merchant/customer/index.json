@@ -1,7 +1,6 @@
 {
   "navigationBarTitleText": "客户档案",
   "usingComponents": {
-    "member-pricing": "/components/member-pricing/index",
-    "customer-binding": "/components/customer-binding/index"
+    "member-pricing": "/components/member-pricing/index"
   }
 }

@@ -31,9 +31,9 @@ const TIER_LABEL = { a: '高价值A', b: '回头客B', n: '新客N', s: '沉睡S
 function vm(u, TH) {
   const tier = tierOf(u, TH)
   return {
-    personalDiscount:u.personalDiscount,id: u.id,nickname:u.displayName || '',
+    personalDiscount:u.personalDiscount,id: u.id,
     name: u.merchantDisplayName || u.displayName || '顾客',
-    av: (u.merchantDisplayName || u.displayName || '?').slice(0, 1),
+    av: (u.displayName || '?').slice(0, 1),
     phone: u.phone || '',
     tier, tierLabel: TIER_LABEL[tier] || '',
     visits: u.completedCount || 0,
@@ -98,7 +98,7 @@ Page({
          分层(RFM)、消费额、储值全靠金额算,员工既拿不到也不该看,整块不出。 */
       if (r.scope === 'mine' || this.data.staffView) {
         const mine = (r.customers || []).map((u) => ({
-          id: u.id, nickname:u.displayName || '', name: u.merchantDisplayName || u.displayName || '顾客', av: (u.merchantDisplayName || u.displayName || '客')[0],
+          id: u.id, name: u.merchantDisplayName || u.displayName || '顾客', av: (u.displayName || '客')[0],
           phone: u.phoneMasked || '', visits: u.visitCount || 0,
           last: u.lastVisitDate || (u.lastVisitAt ? String(u.lastVisitAt).slice(0, 10) : '—'),
           tags: u.tags || [], memberCode: u.memberCode || ''
@@ -108,7 +108,7 @@ Page({
           scopeNote: r.scopeNote || '只显示你服务过的顾客',
           counts: { a: 0, b: 0, n: 0, s: 0, total: mine.length }
         })
-        this.apply();return
+        return
       }
       const all = (r.customers || r.data || r || []).map((u) => vm(u, TH))
       this.setData({
@@ -130,7 +130,7 @@ Page({
     let list = all.slice()
     // D62(店主 08-22):搜索一律大小写不敏感+trim(小写搜不到大写存档=缺陷;全仓同类同刀)
     const k = (kw || '').trim().toLowerCase()
-    if (k) list = list.filter((x) => [x.name,x.nickname].join(' ').toLowerCase().indexOf(k) >= 0 || (x.phone || '').indexOf(k) >= 0)
+    if (k) list = list.filter((x) => String(x.name || '').toLowerCase().indexOf(k) >= 0 || (x.phone || '').indexOf(k) >= 0)
     if (filter !== 'all') list = list.filter((x) => x.tier === filter)
     // 沉睡客默认按「以前多能花」排,先救最值钱的
     if (filter === 's') list.sort((a, b) => b.spendCents - a.spendCents)
