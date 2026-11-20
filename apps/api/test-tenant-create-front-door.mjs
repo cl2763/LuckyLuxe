@@ -213,7 +213,7 @@ check('④c 🔴 **回落仍在**:不传时区 → 不是 Asia/Shanghai(先要�
  * **小婕的顾客会收到一条境外域名的签署链接,而系统不会有任何报错。**
  * 🔴 三处链接全走 `publicAppUrl()` 这一个出口,判据钉住「没有谁再直接读那个常量」。 */
 {
-  const srv2 = codeOnly(read('apps/api/local-server.mjs') + '\n' + read('apps/api/scan-entry-route.mjs'))
+  const srv2 = codeOnly(read('apps/api/local-server.mjs') + '\n' + read('apps/api/scan-entry-route.mjs') + '\n' + read('apps/api/customer-bind-ticket.mjs'))
   const mod = read('apps/api/tenant-public-url.mjs')
   check('⑥a 唯一出口件在,两个域各有名字(别处引名字,不引字面量)',
     /export const DOMAIN_CN = 'https:\/\/app\.jingshengyouji\.com'/.test(mod)

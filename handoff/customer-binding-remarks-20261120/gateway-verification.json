@@ -1,0 +1,101 @@
+[
+  {
+    "host": "https://app.jingshengyouji.com",
+    "path": "/health",
+    "method": "GET",
+    "status": 200,
+    "type": "application/json; charset=utf-8",
+    "error": null,
+    "build": null
+  },
+  {
+    "host": "https://app.jingshengyouji.com",
+    "path": "/member-document-groups/diagnostic-no-token",
+    "method": "GET",
+    "status": 404,
+    "type": "application/json; charset=utf-8",
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "没有这批服务单。"
+    },
+    "build": null
+  },
+  {
+    "host": "https://app.jingshengyouji.com",
+    "path": "/member-documents/diagnostic-no-token/sign",
+    "method": "POST",
+    "status": 404,
+    "type": "application/json; charset=utf-8",
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "没有这张服务单。"
+    },
+    "build": null
+  },
+  {
+    "host": "https://api.jingshengyouji.com",
+    "path": "/health",
+    "method": "GET",
+    "status": 200,
+    "type": "application/json; charset=utf-8",
+    "error": null,
+    "build": null
+  },
+  {
+    "host": "https://api.jingshengyouji.com",
+    "path": "/member-document-groups/diagnostic-no-token",
+    "method": "GET",
+    "status": 404,
+    "type": "application/json; charset=utf-8",
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "没有这批服务单。"
+    },
+    "build": null
+  },
+  {
+    "host": "https://api.jingshengyouji.com",
+    "path": "/member-documents/diagnostic-no-token/sign",
+    "method": "POST",
+    "status": 404,
+    "type": "application/json; charset=utf-8",
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "没有这张服务单。"
+    },
+    "build": null
+  },
+  {
+    "host": "https://www.luckyluxeatelier.com",
+    "path": "/health",
+    "method": "GET",
+    "status": 200,
+    "type": "application/json; charset=utf-8",
+    "error": null,
+    "build": null
+  },
+  {
+    "host": "https://www.luckyluxeatelier.com",
+    "path": "/member-document-groups/diagnostic-no-token",
+    "method": "GET",
+    "status": 404,
+    "type": "application/json; charset=utf-8",
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "没有这批服务单。"
+    },
+    "build": null
+  },
+  {
+    "host": "https://www.luckyluxeatelier.com",
+    "path": "/member-documents/diagnostic-no-token/sign",
+    "method": "POST",
+    "status": 404,
+    "type": "application/json; charset=utf-8",
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "没有这张服务单。"
+    },
+    "build": null
+  }
+]

@@ -33,9 +33,7 @@ export function listAdminCustomers({db,currentTenantId,lastCustomerVisitAt,custo
     const totalSpentCents = customerSpendCents(db, row.id, tid)
     return ({
     id: row.id,
-    displayName: row.display_name,
-    remarkName: customerRemarks.read(tid,row.id),
-    merchantDisplayName: customerRemarks.read(tid,row.id) || row.display_name,
+    ...customerRemarks.names(tid,row.id,row.display_name),
     phone: row.phone,
     email: row.email,
     createdAt: row.created_at,

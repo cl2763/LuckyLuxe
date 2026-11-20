@@ -658,6 +658,9 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
     check('v1.2④-1 会员套餐/券对员工仍是 403(菜单也不再渲染它)', pkgs.status === 403, String(pkgs.status))
     check('v1.2④-2 🔴 报错话是中文(产品其余都是中文,不该只有报错蹦英文)',
       /[一-龥]/.test(pkgs.data?.error?.message || ''), pkgs.data?.error?.message)
+    const originalName=(await request(`/admin/my-customers/${userId}`,{},stf,H)).data.customer?.displayName
+    const remark='员工可见备注'+RUN
+    check('备注:老板为已服务顾客保存本店备注',(await request(`/admin/customers/${userId}/remark-name`,{method:'PATCH',body:JSON.stringify({remarkName:remark})},TOKEN,H)).status===200)
     const mine = await request('/admin/my-customers', {}, stf, H)
     check('v1.2④-3 员工有「我的客人」且是只读', mine.status === 200 && mine.data.readOnly === true, String(mine.status))
     /* 判据要挑**真不是他的**那个人:本店那位顾客恰恰是他服务的(所以 200 才对)。
@@ -670,6 +673,8 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
     }
     const mineOne = await request(`/admin/my-customers/${userId}`, {}, stf, H)
     check('v1.2④-4a 自己服务过的客人:看得到(只读)', mineOne.status === 200 && mineOne.data.readOnly === true, String(mineOne.status))
+    check('备注:员工列表与详情一致且保留顾客原昵称',mine.data.customers.some(c=>c.id===userId&&c.merchantDisplayName===remark)&&mineOne.data.customer.merchantDisplayName===remark&&mineOne.data.customer.displayName===originalName)
+    await request(`/admin/customers/${userId}/remark-name`,{method:'PATCH',body:JSON.stringify({remarkName:''})},TOKEN,H)
     const others = await request(`/admin/my-customers/${otherUser}`, {}, stf, H)
     check('v1.2④-4b 🔴 别人的客人 = 404(那个人对他不该存在)', others.status === 404, `${others.status} · ${otherUser}`)
     const web2 = (await import('node:fs')).readFileSync((await import('node:path')).join((await import('node:path')).dirname((await import('node:url')).fileURLToPath(import.meta.url)), '../../apps/web/admin.js'), 'utf8')

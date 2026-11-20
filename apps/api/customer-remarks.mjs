@@ -1,4 +1,12 @@
+import {isProductionEnv} from './data-scope.mjs'
 // Merchant-only labels; never change customer identity or signed documents.
+// This batch is online only for Xingye until the owner accepts it.
+// Explicit configuration is required to promote other production tenants.
+export function customerBindingTrialEnabled(tenantId,env=process.env) {
+  const configured=env.CUSTOMER_BINDING_REMARKS_TENANTS
+  const list=String(configured === undefined ? (isProductionEnv(env)?'demo-ai':'*') : configured).split(',').map(s=>s.trim()).filter(Boolean)
+  return list.includes('*') || list.includes(String(tenantId))
+}
 export function createCustomerRemarks({db,apiError}) {
   db.exec(`CREATE TABLE IF NOT EXISTS customer_remarks (
     tenant_id TEXT NOT NULL, user_id TEXT NOT NULL, remark_name TEXT NOT NULL DEFAULT '',
@@ -14,5 +22,7 @@ export function createCustomerRemarks({db,apiError}) {
       .run(tenantId,userId,name,at,actor.accountId||actor.email||'owner')
     return {remarkName:name}
   }
-  return {read,save}
+  function names(tenantId,userId,displayName) { const remarkName=read(tenantId,userId); return {displayName,remarkName,merchantDisplayName:remarkName || displayName,customerBindingEnabled:customerBindingTrialEnabled(tenantId)} }
+  function trialNames(tenantId,userId,displayName) { return customerBindingTrialEnabled(tenantId) ? names(tenantId,userId,displayName) : {displayName} }
+  return {read,save,names,trialNames,trialEnabled:customerBindingTrialEnabled}
 }
