@@ -10,10 +10,11 @@
    下次再有人把路由搬走却忘了让扫描器跟上,条数掉下来立刻红。 */
 import { makeActorOf } from './actor-name.mjs'   // J-105 唯一出口
 
-export function createRefundRoutes({ apiError, json, readBody, refundApi, staffScope, usableTimecardsOf, svReversal, db, pricingTransactions }) {
+export function createRefundRoutes({ apiError, json, readBody, refundApi, staffScope, usableTimecardsOf, svReversal, db, pricingTransactions, giftRefunds }) {
   const actorOf = makeActorOf({ apiError })
   async function route(req, res, ctx) {
     const { path, query, adminSession, requireRefundRight } = ctx
+    if(req.method==='GET'&&path==='/admin/account-adjust/gift-review'){requireRefundRight();const uid=String(query.userId||'');if(!db.prepare('SELECT 1 FROM users WHERE id=? AND tenant_id=?').get(uid,ctx.tenantId))throw apiError(404,'NOT_FOUND','顾客不存在。');json(res,200,giftRefunds.review(ctx.tenantId,uid,query.sourceTxnId||null));return true}
     /* 裁定2(08-30d 准开口):错记充值整笔冲销 —— 合同五条见 ./stored-value-reversal.mjs。
        权限与退卡同门(老板 + 财务钥匙:/admin/stored-value 前缀天然在钥匙闸内)。 */
     const svRevMatch = path.match(/^\/admin\/stored-value\/txns\/([^/]+)\/reverse$/)
@@ -22,12 +23,12 @@ export function createRefundRoutes({ apiError, json, readBody, refundApi, staffS
       const b=await readBody(req),txnId=decodeURIComponent(svRevMatch[1])
       const txn=db.prepare('SELECT user_id FROM stored_value_transactions WHERE id=? AND tenant_id=?').get(txnId,ctx.tenantId)
       if(!txn) throw apiError(404,'NOT_FOUND','没有这笔储值流水。')
-      const r = pricingTransactions.run({tenantId:ctx.tenantId,userId:txn.user_id,body:{...b,txnId},admin:adminSession,source:'reversal',execute:()=>svReversal.reverseRechargeTxn({
+      const r = pricingTransactions.run({tenantId:ctx.tenantId,userId:txn.user_id,body:{...b,txnId},admin:adminSession,source:'reversal',execute:()=>giftRefunds.execute(ctx.tenantId,txn.user_id,b,actorOf(adminSession),txnId,()=>svReversal.reverseRechargeTxn({
         txnId: decodeURIComponent(svRevMatch[1]),
         tenantId: ctx.tenantId,
         operator: actorOf(adminSession),   // J-105 第一批:退款落对账,留痕必须是一个人
         reason: b.reason   // D122:事由必填,后端硬拦
-      })})
+      }))})
       json(res, 201, r)
       return true
     }
@@ -47,12 +48,12 @@ export function createRefundRoutes({ apiError, json, readBody, refundApi, staffS
     if (req.method === 'POST' && path === '/admin/stored-value/refund') {
       requireRefundRight()
       const b = await readBody(req)
-      json(res, 201, pricingTransactions.run({tenantId:ctx.tenantId,userId:String(b.userId||'').trim(),body:b,admin:adminSession,source:'refund',execute:()=>refundApi.refundStoredValue({
+      json(res, 201, pricingTransactions.run({tenantId:ctx.tenantId,userId:String(b.userId||'').trim(),body:b,admin:adminSession,source:'refund',execute:()=>giftRefunds.execute(ctx.tenantId,String(b.userId||'').trim(),b,actorOf(adminSession),null,()=>refundApi.refundStoredValue({
         userId: String(b.userId || '').trim(),
         amountCents: b.amountCents ?? (b.amount === undefined ? undefined : Number(b.amount) * 100),
         payChannel: b.payChannel, reason: b.reason, requestId: b.requestId,
         operator: actorOf(adminSession)
-      })}))
+      }))}))
       return true
     }
     // v1.2 ④ 员工只读「我的客人」:实现在 ./staff-scope.mjs,这里只门禁 + 分发

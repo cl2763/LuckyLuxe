@@ -20,3 +20,7 @@
 .sec-hd{display:flex;align-items:baseline;justify-content:space-between;margin:8rpx 4rpx 12rpx}
 .sec-hd .sec-t{margin:0}
 .sec-link{font-size:24rpx;color:var(--brandd)}
+
+.cp-filters{display:flex;flex-wrap:wrap;gap:16rpx;margin:24rpx 0}.cp-filter,.cp-history-toggle{font-size:26rpx;line-height:1.5;border-radius:999rpx;padding:16rpx 20rpx;width:auto;margin:0;background:var(--card);color:var(--ink)}.cp-filters .selected{background:var(--ink);color:var(--paper)}.cp-history-toggle{margin:28rpx 0;width:100%;white-space:normal}
+
+.cp-filters .cp-filter{flex:1;min-width:0;width:0;padding:16rpx 8rpx}

@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-11-20T17:27:12.634486+00:00",
+  "main": {
+    "suites": 226,
+    "assertions": 6904,
+    "passed": true
+  },
+  "demoLoginDisabled": {
+    "suites": 44,
+    "failed": 0
+  },
+  "nativeLayout": {
+    "passed": 0,
+    "failed": 1,
+    "timedOut": 2
+  },
+  "miniUpload": "not-uploaded",
+  "webProduction": "all-eight-tenants-enabled"
+}

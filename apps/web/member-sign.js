@@ -19,7 +19,7 @@
    '<h2>本次支付</h2>'+display.paymentRows.filter(r=>!signed||!r.label.includes('预计')).map(r=>row(r.label,r.value)).join('')+
    (signed?(quote.balanceBeforeText?row('签署前账户余额',quote.balanceBeforeText):'')+row('本单签署后余额',quote.balanceAfterText):'')+
    (display.discountChangeText?row('充值后个人折扣',display.discountChangeText):'')+
-   (display.gifts.length?'<h2>本次赠送</h2>'+display.gifts.map(g=>row(g.name+' × '+g.quantity,g.valueText+'／件')).join('')+'<p class="meta">赠品不计入储值余额。领取请联系门店。</p>':'')+
+   (display.gifts.length?'<h2>本次赠送</h2>'+display.gifts.map(g=>row(g.name+' × '+g.quantity+(g.unitLabel||'')+(g.kindLabel?' · '+g.kindLabel+' · '+g.expiryText:''),g.valueText?g.valueText+'／'+(g.unitLabel||'件'):'')).join('')+'<p class="meta">实物由门店登记领取，服务权益通过服务单核销；此清单不代表已使用或领取。</p>':'')+
    '<div class="notice">'+esc(signed?'此凭证保留签署时的原始明细。后续更正单独留档。':display.note)+'</div>'+
    (signed?'<p class="meta">签署时间：'+esc(d.signedAtText)+'</p><canvas data-signed="'+esc(d.id)+'" aria-label="已签名笔迹"></canvas>'+corrections(d):
     '<label class="check"><input id="confirm" type="checkbox">我已核对被服务者、付款会员、服务、充值、赠送及扣款明细，并确认由本人签署。</label><canvas id="signature" aria-label="请在此处手写签名"></canvas><div class="pad-foot"><span>请在此处签名</span><button id="clear" type="button">清除重签</button></div><p id="signError" class="error" role="alert"></p><button id="sign" class="submit" type="button">'+(group.documents.filter(x=>x.status==='pending_sign').length>1?'确认签署本张并继续':'确认签署，完成本次')+'</button>')+'</section>';

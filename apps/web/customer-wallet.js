@@ -7,7 +7,7 @@
 window.CustomerWallet = (function () {
   function renderGifts(items, { zh, escapeHtml, money }) {
     if (!Array.isArray(items) || !items.length) return ''
-    return `<div class="gift-list" style="margin:14px 0;padding:14px 0;border-top:1px solid var(--line);min-width:0"><strong>${zh ? '赠送物品' : 'Included gifts'}</strong>${items.map((g) => `<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px"><span style="overflow-wrap:anywhere">${escapeHtml(g.name)} × ${Number(g.quantity)}</span><span class="subtle">${zh ? '单件价值' : 'Unit value'} ${escapeHtml(money(g.unitValueCents, 2))}</span></div>`).join('')}<div class="subtle" style="margin-top:10px;line-height:1.6">${zh ? '物品领取请联系门店，此清单不代表已领取。' : 'Contact the store to collect. This list does not confirm collection.'}</div></div>`
+    return `<div class="gift-list" style="margin:14px 0;padding:14px 0;border-top:1px solid var(--line);min-width:0"><strong>${zh ? '赠送物品' : 'Included gifts'}</strong>${items.map((g) => `<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px"><span style="overflow-wrap:anywhere">${escapeHtml(g.name)} × ${Number(g.quantity)} ${escapeHtml(g.unitLabel||'')}${g.kindLabel?' · '+escapeHtml(g.kindLabel):''}${g.expiryText?' · '+escapeHtml(g.expiryText):''}</span>${g.unitValueCents==null?'':`<span class="subtle">${zh ? '单件参考价值' : 'Unit value'} ${escapeHtml(money(g.unitValueCents, 2))}</span>`}</div>`).join('')}<div class="subtle" style="margin-top:10px;line-height:1.6">${zh ? '物品领取请联系门店，此清单不代表已领取。' : 'Contact the store to collect. This list does not confirm collection.'}</div></div>`
   }
   function renderCardPack({ state, els, zh, escapeHtml, render, loadCardPack }) {
     const pack = state.cardPack
@@ -16,29 +16,34 @@ window.CustomerWallet = (function () {
       loadCardPack().then(() => { if (state.view === 'cardPack') render() })
       return
     }
+    const filter=state.cardPackFilter||'all'
     els.screen.innerHTML = `
       <section class="view-web">
         <button class="ghost back-btn" data-me-target="me" type="button">← ${zh ? '我的' : 'Me'}</button>
         <h1>${zh ? '卡包' : 'Card pack'}</h1><button class="ghost" data-me-target="mall" type="button">${zh?'充值套餐与次卡商城':'Recharge packages & passes'}</button>
+        <div class="inline-actions" aria-label="权益类别">${[['all',zh?'全部':'All'],['coupon',zh?'优惠券':'Coupons'],['service',zh?'服务权益':'Services'],['physical',zh?'实物':'Items']].map(([key,label])=>`<button class="${filter===key?'primary':'ghost'} slim" type="button" data-pack-filter="${key}" aria-pressed="${filter===key}">${label}</button>`).join('')}</div>
         ${pack.migration?.hasPending ? `<div class="info-card-web card"><strong>${escapeHtml(pack.migration.title)}</strong><p class="subtle">${escapeHtml(pack.migration.message)}</p></div>` : ''}
         ${pack.emptyText ? `<div class="empty-state tall"><strong>${escapeHtml(pack.emptyText)}</strong>
           <button class="primary" data-me-target="mall" type="button">${zh ? '去看看充值套餐' : 'See packages'}</button></div>` : ''}
-        ${pack.timecards.length ? `<div class="section-row compact"><h2>${zh ? '次卡' : 'Passes'}</h2><button class="section-note-btn" data-mall-focus="timecard" type="button">${zh ? '去商城 ›' : 'Shop ›'}</button></div>
+        ${(filter==='all'||filter==='service')&&pack.timecards.length ? `<div class="section-row compact"><h2>${zh ? '次卡' : 'Passes'}</h2><button class="section-note-btn" data-mall-focus="timecard" type="button">${zh ? '去商城 ›' : 'Shop ›'}</button></div>
           ${pack.timecards.map((c) => `
             <div class="info-card-web card">
-              <p><span><strong>${escapeHtml(c.name)}</strong></span><strong>${zh ? '剩' : 'Left'} ${c.remaining}/${c.totalTimes}</strong></p>
+              <p><span><strong>${escapeHtml(c.name)}</strong>${c.giftKind?` · ${escapeHtml(c.kindLabel)}`:''}</span><strong>${zh ? '剩' : 'Left'} ${c.remaining}/${c.totalTimes}</strong></p>
               <p class="subtle">${c.expiresAt ? `${escapeHtml(c.expiresAt)} ${zh ? '到期' : 'expires'}` : (zh ? '长期有效' : 'No expiry')}</p>
               ${c.sourceLabel ? `<p class="subtle">${escapeHtml(c.sourceLabel)}</p>` : ''}
             </div>`).join('')}` : ''}
-        ${pack.coupons.length ? `<div class="section-row compact"><h2>${zh ? '优惠券' : 'Coupons'}</h2></div>
+        ${(filter==='all'||filter==='physical')&&(pack.giftEntitlements||[]).length?`<h2>${zh?'赠品领取':'Gift collection'}</h2><p>${zh?'到店由门店登记领取，无需自行核销。':'The store records collection when you receive your gift.'}</p>${pack.giftEntitlements.map(g=>`<div class="info-card-web card"><strong>${escapeHtml(g.name)}</strong><p>${zh?'剩余':'Remaining'} ${g.remaining}/${g.quantity} · ${zh?'已领':'Collected'} ${g.claimed}</p><p class="subtle">${escapeHtml(g.expiresOn|| (zh?'长期有效':'No expiry'))}${g.expired?(zh?' · 已过期':' · Expired'):''}</p>${g.events.length?`<details><summary>${zh?'查看领取记录':'Collection history'}</summary>${g.events.map(ev=>`<p class="subtle">${escapeHtml(ev.label)} ${escapeHtml(ev.quantityText)} · ${escapeHtml(ev.createdText)}</p>`).join('')}</details>`:''}</div>`).join('')}`:''}
+        ${(filter==='all'||filter==='coupon')&&pack.coupons.length ? `<div class="section-row compact"><h2>${zh ? '优惠券' : 'Coupons'}</h2></div>
           ${pack.coupons.map((q) => `
             <div class="info-card-web card">
               <p><span><strong>${escapeHtml(q.name)}</strong></span><strong class="price">${escapeHtml(q.faceText)}</strong></p>
               <p class="subtle">${escapeHtml(q.subtitle)}</p>
               ${q.sourceLabel ? `<p class="subtle">${escapeHtml(q.sourceLabel)}</p>` : ''}
             </div>`).join('')}` : ''}
+        ${(pack.giftHistory||[]).length?`<details class="card" style="margin-top:24px;padding:20px"><summary>${zh?'查看已使用 / 已过期权益与记录':'Used / expired gift history'}</summary>${pack.giftHistory.filter(g=>filter==='all'||filter==='coupon'&&g.kind==='coupon'||filter==='service'&&g.kind!=='coupon').map(g=>`<article style="padding:16px 0;border-bottom:1px solid var(--line)"><strong>${escapeHtml(g.name)}</strong><p>${escapeHtml(g.kindLabel)} · ${escapeHtml(g.statusText)}</p><p>${zh?'已用':'Used'} ${g.used} · ${zh?'剩余':'Remaining'} ${g.remaining} · ${zh?'作废':'Voided'} ${g.voided}</p><p class="subtle">${escapeHtml(g.sourceLabel)} · ${escapeHtml(g.expiresOn||(zh?'长期有效':'No expiry'))}</p>${[...g.records,...g.events].map(ev=>`<p class="subtle">${escapeHtml(ev.label)} ${escapeHtml(ev.quantityText||'')} · ${escapeHtml(ev.createdText)}</p>`).join('')}</article>`).join('')}</details>`:''}
         ${/* 裁定①(店主 08-23):卡包=券+次卡两类,储值不进卡包(会员卡已直达+自有页,重复即乱) */''}
       </section>`
+    els.screen.querySelectorAll('[data-pack-filter]').forEach(b=>b.onclick=()=>{state.cardPackFilter=b.dataset.packFilter;render()})
   }
 
   /* 储值流水页(N-5 新增):退款、充值、耗卡、赠送都在这儿看得到。

@@ -1,9 +1,9 @@
 <setup-preview-banner id="setup-preview-banner" wx:if="{{setupPreviewActive}}" label="{{setupPreviewLabel}}" />
 <view class="page {{themeClass}}">
-  <view class="form">
+  <view class="form"><view wx:if="{{giftEnabled}}" class="frow"><text class="lb">使用对象</text><picker class="pk" range="{{recipients}}" value="{{recipientIdx}}" bindchange="onRecipient"><view class="pkv">{{recipients[recipientIdx]}} ›</view></picker></view><view wx:if="{{giftEnabled && recipientIdx===1}}" class="note">用于指定朋友整单收费服务，按原价打折，不叠加会员折扣；卡主折扣不变。</view>
     <view class="frow">
       <text class="lb">类型</text>
-      <picker class="pk" mode="selector" range="{{types}}" range-key="label" value="{{typeIdx}}" bindchange="onType">
+      <picker class="pk" mode="selector" disabled="{{recipientIdx===1}}" range="{{types}}" range-key="label" value="{{typeIdx}}" bindchange="onType">
         <view class="pkv">{{types[typeIdx].label}} ›</view>
       </picker>
     </view>
@@ -13,17 +13,18 @@
       <view class="frow"><text class="lb">面额 ({{currency}})</text><input class="in" type="digit" value="{{amount}}" placeholder="减多少,如 30" bindinput="onAmount" /></view>
     </block>
     <block wx:else>
-      <view class="frow"><text class="lb">立减折扣 (%)</text><input class="in" type="number" value="{{percent}}" placeholder="如 10 表示立减10%" bindinput="onPercent" /></view>
+      <view wx:if="{{giftEnabled && percent!=='100'}}" class="frow"><text class="lb">优惠券折扣</text><picker class="pk coupon-rate" range="{{couponRates}}" range-key="label" value="{{couponRateIndex}}" bindchange="onCouponRate"><view class="pkv">{{couponRateText}} ›</view></picker></view><view wx:else class="frow"><text class="lb">立减折扣 (%)</text><input class="in" type="number" value="{{percent}}" placeholder="如 15 表示八五折（减15%）" bindinput="onPercent" /></view>
     </block>
 
     <view class="frow"><text class="lb">使用门槛 ({{currency}})</text><input class="in" type="digit" value="{{minSpend}}" placeholder="0 表示无门槛" bindinput="onMin" /></view>
     <view class="frow"><text class="lb">有效天数</text><input class="in" type="number" value="{{validDays}}" placeholder="领取后 N 天内有效" bindinput="onDays" /></view>
     <view class="frow"><text class="lb">发放总量</text><input class="in" type="number" value="{{totalQty}}" placeholder="0 表示不限量" bindinput="onQty" /></view>
-    <view class="scope-section"><text>适用大类（不选为全部）</text><checkbox-group bindchange="onScope"><label wx:for="{{categories}}" wx:key="id"><checkbox value="{{item.id}}" checked="{{item.checked}}" />{{item.name}}</label></checkbox-group></view>
+    <view wx:if="{{recipientIdx!==1}}" class="scope-section"><text>适用大类（不选为全部）</text><checkbox-group bindchange="onScope"><label wx:for="{{categories}}" wx:key="id"><checkbox value="{{item.id}}" checked="{{item.checked}}" />{{item.name}}</label></checkbox-group></view>
     <view wx:if="{{issuedQty>0}}" class="scope-section"><text>已有顾客持券。调整范围请复制成新模板，原券保持原权益。</text><label><switch checked="{{copyTemplate}}" bindchange="onCopy" />另存为新模板</label></view>
     <view class="frow"><text class="lb">启用</text><switch checked="{{active}}" color="#c8a47e" bindchange="onActive" /></view>
   </view>
 
+  <view wx:if="{{giftEnabled && recipientIdx===1}}" class="coupon-preview"><view class="preview-title">顾客将看到</view><view>{{name || '好友同行券'}} · {{couponRateText}}</view><view>朋友整单收费服务按原价打折，不叠加会员折扣；持券人本人的折扣不受影响。</view><view>有效期 {{validDays || 30}} 天</view></view>
   <view class="btn {{saving?'off':''}}" bindtap="save">{{saving?'保存中…':(isNew?'新增':'保存')}}</view>
   <view class="note">这里设置优惠券模板；保存不会自动发券。</view>
 </view>

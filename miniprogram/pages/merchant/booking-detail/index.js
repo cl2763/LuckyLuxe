@@ -2,7 +2,7 @@ const api = require('../../../utils/api')
 const { storeMoney } = require('../../../utils/storeclock')
 
 Page({
-  data: { booking: null, loading: true, error: '', snapViewer: { open: false, items: [], index: 0 } },
+  data: { booking: null, isOwner:false, loading: true, error: '', snapViewer: { open: false, items: [], index: 0 } },
   onLoad(q) { this.bookingId = decodeURIComponent(q.id || '') },
   onShow() { this.load() },
   async load() {
@@ -12,10 +12,12 @@ Page({
       const r = await api.adminGet(`/admin/bookings/${encodeURIComponent(this.bookingId)}`)
       const b = r.booking
       if (!b) throw new Error('找不到这张订单，或当前账号无权查看')
+      const session=api.getAdminAuth()
+      this.setData({isOwner:session?.admin?.role==='owner'})
       const signed = Boolean(b.payment)
       this.setData({
         booking: {
-          id: b.id, depositWorkflow:b.depositWorkflow,
+          id: b.id, userId:b.user?.id||b.userId, depositWorkflow:b.depositWorkflow,
           code: b.publicCode || '',
           customer: (b.user && b.user.display_name) || '顾客',
           service: (b.service && b.service.name) || '服务',

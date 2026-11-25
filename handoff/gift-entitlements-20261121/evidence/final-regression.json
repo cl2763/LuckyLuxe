@@ -1,0 +1,16 @@
+{
+  "checkedAt": "2026-11-25T11:55:32.591571+00:00",
+  "runtime": "v22.11.0",
+  "log": "full-regression-21.log",
+  "sha256": "1eacae692ac6ee971e400b2aecc195f9871edcd784fdeffb92c8bfd4e7e2ff3b",
+  "exitCode": 0,
+  "mainSuites": 229,
+  "mainAssertions": 6942,
+  "closedDemoSuites": 45,
+  "unexecutedMainSuites": 0,
+  "nativeMode": "verified recorded evidence from actual local run: 3 suites, 16 assertions; not reexecuted in this full run",
+  "webAdminBuild": "20261125-gift4",
+  "miniBuild": "b93879d92f02cfc7",
+  "deployed": false,
+  "uploaded": false
+}

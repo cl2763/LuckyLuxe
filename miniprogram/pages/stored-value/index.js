@@ -27,7 +27,7 @@ title: (t.typeText || t.type) + (t.note && t.note !== '演示储值' ? ' · ' + 
 date: t.discountReceipt?.createdText || String(t.createdAt || '').slice(0, 10) + (CH_LABEL[t.payChannel] ? ' · ' + CH_LABEL[t.payChannel] : ''),
 delta: (t.amountCents >= 0 ? '+' : '-') + money(Math.abs(t.amountCents)),
 up: t.amountCents >= 0,
-giftItems: (t.giftItems || []).map((g) => ({ ...g, unitValueText: money(g.unitValueCents, 2) })),
+giftItems: (t.giftItems || []).map((g) => ({ ...g, unitValueText: g.unitValueCents==null?'':money(g.unitValueCents, 2) })),
 needsConfirm: Boolean(t.needsConfirm)
 }))
 /* B3-3/4 代充回执:门店代充的到账回执(金额/渠道/时间戳,余额=顶部大数)。
@@ -37,7 +37,7 @@ discountReceipt:receipt(t.discountReceipt), id: t.id,
 amount: money(t.amountCents),
 channel: CH_LABEL[t.payChannel] ?? t.payChannel ?? '门店',
 at: t.discountReceipt?.createdText || String(t.createdAt || '').slice(0, 16).replace('T', ' '),
-giftItems: (t.giftItems || []).map((g) => ({ ...g, unitValueText: money(g.unitValueCents, 2) })),
+giftItems: (t.giftItems || []).map((g) => ({ ...g, unitValueText: g.unitValueCents==null?'':money(g.unitValueCents, 2) })),
 note: t.note || ''
 }))
 this.setData({ balance: (r.balanceCents || 0) / 100, balanceText: money(r.balanceCents || 0, 2) })

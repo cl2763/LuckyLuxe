@@ -65,6 +65,7 @@ const definition={
     payMenu: { useBalance: true, recharge: false },
 
     applyFootSurcharge: false, applyTipReuse: false,
+    personCoupons:{},couponPersonKey:'self',personCouponSelected:'',couponDocumentNames:{},
     couponGrantId: '', couponPanel: false, couponOptions: [], couponUsableCount: 0, couponPicked: null,
     preview: null, view: null,
     bind: { bound: true, badgeText: '', hintText: '', phoneMasked: '', memberCode: '' },
@@ -575,6 +576,7 @@ const definition={
   },
 
 
+  openPersonCoupon(e){const key=e.currentTarget.dataset.person,doc=this.data.preview?.documents?.find(d=>d.beneficiaryKey===key);this.setData({couponPersonKey:key,couponOptions:doc?.couponOptions||[],personCouponSelected:this.data.personCoupons[key]||'',couponPanel:true})},
   openCouponPanel() {
     if (!this.data.couponOptions.length) { wx.showToast({ title: '顾客券包里没有券', icon: 'none' }); return }
     this.setData({ couponPanel: true })
@@ -585,7 +587,7 @@ const definition={
     const id = e.currentTarget.dataset.id || ''
     const picked = this.data.couponOptions.find((o) => o.grantId === id)
     if (id && picked && !picked.usable) { wx.showToast({ title: picked.reason || '这张券本单用不了', icon: 'none' }); return }
-    this.setData({ couponGrantId: id, couponPanel: false })
+    if(this.data.pricingConfig?.giftEntitlementsEnabled)this.setData({personCoupons:{...this.data.personCoupons,[this.data.couponPersonKey]:id},personCouponSelected:id,couponPanel:false});else this.setData({ couponGrantId: id, couponPanel: false })
     this.refresh()
   },
 

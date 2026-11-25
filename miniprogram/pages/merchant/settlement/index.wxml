@@ -138,7 +138,18 @@
 
       <!-- 「＋添加第二个服务项目」在组①末尾之后(合同规则④) -->
       <view wx:if="{{!pricingConfig.active && grp.index === groups.length - 1}}" class="addmain" bindtap="addGroup">＋ 添加第二个服务项目</view>
-    </block><view wx:if="{{pricingConfig.active}}" class="mp-add-actions"><button class="ghost" data-person="{{person.key}}" bindtap="mpAddProject">＋ 为{{person.self?customerName:person.name||'此人'}}新增项目</button><button class="ghost" bindtap="mpAddPerson">＋ 新增被服务者</button></view></view></block>
+    </block><view wx:if="{{pricingConfig.active}}" class="mp-add-actions"><button class="ghost" data-person="{{person.key}}" bindtap="mpAddProject">＋ 为{{person.self?customerName:person.name||'此人'}}新增项目</button><button class="ghost" bindtap="mpAddPerson">＋ 新增被服务者</button></view>
+    <view wx:if="{{pricingConfig.giftEntitlementsEnabled}}" class="mp-person-check">
+      <view class="cpnline" data-person="{{person.key}}" bindtap="openPersonCoupon"><text>本张服务单优惠券</text><text>{{couponDocumentNames[person.key] || '选择优惠券'}} ›</text></view>
+      <block wx:if="{{personSummaries[person.key]}}"><view wx:if="{{personSummaries[person.key].coupon}}" class="mp-person-coupon"><view>{{personSummaries[person.key].coupon.name}}</view><view class="hint">{{personSummaries[person.key].coupon.rule}}</view><view wx:if="{{personSummaries[person.key].coupon.pendingGift}}" class="hint">先签含充值的单，权益到账后再签本单。</view></view><view wx:elif="{{person.self}}" class="hint">好友同行券不可用于持券人本人。</view>
+      <view class="mp-person-amount"><text>原价服务合计</text><text>{{personSummaries[person.key].list}}</text></view>
+      <view wx:if="{{personSummaries[person.key].tierDiscount}}" class="mp-person-amount"><text>价格优惠</text><text>−{{personSummaries[person.key].tierDiscount}}</text></view>
+      <view wx:if="{{personSummaries[person.key].couponDiscount}}" class="mp-person-amount"><text>优惠券抵扣</text><text>−{{personSummaries[person.key].couponDiscount}}</text></view>
+      <view wx:if="{{personSummaries[person.key].deposit}}" class="mp-person-amount"><text>已付定金抵扣</text><text>−{{personSummaries[person.key].deposit}}</text></view>
+      <view wx:if="{{personSummaries[person.key].recharge}}" class="mp-person-amount"><text>本单充值款</text><text>{{personSummaries[person.key].recharge}}</text></view>
+      <view wx:if="{{personSummaries[person.key].purchase}}" class="mp-person-amount"><text>本单购卡款</text><text>{{personSummaries[person.key].purchase}}</text></view>
+      <view class="mp-person-amount mp-person-total"><text>{{person.self?customerName:person.name||'此人'}}本单应付</text><text>{{personSummaries[person.key].total}}</text></view></block><view wx:else class="hint">选好项目后显示本单金额。</view>
+    </view></view></block>
     </block>
     <view wx:if="{{memberDocuments.length}}" class="card"><view class="ch">本次服务单 · 共{{memberDocuments.length}}张</view><view wx:for="{{memberDocuments}}" wx:key="id" class="mp-batch-row"><view><text>{{item.personName}}</text><view class="hint">{{item.itemsText}}</view><view class="hint">{{item.quote.display.discountText}}</view><view wx:if="{{item.quote.rechargeCents > 0}}" class="hint">{{item.rechargeText}}</view><view wx:if="{{item.quote.rechargeCents > 0}}" class="hint">本次充值折扣 {{item.quote.display.discountChangeText}}</view></view><view><text>{{item.correction.amountText}}</text><view>{{item.statusText}}</view></view></view><view class="hint">{{batchHint}}</view><view class="hint">{{deliveryStatus}}</view><view class="mp-add-actions"><button class="primary" loading="{{sending}}" disabled="{{sending || !pendingDocuments}}" bindtap="mpDeliver">推送本人签署</button><button class="ghost" bindtap="mpLocalSign">在本机签署</button></view><button class="ghost" bindtap="mpRecheck">价格或权益有变化？重新核对待签单</button></view>
 
@@ -159,7 +170,7 @@
       <view wx:else class="empty">本店定金不抵扣尾款（门店设置 → 定金与取消规则）</view>
 
       <!-- 优惠券(图 v2.2 未画,按现状保留;挂组①的单,一单一张口径不变 —— 记假设) -->
-      <view class="cpnline" bindtap="openCouponPanel">
+      <view class="cpnline" wx:if="{{!pricingConfig.giftEntitlementsEnabled}}" bindtap="openCouponPanel">
         <text class="l">优惠券</text>
         <block wx:if="{{couponPicked}}">
           <text class="v ok">{{couponPicked.name}} {{couponPicked.deductText}}</text>
@@ -248,7 +259,7 @@
       <view class="cpnsheet" catchtap="noop">
         <view class="ch">选择优惠券 · {{customerName}}的券包</view>
         <scroll-view class="cpnlist" scroll-y>
-          <view class="cpn {{o.usable ? '' : 'dis'}} {{couponGrantId === o.grantId ? 'on' : ''}}"
+          <view class="cpn {{o.usable ? '' : 'dis'}} {{(pricingConfig.giftEntitlementsEnabled ? personCouponSelected : couponGrantId) === o.grantId ? 'on' : ''}}"
                 wx:for="{{couponOptions}}" wx:for-item="o" wx:key="grantId" data-id="{{o.grantId}}" bindtap="pickCoupon">
             <view class="l">
               <text class="n">{{o.name}}</text>
@@ -257,7 +268,7 @@
             <text wx:if="{{o.usable}}" class="d">{{o.deductText}}</text>
             <view class="pick"></view>
           </view>
-          <view class="cpn {{couponGrantId ? '' : 'on'}}" data-id="" bindtap="pickCoupon">
+          <view class="cpn {{(pricingConfig.giftEntitlementsEnabled ? personCouponSelected : couponGrantId) ? '' : 'on'}}" data-id="" bindtap="pickCoupon">
             <view class="l"><text class="n">不使用优惠券</text><text class="s">本单不抵扣</text></view>
             <view class="pick"></view>
           </view>

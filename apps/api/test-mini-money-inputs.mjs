@@ -161,6 +161,9 @@ check('反向守:handler 都找得到(找不到就等于没验,不许当成通�
    小程序 `type="digit"` = 带小数点的数字键盘(金额用);`type="number"` = 整数键盘(计数/百分比用)。
    凡 `type="number"` 必须落进「不是金额」白名单,每项一行理由;条目数上棘轮,只许减。 */
 const NOT_MONEY_NUMBER = {
+  'pages/merchant/components/gift-entitlements/index.wxml:quantity': '已确认赠品领取/退回件数，整数；不涉及金额。',
+  'pages/merchant/components/gift-refund-review/index.wxml:item.returnQuantity': '已确认退款时实物退回件数，整数；退款金额仍使用金额输入。',
+  'pages/merchant/package-edit/index.wxml:item.days': '已确认赠送权益有效天数，整数；单件参考价值另用digit。',
   "pages/merchant/booking-addons/index.wxml:edit.duration": "已确认 F05 附加服务增加分钟数，整数时长，不是金额。",
   "pages/merchant/booking-addons/index.wxml:edit.sort": "已确认 F05 排序序号，不是金额。",
   "pages/merchant/schedule-day/index.wxml:shiftDuration || 120": "已确认 F06 服务时长预览，整数分钟。",
@@ -192,7 +195,7 @@ const NOT_MONEY_NUMBER = {
   'pages/merchant/notify-settings/index.wxml:r.revisitDays': '回访间隔(天)—— 计数;P3 件3 新增',
   'pages/merchant/notify-settings/index.wxml:r.advanceDays': '临期提醒提前天数 —— 计数;P3 件3 新增'
 }
-const NUMBER_CAP = 29 // 本批已确认 F04/F05/F06 的 11 个非金额整数控件逐项登记；金额仍须 digit。
+const NUMBER_CAP = 32 // 本批已确认 F04/F05/F06 的 11 个非金额整数控件逐项登记；金额仍须 digit。
 const numberInputs = allTags.filter((t) => t.type === 'number').map((t) => `${t.page}:${t.valueExpr}`)
 const notWhitelisted = numberInputs.filter((k) => !(k in NOT_MONEY_NUMBER))
 check(`③ 白名单式:全仓 ${numberInputs.length} 个 type="number" 逐个落在「不是金额」白名单里(新来的自动红)`,

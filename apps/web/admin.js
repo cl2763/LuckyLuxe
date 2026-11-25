@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261120-bind1'
+const ADMIN_BUILD = '20261125-gift4'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -4212,7 +4212,7 @@ function renderCustomerDetail() {
         </div>
       </article>
       <section class="card customer-profile-edit"><h2>${owner.lang === 'zh' ? '本店备注名' : 'Store remark name'}</h2><p class="subtle">${owner.lang === 'zh' ? '仅本店商家端可见，不改变顾客自己设置的昵称。顾客昵称：' : 'Visible to this store only. Customer nickname: '}${escapeHtml(customer.displayName || '')}</p><label><span>${owner.lang === 'zh' ? '备注名（最多40字，留空清除）' : 'Remark name (up to 40 characters; clear to remove)'}</span><input id="customerRemarkNameInput" maxlength="40" value="${escapeHtml(customer.remarkName || '')}"></label><button class="primary slim" data-customer-remark-save="${escapeHtml(customer.id)}" type="button">${owner.lang === 'zh' ? '保存备注名' : 'Save remark name'}</button></section>
-      <div id="customerBinding"></div><div id="mpCustomerDiscount"></div>
+      <div id="customerBinding"></div><div id="mpCustomerDiscount"></div><div id="customerGifts"></div>
       <section class="customer-profile-edit card">
         <div class="section-row compact-row">
           <div>
@@ -4279,7 +4279,7 @@ function renderCustomerDetail() {
       </section>
     </section>
   `
-  window.MemberPricingMember.mount(document.querySelector('#mpCustomerDiscount'),customer.id,{request,escapeHtml,money,toast,isOwner:isOwnerRole()})
+  window.CustomerGifts.mount(document.querySelector('#customerGifts'),customer.id,{request,escapeHtml,money,toast,isOwner:isOwnerRole()});window.MemberPricingMember.mount(document.querySelector('#mpCustomerDiscount'),customer.id,{request,escapeHtml,money,toast,isOwner:isOwnerRole()})
   window.CustomerBinding.mount(document.querySelector('#customerBinding'),customer,{request,zh:owner.lang==='zh'});loadMigrationArchive(customer.id)
   loadCustomerNotes(customer.id); renderSignedDocsBlock(customer.id, customerName(customer))   // 签署文件留档(10b);实现在 customer-docs.js
 }

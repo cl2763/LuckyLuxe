@@ -2,7 +2,7 @@
 /* 折算单价(规则⑦:核销按折算单价确认收入计积分/业绩)。
    分币余数末次吃(测试标准点名的边界):第 nth 次(1 起)= 非末次 floor(price/total),末次吃余数。 */
 // Shared computed view for every card reader; no persisted values are changed here.
-export function createMemberTimecardView({db,todayOf}) {
+export function createMemberTimecardView({db,todayOf,giftEntitlements}) {
 function timecardUnitCents(card, nth) {
   const base = Math.floor(card.price_cents / card.total_times)
   return nth >= card.total_times ? card.price_cents - base * (card.total_times - 1) : base
@@ -19,11 +19,13 @@ function timecardRemainingOf(row) {
 
 function serializeMemberTimecard(row) {
   const migratedService=db.prepare("SELECT kind,review_json FROM migration_asset_activations WHERE id=? AND tenant_id=? AND kind IN ('service','paid_service')").get(row.id,row.tenant_id)
-  const serviceId=migratedService?JSON.parse(migratedService.review_json).serviceId:null
+  const gift=giftEntitlements?.serviceFor(row.tenant_id,row.id)
+  const serviceId=gift?gift.service_id:migratedService?JSON.parse(migratedService.review_json).serviceId:null
   const mappedService=serviceId?db.prepare('SELECT name_zh FROM services WHERE id=? AND tenant_id=?').get(serviceId,row.tenant_id):null
   const remaining = timecardRemainingOf(row)
   const expired = timecardExpired(row)
   return {
+    giftKind:gift?.kind||null,kindLabel:gift?.kind==='service_voucher'?'服务兑换券':gift?.kind==='service_timecard'?'赠送服务次卡':'次卡',
     id: row.id,
     userId: row.user_id,
     packageId: row.package_id || null,

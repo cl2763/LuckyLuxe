@@ -78,7 +78,9 @@ if [ -n "$AI_ENV" ]; then
   NODE_ARGS+=("--env-file-if-exists=$AI_ENV")
   echo "   ⚠️ 带 AI env 起沙箱:$AI_ENV(真模型会**真花钱**;不传 --ai-env 就是现状 mock)"
 fi
-PORT=4310 DATA_DIR="$DATA_DIR_ARG" ALLOW_DEMO_ADMIN_LOGIN=true TEST_DB_PATH= AI_GATE="${AI_GATE:-}" nohup node ${NODE_ARGS[@]+"${NODE_ARGS[@]}"} local-server.mjs > /tmp/ll-sandbox-4310.log 2>&1 &
+# Called both by people and regression prerequisites. Never inherit the test
+# runner's zero merge window or mock storage credentials into the live sandbox.
+PORT=4310 DATA_DIR="$DATA_DIR_ARG" ALLOW_DEMO_ADMIN_LOGIN=true TEST_DB_PATH= AI_GATE="${AI_GATE:-}" nohup env -u MERGE_WINDOW_MS -u MERGE_WINDOW_CAP_MS -u COS_SECRET_ID -u COS_SECRET_KEY -u COS_REGION -u COS_BUCKET node ${NODE_ARGS[@]+"${NODE_ARGS[@]}"} local-server.mjs > /tmp/ll-sandbox-4310.log 2>&1 &
 for _ in $(seq 1 20); do
   if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health"; then
     echo "== 沙箱 4310 已起 =="

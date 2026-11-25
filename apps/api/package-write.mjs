@@ -1,7 +1,7 @@
 import {assertRecordActive,activeRecords} from './record-lifecycle.mjs'
 import {normalizeGiftItems,readGiftItems} from './gifts.mjs'
 import {canonicalPackageKind} from './package-kind.mjs'
-export function createPackageWrite({db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage,memberPricing}) {
+export function createPackageWrite({db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage,memberPricing,giftEntitlements}) {
   const number=(v,label,min=0)=>{if(!Number.isSafeInteger(v)||v<min||v>100000000)throw apiError(400,'BAD_REQUEST',`${label}须为有效整数，不能为负数或超出上限。`);return v}
   function configure(tid,b,{id:givenId=null}={}) {
     const editing=Boolean(givenId),id=givenId||randomId('pkg')
@@ -15,8 +15,17 @@ export function createPackageWrite({db,apiError,readBody,json,currentTenantId,ra
     assertPackageValueOk({kind,priceCents:price,timesCount:times})
     const group=String(get('projectGroup','project_group','')).trim()
     if(!cur||b.projectGroup!==undefined&&group!==String(cur.project_group||''))assertProjectGroupValid(tid,group)
-    const giftItems=b.giftItems===undefined?(cur?readGiftItems(cur):[]):normalizeGiftItems(b.giftItems,apiError)
-    if(kind!=='recharge'&&b.giftItems?.length)throw apiError(400,'INVALID_GIFT_ITEMS','实物赠品仅适用于充值套餐。')
+    const previousGifts=cur?readGiftItems(cur):[]
+    let giftItems=b.giftItems===undefined?previousGifts:normalizeGiftItems(b.giftItems,apiError)
+    // Old clients serialize only name/quantity/value (including null as zero).
+    // Preserve the full snapshot when that projection is unchanged; never silently erase typed rights.
+    if(cur&&b.giftItems!==undefined&&previousGifts.some(g=>g.kind)&&b.giftSchemaVersion!==1&&!giftItems.some(g=>g.kind)){
+      const legacyProjection=items=>JSON.stringify(items.map(g=>({name:g.name,quantity:g.quantity,unitValueCents:g.unitValueCents??0})))
+      if(legacyProjection(giftItems)!==legacyProjection(previousGifts))throw apiError(409,'GIFT_EDITOR_UPGRADE_REQUIRED','该套餐包含分类赠送权益，请在新版网页或新版小程序编辑赠品；本次未保存，原配置已保留。')
+      giftItems=previousGifts
+    }
+    if(b.giftItems!==undefined&&giftEntitlements)giftEntitlements.validate(tid,giftItems)
+    if(kind!=='recharge'&&b.giftItems?.length)throw apiError(400,'INVALID_GIFT_ITEMS','赠送权益仅适用于充值套餐。')
     const valid=get('validDays','valid_days',null);if(valid!==null&&valid!==''&&valid!==0)number(valid,'有效期',1)
     const active=get('isActive','is_active',true)?1:0,mall=get('mallVisible','mall_visible',true)?1:0
     const values=[storedKind,name,price,bonus,times,String(get('scope','scope','')).slice(0,200)||null,String(get('benefits','benefits','')).slice(0,400)||null,active,number(get('sortOrder','sort_order',0),'排序'),valid||null,group||null,mall,JSON.stringify(kind==='recharge'?giftItems:[])]

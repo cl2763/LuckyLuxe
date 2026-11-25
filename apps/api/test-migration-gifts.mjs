@@ -37,4 +37,5 @@ check('archived customer cannot activate or claim; historical read and retry sta
  assert.equal(run('a','activate',a).replayed,true);assert.equal(service.preview('A','u','a').grant.remaining,2);
  db.exec("UPDATE record_lifecycle SET status='active'");assert.equal(run('archived','activate',b).remaining,3)
 })
+check('optional reference value preserves null versus explicit zero and old values across restart',()=>{const old=JSON.stringify(db.prepare("SELECT * FROM migration_asset_activations WHERE asset_id='a'").get());for(const [id,value] of [['unknown',null],['knownzero',0]]){const b=seed(id);run(id,'activate',{...b,unitValueCents:value});assert.equal(service.preview('A','u',id).grant.unitValueCents,value)}service.ensureSchema();assert.equal(JSON.stringify(db.prepare("SELECT * FROM migration_asset_activations WHERE asset_id='a'").get()),old);assert.equal(service.preview('A','u','unknown').grant.unitValueCents,null)})
 console.log(n+' gift migration checks passed');db.close()

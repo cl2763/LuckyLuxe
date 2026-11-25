@@ -24,7 +24,7 @@ window.SettlementWeb = (function () {
     bookingId: '', userId: '', customerName: '',
     cats: [], items: [], roster: [], timecards: [], timecardPackages: [],
     depositDeductible: true, depositApplied: false,
-    catalogPrices: null, groups: [], couponGrantId: '', couponOptions: [], couponUsableCount: 0,
+    catalogPrices: null, groups: [], giftDraftKey:null, personCoupons:{}, couponPersonKey:'self', couponGrantId: '', couponOptions: [], couponUsableCount: 0,
     payMenu: { useBalance: true, recharge: false },
     applyFootSurcharge: false, applyTipReuse: false,
     bind: null, couponPanel: false,
@@ -117,7 +117,7 @@ window.SettlementWeb = (function () {
     Object.assign(state, {
       open: true, ready: false, submitting: false, _scrolled: false,
       bookingId: ctx.bookingId || '', userId: ctx.userId || '', customerName: ctx.customerName || '',
-      catalogPrices: null, groups: [], couponGrantId: '', couponOptions: [], couponUsableCount: 0,
+      catalogPrices: null, groups: [], giftDraftKey:null, personCoupons:{}, couponPersonKey:'self', couponGrantId: '', couponOptions: [], couponUsableCount: 0,
       payMenu: { useBalance: true, recharge: false }, applyFootSurcharge: false, applyTipReuse: false,
       bind: null, couponPanel: false, rvDraft: null, rvPanel: null, preview: null, view: null, pendingSheets: [], signLink: null
     })
@@ -242,11 +242,11 @@ window.SettlementWeb = (function () {
             ? '<p class="sw-empty">这张单没有定金收取记录,没有可抵扣的定金</p>'
             : '<p class="sw-empty">本店定金不抵扣尾款（门店设置 → 定金与取消规则）</p>')}
 
-          <button class="sw-cpnline" data-sw-coupon-open type="button">
+          ${state.pricingConfig?.giftEntitlementsEnabled?'':`<button class="sw-cpnline" data-sw-coupon-open type="button">
             <span class="l">优惠券</span>
             ${state.couponGrantId && couponPickedOf() ? `<span class="v ok">${escapeHtml(couponPickedOf().title || couponPickedOf().name || '')} ${escapeHtml(couponPickedOf().deductText || '')}</span><span class="arr">›</span>`
               : (state.couponUsableCount ? `<span class="v">顾客有 ${state.couponUsableCount} 张可用券</span><span class="arr">›</span>` : '<span class="v mut">无可用券</span>')}
-          </button>
+          </button>`}
 
           <div class="sw-gh">整单规则</div>
           <div class="sw-item"><span class="sw-iname wide">足部美甲<span class="sw-sub">手部基础上整单加收</span></span>
@@ -479,18 +479,19 @@ window.SettlementWeb = (function () {
   }
 
   function renderCouponPanel(escapeHtml) {
+    const selected=state.pricingConfig?.giftEntitlementsEnabled?(state.personCoupons[state.couponPersonKey]||''):state.couponGrantId
     return `
       <div class="sw-cpnmask" data-sw-coupon-close></div>
       <div class="sw-cpnsheet">
-        <div class="sw-ch">选择优惠券 · ${escapeHtml(state.customerName || '顾客')}的券包</div>
+        <div class="sw-ch">选择优惠券 · 用于${escapeHtml((state.couponPersonKey==='self'?state.customerName:state.groups.find(g=>g.beneficiaryKey===state.couponPersonKey)?.servedPersonName) || '顾客')}的服务单（卡主券包）</div>
         <div class="sw-cpnlist">
           ${state.couponOptions.map(function (o) {
-            return `<button class="sw-cpn ${o.usable ? '' : 'dis'} ${state.couponGrantId === o.grantId ? 'on' : ''}" data-sw-coupon-pick="${escapeHtml(o.grantId)}" type="button" ${o.usable ? '' : 'disabled'}>
+            return `<button class="sw-cpn ${o.usable ? '' : 'dis'} ${selected === o.grantId ? 'on' : ''}" data-sw-coupon-pick="${escapeHtml(o.grantId)}" type="button" ${o.usable ? '' : 'disabled'}>
               <span class="l"><span class="n">${escapeHtml(o.title || o.name || '')}</span><span class="s">${escapeHtml(o.usable ? (o.subtitle || '') : (o.reason || '本单用不了'))}</span></span>
               ${o.usable ? `<span class="d">${escapeHtml(o.deductText || '')}</span>` : ''}
             </button>`
           }).join('')}
-          <button class="sw-cpn ${state.couponGrantId ? '' : 'on'}" data-sw-coupon-pick="" type="button">
+          <button class="sw-cpn ${selected ? '' : 'on'}" data-sw-coupon-pick="" type="button">
             <span class="l"><span class="n">不使用优惠券</span><span class="s">本单不抵扣</span></span>
           </button>
         </div>
@@ -612,6 +613,7 @@ window.SettlementWeb = (function () {
     })
     on('[data-sw-foot]', function () { state.applyFootSurcharge = !state.applyFootSurcharge; render(); schedulePreview() })
     on('[data-sw-tipreuse]', function () { state.applyTipReuse = !state.applyTipReuse; render(); schedulePreview() })
+    on('[data-sw-person-coupon]',el=>{state.couponPersonKey=el.dataset.swPersonCoupon;state.couponOptions=state.preview?.documents?.find(d=>d.beneficiaryKey===state.couponPersonKey)?.couponOptions||[];state.couponPanel=true;render()})
     on('[data-sw-coupon-open]', function () {
       if (!state.couponOptions.length) { toast('顾客券包里没有券'); return }
       state.couponPanel = true; render()
@@ -621,7 +623,7 @@ window.SettlementWeb = (function () {
       const id = el.dataset.swCouponPick || ''
       const picked = state.couponOptions.find(function (o) { return o.grantId === id })
       if (id && picked && !picked.usable) { toast(picked.reason || '这张券本单用不了'); return }
-      state.couponGrantId = id; state.couponPanel = false
+      if(state.pricingConfig?.giftEntitlementsEnabled)state.personCoupons[state.couponPersonKey]=id;else state.couponGrantId=id;state.couponPanel=false
       render(); schedulePreview()
     })
     /* 随单充值(死口清剿·三接回):行为逐条镜像小程序 payToggleRecharge/rvPickPkg/rvConfirm/rvRemove;
@@ -713,7 +715,7 @@ window.SettlementWeb = (function () {
       state.preview = r
       const sheets = r.sheets || []
       const pay = (r.group || {}).payment || {}
-      state.couponOptions = ((sheets[0] || {}).couponOptions || [])
+      state.couponOptions = state.pricingConfig?.giftEntitlementsEnabled?(r.documents?.find(d=>d.beneficiaryKey===state.couponPersonKey)?.couponOptions||[]):((sheets[0] || {}).couponOptions || [])
       state.couponUsableCount = (sheets[0] || {}).couponUsableCount || 0
       const grp = r.group || {}
       const money = state._deps.money

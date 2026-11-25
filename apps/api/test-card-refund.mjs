@@ -610,7 +610,8 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
        动态逐类型渲染没法给唯一 id,类名只住 notify-settings.js,棘轮 6 id+2 类 → +1 类随批报 Cowork */
     const isNfy = /class="nfy-num"/.test(attrs)
     const isGiftQuantity = /data-gift-quantity/.test(attrs) && /aria-label="赠品数量"/.test(attrs) && /step="1"/.test(attrs)
-    return !NON_MONEY.includes(id) && !isPct && !isSort && !isNfy && !isGiftQuantity
+    const isClaimQuantity = /data-claim-quantity/.test(attrs) && /aria-label="本次领取或退回数量"/.test(attrs) && /step="1"/.test(attrs)
+    return !NON_MONEY.includes(id) && !isPct && !isSort && !isNfy && !isGiftQuantity && !isClaimQuantity
   })
   check(`v1.2③-1b 🔴 反过来数:全网页端 ${numberInputs.length} 个 type=number 全是"不是钱"的(百分比/几号/排序)`,
     suspects.length === 0 && numberInputs.length >= 5, suspects.join(' | ').slice(0, 300))

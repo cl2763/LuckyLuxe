@@ -51,7 +51,7 @@ window.MyCustomers = (function () {
         <p class="subtle">${escapeHtml(c.memberCode || '')}${c.phoneMasked ? ` · ${escapeHtml(c.phoneMasked)}` : ''}</p>
         <p class="subtle">${escapeHtml(d.note || '')}</p>
         ${(c.tags || []).length ? `<div class="customer-tags">${c.tags.map((t) => `<span class="customer-tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
-        <div id="mpStaffCustomer"></div><h3>${zh ? '服务历史' : 'Service history'}</h3>
+        <div id="mpStaffCustomer"></div><div id="staffCustomerGifts"></div><h3>${zh ? '服务历史' : 'Service history'}</h3>
         ${(d.bookings || []).length ? (d.bookings || []).map((b) => `
           <div class="info-card-web card">
             <p><span>${escapeHtml(b.atText || '')}</span><strong>${escapeHtml(b.serviceName || '')}</strong></p>
@@ -75,6 +75,7 @@ window.MyCustomers = (function () {
             ${(n.images || []).length ? `<div class="mn-thumbs">${n.images.map((im) => `<img class="mn-thumb" src="${im}" alt="小记图片">`).join('')}</div>` : ''}
           </div>`).join('')}`
       window.MemberPricingMember.mount(box.querySelector('#mpStaffCustomer'),userId,{request,escapeHtml,toast,money:()=>'',isOwner:false,showBalance:false})
+      await window.CustomerGifts.mount(box.querySelector('#staffCustomerGifts'),userId,{request,escapeHtml,toast,isOwner:false})
       let draftImages = []
       const drawDraft = () => {
         const row = document.querySelector('#mnImgRow')

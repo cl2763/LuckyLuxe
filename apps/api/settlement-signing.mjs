@@ -1,5 +1,5 @@
 /** Shared signing ledger; person documents can commit multiple service components atomically. */
-export function createSettlementSigner({db,storedValueBalanceDetail,apiError,iso,todayOf,randomId,insertFinanceTransaction,timecardExpired,timecardRemainingOf,insertStoredValueTransaction,logCouponGrant,formatMoneyCents,settleDepositReceiptsOnSign,renderSettlementSnapshotSvg,serializeSettlement,cosPutObject,settlementRead}) {
+export function createSettlementSigner({giftEntitlements,db,storedValueBalanceDetail,apiError,iso,todayOf,randomId,insertFinanceTransaction,timecardExpired,timecardRemainingOf,insertStoredValueTransaction,logCouponGrant,formatMoneyCents,settleDepositReceiptsOnSign,renderSettlementSnapshotSvg,serializeSettlement,cosPutObject,settlementRead}) {
 function signLedger(row, { signature, signedBy = '', strokes = [], withinTransaction = false, finalizeDeposit = true, couponLogDiscountCents = null }) {
   const tenantId = row.tenant_id
   const legs = db.prepare("SELECT * FROM settlement_payments WHERE settlement_id = ? AND leg IN ('stored_value','migrate_stored') ORDER BY rowid ASC").all(row.id)
@@ -15,16 +15,6 @@ function signLedger(row, { signature, signedBy = '', strokes = [], withinTransac
   /* 规则⑤ 核销留痕:**签字成功那一刻**券才核销。签字前退出/改单,券一直是 active,
      自然就回到券包里了 —— 不需要"释放"动作,也就不存在忘记释放这回事。
      签的这一刻再校验一次:过期了或在别处核销了就拦下,不让顾客签一个抵不了的数。 */
-  let couponGrant = null
-  if (row.coupon_grant_id) {
-    couponGrant = db.prepare('SELECT * FROM coupon_grants WHERE id = ? AND tenant_id = ?').get(row.coupon_grant_id, tenantId)
-    if (!couponGrant || couponGrant.status !== 'active') {
-      throw apiError(400, 'COUPON_UNUSABLE', '所选优惠券已不可用(过期或已在别处核销),请回到服务单重新选券。')
-    }
-    if (couponGrant.expires_at && String(couponGrant.expires_at) < iso(new Date())) {
-      throw apiError(400, 'COUPON_UNUSABLE', '所选优惠券已过期,请回到服务单重新选券。')
-    }
-  }
   if(withinTransaction) {
     const legacy=legs.filter(l=>l.leg==='migrate_stored').reduce((n,l)=>n+l.amount_cents,0)
     const normal=legs.filter(l=>l.leg==='stored_value').reduce((n,l)=>n+l.amount_cents,0)
@@ -70,6 +60,7 @@ function signLedger(row, { signature, signedBy = '', strokes = [], withinTransac
         const item=db.prepare("SELECT service_id FROM settlement_items WHERE settlement_id=? AND kind='timecard'").get(row.id)
         if(!item || item.service_id!==JSON.parse(migratedService.review_json).serviceId) throw apiError(409,'TIMECARD_SERVICE_NOT_ALLOWED','赠卡对应服务不一致，请重新核对结算单。')
       }
+      giftEntitlements?.assertService(tenantId,card.id,db.prepare("SELECT service_id FROM settlement_items WHERE settlement_id=? AND kind='timecard'").get(row.id)?.service_id)
       if (timecardExpired(card)) throw apiError(400, 'TIMECARD_EXPIRED', '这张次卡已过期——请回到服务单改支付构成再签(单据不作废)。')
       // Draft validation is not enough: remaining rights can be refunded before signing.
       if (card.user_id !== row.user_id) throw apiError(409, 'TIMECARD_NOT_OWNER', '次卡归属已变化，请重新核对本单顾客。')
@@ -87,7 +78,7 @@ function signLedger(row, { signature, signedBy = '', strokes = [], withinTransac
         db.prepare("UPDATE settlement_payments SET status = 'paid' WHERE id = ?").run(tcLeg.id)
         // 规则⑦:核销=按折算单价确认收入(负债转收入),单列类目供日结;payChannel=times_card 不混现金实收。
         // tenantId 必传:签署页=公开路由没进租户闸门,不传会记到旗舰店账上(insertFinanceTransaction 注释点名的坑,套件 ㊻ 咬过一次)
-        if (!migratedService || migratedService.kind==='paid_service') insertFinanceTransaction({
+        if (card.card_source!=='gift' && (!migratedService || migratedService.kind==='paid_service')) insertFinanceTransaction({
           type: 'income', source: 'settlement', category: '服务收入-次卡核销', tags: row.code,
           amountCents: tcLeg.amount_cents, payChannel: 'times_card', occurredOn: todayOf(tenantId),
           note: `服务单 ${row.code} · ${tcLeg.note || '次卡核销'}`, createdBy: signedBy || 'customer_sign', tenantId
@@ -100,7 +91,7 @@ function signLedger(row, { signature, signedBy = '', strokes = [], withinTransac
        tenantId 必传(D53:签署页=公开路由,不传记到旗舰店账上)。 */
     if (scRecharge && scRecharge.amountCents > 0) {
       const rechargeTxn=insertStoredValueTransaction({
-        userId: row.user_id, type: 'recharge', amountCents: scRecharge.amountCents, giftItems:scRecharge.giftItems||[],
+        plannedTxnId:scRecharge.sourceTxnId||null,userId: row.user_id, type: 'recharge', amountCents: scRecharge.amountCents, giftItems:scRecharge.giftItems||[],
         payChannel: scRecharge.payChannel || 'cash',
         note: `随单充值 · 服务单 ${row.code}${scRecharge.packageName ? ' · ' + scRecharge.packageName : ''}`,
         createdBy: signedBy || 'customer_sign', technicianId: scRecharge.technicianId || null, tenantId, createdAt: now,
@@ -117,6 +108,16 @@ function signLedger(row, { signature, signedBy = '', strokes = [], withinTransac
         bonusTxnId=bonusTxn.id
       }
     }
+  let couponGrant = null
+  if (row.coupon_grant_id) {
+    couponGrant = db.prepare('SELECT * FROM coupon_grants WHERE id = ? AND tenant_id = ?').get(row.coupon_grant_id, tenantId)
+    if (!couponGrant || couponGrant.status !== 'active') {
+      throw apiError(400, 'COUPON_UNUSABLE', '所选优惠券已不可用(过期或已在别处核销),请回到服务单重新选券。')
+    }
+    if (couponGrant.expires_at && String(couponGrant.expires_at) < iso(new Date())) {
+      throw apiError(400, 'COUPON_UNUSABLE', '所选优惠券已过期,请回到服务单重新选券。')
+    }
+  }
     for (const leg of legs) {
       if (leg.amount_cents <= 0) continue
       db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bucket)

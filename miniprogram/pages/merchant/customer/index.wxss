@@ -33,4 +33,4 @@ page{background:var(--paper)}
 /* 六统一(08-30c):四个同排动作同一形制同一配色 —— 不许一组里两黑两白(店主原话) */
 .hbtn.ghost{background:var(--hero);color:var(--heroink)}
 
-.remark-input{padding:24rpx;margin:20rpx 0;border:1rpx solid var(--line);border-radius:12rpx;font-size:28rpx;color:var(--ink);min-height:48rpx}
+.remark-input{padding:0 24rpx;margin:20rpx 0;border:1rpx solid var(--line);border-radius:12rpx;font-size:28rpx;color:var(--ink);height:96rpx;min-height:96rpx;line-height:normal;box-sizing:border-box}

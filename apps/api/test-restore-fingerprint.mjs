@@ -19,7 +19,7 @@ import { readFileSync, existsSync, statSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'node:http'
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 
 /* 🔴 必须 `resolve`:`join(..., '../..')` 留着 `/apps/api/../..` 这种没规约的形状,
    而 `startsWith` 是按字符串比的 —— ③a 第一次就是这么红的(刀红在自己身上,不是产品上)。 */
@@ -55,6 +55,18 @@ for (const fn of ['restore_local', 'restore_sandbox']) {
 }
 check('②c 反向守:这把尺子不是在整份文件里瞎搜 —— 随便给个不存在的函数名必须取到空函数体',
   bodyOf('restore_nothing_at_all') === '')
+
+// Exercise the launcher's actual environment wrapper without starting a server,
+// killing ports or touching its remembered database. A mutated wrapper must leak.
+const launcher = readFileSync(join(ROOT, 'apps/api/start-sandbox.sh'), 'utf8')
+const launchLine = launcher.split('\n').find(line => line.startsWith('PORT=4310 ') && line.includes(' nohup '))
+const wrapper = launchLine?.match(/ nohup (.*?) node /)?.[1]
+const probeEnv = { ...process.env, MERGE_WINDOW_MS: '0', MERGE_WINDOW_CAP_MS: '1', COS_SECRET_ID: 'isolated-test', COS_SECRET_KEY: 'isolated-test', COS_REGION: 'isolated-test', COS_BUCKET: 'isolated-test', AI_GATE: 'preserve-test' }
+const probe = prefix => JSON.parse(execFileSync('bash', ['-c', prefix + ' "$1" -e \'console.log(JSON.stringify({window:process.env.MERGE_WINDOW_MS,cap:process.env.MERGE_WINDOW_CAP_MS,storage:process.env.COS_SECRET_ID,gate:process.env.AI_GATE}))\'', 'env-probe', process.execPath], { env: probeEnv, encoding: 'utf8' }))
+const clean = wrapper ? probe(wrapper) : null
+const dirty = probe('env')
+check('②d 沙箱前置启动也剥离回归环境；反例会泄漏，原 AI 门档保留',
+  clean && clean.window === undefined && clean.cap === undefined && clean.storage === undefined && clean.gate === 'preserve-test' && dirty.window === '0' && dirty.storage === 'isolated-test')
 
 /* ── ③ 真能分辨(本体)────────────────────────────────────────── */
 const serve = (payload, port) => new Promise((resolve) => {

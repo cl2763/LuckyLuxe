@@ -1,1 +1,8 @@
-{"navigationBarTitleText": "账户调整", "usingComponents": {"discount-wheel": "/components/discount-wheel/index"}}
+{
+  "navigationBarTitleText": "账户调整",
+  "usingComponents": {
+    "discount-wheel": "/components/discount-wheel/index",
+    "gift-refund-review": "/pages/merchant/components/gift-refund-review/index",
+    "gift-recharge-review": "/pages/merchant/components/gift-recharge-review/index"
+  }
+}

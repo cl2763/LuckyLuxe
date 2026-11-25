@@ -127,7 +127,8 @@ module.exports={
       }
 
       const s0 = sheets[0] || {}
-      const options = (s0.couponOptions || []).map((o) => Object.assign({}, o, { deductText: o.usable ? `−${m(o.discountCents)}` : '' }))
+      const panelDoc=this.data.pricingConfig?.giftEntitlementsEnabled?(r.documents||[]).find(p=>p.beneficiaryKey===this.data.couponPersonKey):s0
+      const options = (panelDoc?.couponOptions || []).map((o) => Object.assign({}, o, { deductText: o.usable ? `−${m(o.discountCents)}` : '' }))
       const prev = this.data.display
 
 
@@ -137,7 +138,8 @@ module.exports={
       const curGrant = this.data.couponGrantId || ''
       const nextGrant = s0.coupon ? s0.coupon.grantId : (curGrant && curGrant !== sentGrant ? curGrant : '')
       this.setData({
-        preview: r, view, display: d,
+        preview: r, view, display: d,couponDocumentNames:Object.fromEntries((r.documents||[]).map(p=>[p.beneficiaryKey,p.coupon?.name||'选择优惠券'])),
+        personSummaries:Object.fromEntries((r.documents||[]).map(p=>[p.beneficiaryKey,{list:m(p.listTotalCents),tierDiscount:p.tierDiscountCents?m(p.tierDiscountCents):'',couponDiscount:p.couponDiscountCents?m(p.couponDiscountCents):'',deposit:p.depositDeductCents?m(p.depositDeductCents):'',recharge:p.rechargeCents?m(p.rechargeCents):'',purchase:p.purchaseCents?m(p.purchaseCents):'',total:m(p.totalCents),coupon:p.coupon?{name:p.coupon.name,rule:p.couponOptions.find(o=>o.grantId===p.coupon.grantId)?.recipientMode==='friend_original'?'仅用于这位同行朋友的整单收费服务，按原价优惠，不叠加会员折扣。':p.couponOptions.find(o=>o.grantId===p.coupon.grantId)?.subtitle||'按优惠券适用范围抵扣。',pendingGift:p.couponOptions.find(o=>o.grantId===p.coupon.grantId)?.pendingGift}:null}])),
         couponOptions: options,
         couponUsableCount: s0.couponUsableCount || 0,
         couponPicked: s0.coupon

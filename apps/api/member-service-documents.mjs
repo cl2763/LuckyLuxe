@@ -1,3 +1,4 @@
+import {normalizeGiftItems} from './gifts.mjs'
 import {memberDocumentDisplay} from './member-document-display.mjs'
 import {memberDocumentRootGroup} from './member-document-summary.mjs'
 import {randomUUID,randomBytes,createHash} from 'node:crypto'
@@ -28,7 +29,7 @@ export function ensureMemberDocumentSchema(db) {
     CREATE TRIGGER IF NOT EXISTS member_document_signed_delete BEFORE DELETE ON member_service_documents WHEN OLD.status='signed'
       BEGIN SELECT RAISE(ABORT,'signed person document is immutable');END;`)
 }
-export function createMemberServiceDocuments({db,policy,preview,apiError,currentTenantId,createSettlementGroup,signLedger,balanceOf,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,assertStaff,amendSettlement,amendmentShape,formatMoneyCents,formatSignedAt=v=>v,validateDeposit=()=>{}}) {
+export function createMemberServiceDocuments({db,policy,preview,apiError,currentTenantId,createSettlementGroup,signLedger,balanceOf,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,assertStaff,amendSettlement,amendmentShape,formatMoneyCents,formatSignedAt=v=>v,validateDeposit=()=>{},giftEntitlements=null}) {
   const actorOf=makeActorOf({apiError}),now=()=>new Date().toISOString()
   const canonical=v=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v
   const digest=v=>pricingDigest(canonical(v))
@@ -40,15 +41,18 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
   }
   function components(row) {return db.prepare(`SELECT s.* FROM member_document_components c JOIN settlements s ON s.id=c.settlement_id
     WHERE c.document_id=? AND c.tenant_id=? ORDER BY c.component_index`).all(row.id,row.tenant_id)}
-  function proof(tid,sheets) {
+  function proof(tid,sheets,uid) {
     const ids=[...new Set(sheets.flatMap(s=>[...(s.items||[]).map(i=>i.serviceId),s.timecardServiceId].filter(Boolean)))].sort()
     const packageIds=[...new Set(sheets.flatMap(s=>[s.rechargePackageId,s.purchasePackageId].filter(Boolean)))].sort()
+    const pendingSourceIds=sheets.filter(s=>s.giftDraftKey).flatMap(s=>{const pkg=db.prepare('SELECT gift_items_json FROM membership_packages WHERE id=? AND tenant_id=?').get(s.rechargePackageId||'',tid);return normalizeGiftItems(JSON.parse(pkg?.gift_items_json||'[]')).filter(g=>g.kind==='coupon').map(g=>g.couponId)})
+    const pendingIds=new Set(sheets.filter(s=>s.giftDraftKey).flatMap(s=>{const pkg=db.prepare('SELECT gift_items_json FROM membership_packages WHERE id=? AND tenant_id=?').get(s.rechargePackageId||'',tid);return giftEntitlements?.planned(tid,uid,normalizeGiftItems(JSON.parse(pkg?.gift_items_json||'[]')),s.giftDraftKey)?.coupons.map(c=>c.id)||[]}))
     const couponIds=[...new Set(sheets.map(s=>s.couponGrantId).filter(Boolean))].sort()
     const {active,membershipEnabled,settlementTypes}=policy.config(tid)
     return digest({config:{active,membershipEnabled,settlementTypes},membership:policy.getMembershipConfig(tid),rules:getPricingRules(tid),
       services:ids.map(id=>({id,prices:policy.prices(tid,id,'settlement').prices,service:Object.fromEntries(Object.entries(db.prepare('SELECT * FROM services WHERE id=? AND tenant_id=?').get(id,tid)||{}).filter(([key])=>['id','name_zh','name_en','is_active','category_id','item_kind','unit','price_rule','price_rule_value','addon_scope_json','addon_group','price_mode'].includes(key)))})),
       packages:packageIds.map(id=>db.prepare('SELECT * FROM membership_packages WHERE id=? AND tenant_id=?').get(id,tid)),
-      coupons:couponIds.map(id=>db.prepare('SELECT c.*,g.expires_at FROM coupons c JOIN coupon_grants g ON g.coupon_id=c.id WHERE g.id=? AND g.tenant_id=?').get(id,tid))})
+      ...(pendingSourceIds.length?{giftTemplates:[...new Set(pendingSourceIds)].sort().map(id=>{const c=db.prepare('SELECT * FROM coupons WHERE id=? AND tenant_id=?').get(id,tid);if(!c)return null;const {issued_qty,...definition}=c;return definition})}:{}),
+      coupons:couponIds.filter(id=>!pendingIds.has(id)).map(id=>{const c=db.prepare('SELECT c.*,g.expires_at FROM coupons c JOIN coupon_grants g ON g.coupon_id=c.id WHERE g.id=? AND g.tenant_id=?').get(id,tid);if(!c)return c;if(c.recipient_mode==='any'){const {recipient_mode,...legacy}=c;return legacy}return c})})
   }
   function freshness(row){
     if(row.status!=='pending_sign')return null
@@ -56,7 +60,7 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
     const context=JSON.parse(group.context_json),current=policy.discount(row.tenant_id,row.user_id),previous=db.prepare("SELECT * FROM member_discount_events WHERE tenant_id=? AND user_id=? AND source='recharge' AND source_id=?").get(row.tenant_id,row.user_id,`document-group:${row.group_id}`)
     let reason=''
     try{components(row).forEach(validateDeposit)}catch(e){reason=e.message}
-    if(!reason&&proof(row.tenant_id,JSON.parse(group.input_json))!==group.proof_hash)reason='服务价格或会员规则已变化，请店员重新核对。'
+    if(!reason&&proof(row.tenant_id,JSON.parse(group.input_json),row.user_id)!==group.proof_hash)reason='服务价格或会员规则已变化，请店员重新核对。'
     else if(current.revision!==(previous?previous.revision:context.oldRevision))reason='个人折扣已变化，请店员重新核对。'
     const begun=db.prepare("SELECT 1 FROM member_service_documents WHERE group_id=? AND status='signed'").get(row.group_id)
     const recharge=JSON.parse(group.input_json).some(s=>s.rechargePackageId||s.rechargeAmountCents!==undefined)
@@ -87,7 +91,7 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
       const preparedSheets=sheets.map((s,i)=>({...s,couponGrantId:view.components[i].coupon?.grantId||null,payIntent:s.payIntent||body.payIntent}))
       const made=createSettlementGroup({...body,__demoSeed:null,cardOwnerUserId:userId,settlements:preparedSheets},admin,{computedSheets:view.components,documentMode:true,sharedBookingGroupId:options.sharedBookingGroupId})
       const input=JSON.stringify(sheets),timestamp=now(),groupId=made.groupId
-      db.prepare('INSERT INTO member_document_groups VALUES(?,?,?,?,?,?,?,?,?)').run(groupId,tid,userId,id,payloadHash,input,JSON.stringify(context),proof(tid,sheets),timestamp)
+      db.prepare('INSERT INTO member_document_groups VALUES(?,?,?,?,?,?,?,?,?)').run(groupId,tid,userId,id,payloadHash,input,JSON.stringify(context),proof(tid,sheets,userId),timestamp)
       let primaryId=null
       let documentBalance=view.personalDiscount.current.balanceCents
       for(const person of view.documents) {
@@ -158,7 +162,7 @@ export function createMemberServiceDocuments({db,policy,preview,apiError,current
       if(row.status!=='pending_sign')throw apiError(409,'DOCUMENT_VOIDED','这张服务单已撤回。')
       if(row.dependency_id&&get(row.dependency_id).status!=='signed')throw apiError(409,'RECHARGE_DOCUMENT_FIRST','请先签署包含随单充值的服务单，再确认本单。')
       const group=db.prepare('SELECT * FROM member_document_groups WHERE id=?').get(row.group_id),context=JSON.parse(group.context_json)
-      if(proof(row.tenant_id,JSON.parse(group.input_json))!==group.proof_hash)throw apiError(409,'PRICING_CHANGED','价格或会员规则已变化，请联系商家更新服务单后重新确认。')
+      if(proof(row.tenant_id,JSON.parse(group.input_json),row.user_id)!==group.proof_hash)throw apiError(409,'PRICING_CHANGED','价格或会员规则已变化，请联系商家更新服务单后重新确认。')
       const previous=db.prepare("SELECT * FROM member_discount_events WHERE tenant_id=? AND user_id=? AND source='recharge' AND source_id=?").get(row.tenant_id,row.user_id,`document-group:${row.group_id}`)
       const current=policy.discount(row.tenant_id,row.user_id)
       policy.revision(previous?previous.revision:context.oldRevision,current.revision)

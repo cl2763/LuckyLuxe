@@ -1,0 +1,1 @@
+page{background:var(--paper,#faf8f2)}.error{margin:32rpx;padding:24rpx;line-height:1.7;color:var(--ink,#292520)}

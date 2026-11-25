@@ -1,0 +1,8 @@
+<view class="binding-card">
+ <view class="title">小程序绑定</view>
+ <view class="status">{{state === 'bound' ? '已绑定微信' : state === 'unbound' ? '未绑定微信' : state === 'loading' ? '正在核对绑定状态…' : '绑定状态读取失败'}}</view>
+ <view class="hint">请顾客用自己的微信扫码，核对门店与档案后确认本人。绑定沿用原档案，不改变余额或历史记录。</view>
+ <view class="actions"><button class="action" wx:if="{{state === 'unbound'}}" bindtap="generate" loading="{{busy}}" disabled="{{busy}}">{{ticket ? '重新出示绑定码' : '出示绑定码'}}</button><button class="action secondary" bindtap="refresh">刷新绑定状态</button></view>
+ <view wx:if="{{ticket}}"><image wx:if="{{ticket.miniCodeUrl && !codeError}}" class="code" src="{{ticket.miniCodeUrl}}" mode="aspectFit" binderror="imageError"/><view wx:else class="hint">绑定码暂不可用，请重新出示或联系平台。</view><view class="hint">等待顾客确认。重新出示会使上一张绑定码失效。</view></view>
+ <view wx:if="{{error}}" class="error">{{error}}</view>
+</view>
