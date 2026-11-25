@@ -7,12 +7,14 @@ Page({
   async onShow() { if (!(await api.guardOwner())) return; await refreshStoreClock().catch(() => {}); this.setData({ currency: storeCurrencyPrefix() }) },
   data: {
     rateBps:null,discountRevision:0,loaded:false,loadError:'',
+    giftConfig:{enabled:false,services:[],coupons:[]},giftTypes:[{key:'physical',name:'实物领取'},{key:'coupon',name:'优惠券'},{key:'service_voucher',name:'服务兑换券'},{key:'service_timecard',name:'服务次卡'}],
     id: '', isNew: true, kind: 'recharge',
     name: '', price: '', bonus: '', times: '', scope: '', benefits: '', active: true,
-    giftItems: [], currency: '', saving: false, validityModes:['请选择','固定天数','长期有效'],validityIndex:0,groupNames:['不限项目组'],groupIndex:0,validDays:'',projectGroup:'',mallVisible:true
+    giftEditIndex:-1,giftEditNew:false,giftEditBackup:null,giftEditError:'',giftItems: [], currency: '', saving: false, validityModes:['请选择','固定天数','长期有效'],validityIndex:0,groupNames:['不限项目组'],groupIndex:0,validDays:'',projectGroup:'',mallVisible:true
   },
 
   onLoad(opt) {
+    this.loadGiftConfig()
     const kind = opt && opt.kind === 'times' ? 'times' : 'recharge'
     if(kind==='times')this.loadGroups()
     if (opt && opt.id) {
@@ -42,11 +44,11 @@ Page({
         price: String((p.priceCents || 0) / 100),
         bonus: p.bonusCents ? String(p.bonusCents / 100) : '',
         times: p.timesCount ? String(p.timesCount) : '',
-        giftItems: (p.giftItems || []).map((g) => ({ name: g.name, quantity: String(g.quantity), value: String(g.unitValueCents / 100) })),
+        giftItems: (p.giftItems || []).map((g) => ({...g,legacyUntyped:!g.kind,kind:g.kind||'physical',kindIndex:Math.max(0,this.data.giftTypes.findIndex(t=>t.key===(g.kind||'physical'))),referenceName:g.serviceId||g.couponId||'请选择',quantity:String(g.quantity),value:g.unitValueCents==null?'':String(g.unitValueCents/100),days:g.validDays==null?'':String(g.validDays)})),
         validityIndex:p.validDays==null?2:1,validDays:p.validDays==null?'':String(p.validDays),projectGroup:p.projectGroup||'',mallVisible:p.mallVisible!==false,
         scope: p.scope || '', benefits: p.benefits || '', active: p.isActive !== false
       })
-      if(p.kind==='times')await this.loadGroups()
+      this.refreshGiftReferences();if(p.kind==='times')await this.loadGroups()
     } catch (e) { this.setData({loaded:false,loadError:e.message||'加载失败，当前输入已保留'});wx.showToast({ title: '加载失败，请重试', icon: 'none' }) }
   },
 
@@ -60,17 +62,25 @@ Page({
   onBenefits(e) { this.setData({ benefits: e.detail.value }) },
   onActive(e) { this.setData({ active: e.detail.value }) },
 
-  addGift() { if (this.data.giftItems.length < 20) this.setData({ giftItems: this.data.giftItems.concat({ name: '', quantity: '1', value: '' }) }) },
-  removeGift(e) { this.setData({ giftItems: this.data.giftItems.filter((_, i) => i !== Number(e.currentTarget.dataset.i)) }) },
-  onGift(e) { const { i, field } = e.currentTarget.dataset; if (!['name', 'quantity', 'value'].includes(field)) return; this.setData({ [`giftItems[${i}].${field}`]: e.detail.value }) },
+  addGift(e) { if(this.data.giftEditIndex>=0){this.setData({giftEditError:'请先保存本项或取消编辑'});return}if (this.data.giftItems.length < 20) {const kind=e?.currentTarget?.dataset?.kind||'physical';this.setData({giftEditIndex:this.data.giftItems.length,giftEditNew:true,giftEditBackup:null,giftEditError:'',giftItems: this.data.giftItems.concat({ name:'',kind,kindIndex:this.data.giftTypes.findIndex(t=>t.key===kind),referenceName:'请选择',quantity:'1',value:'',days:'' }) })} },
+  editGift(e){if(this.data.giftEditIndex>=0){this.setData({giftEditError:'请先保存本项或取消编辑'});return}const i=Number(e.currentTarget.dataset.i);this.setData({giftEditIndex:i,giftEditNew:false,giftEditBackup:{...this.data.giftItems[i]},giftEditError:''})},
+  cancelGift(){const i=this.data.giftEditIndex;if(i<0)return;const items=this.data.giftItems.slice();if(this.data.giftEditNew)items.splice(i,1);else items[i]=this.data.giftEditBackup;this.setData({giftItems:items,giftEditIndex:-1,giftEditBackup:null,giftEditError:''})},
+  commitGift(){const g=this.data.giftItems[this.data.giftEditIndex];if(!g)return;const q=String(g.quantity),v=String(g.value),days=String(g.days||'');let error='';if(!g.name.trim()||g.name.trim().length>80)error='请填写名称，最多80字';else if(!/^\d+$/.test(q)||+q<1||+q>999)error='数量须为1至999整数';else if(v&&(!/^\d+(\.\d{1,2})?$/.test(v)||+v>1000000))error='参考价值须为非负金额，最多两位小数';else if(this.data.giftConfig.enabled&&!g.legacyUntyped&&days&&(!/^\d+$/.test(days)||+days<1||+days>3650))error='有效期须为1至3650天';else if(this.data.giftConfig.enabled&&!g.legacyUntyped&&g.kind!=='physical'&&!(g.kind==='coupon'?g.couponId:g.serviceId))error='请选择对应服务或券模板';if(error){this.setData({giftEditError:error});return}this.setData({giftEditIndex:-1,giftEditBackup:null,giftEditError:''})},
+  removeGift(e) { if(this.data.giftEditIndex>=0){this.setData({giftEditError:'请先保存本项或取消编辑'});return}this.setData({ giftItems: this.data.giftItems.filter((_, i) => i !== Number(e.currentTarget.dataset.i)) }) },
+  onGift(e) { const { i, field } = e.currentTarget.dataset; if (!['name', 'quantity', 'value','days'].includes(field)) return; this.setData({ [`giftItems[${i}].${field}`]: e.detail.value }) },
 
+  async loadGiftConfig(){try{const config=await api.adminGet('/admin/gift-entitlements/config');this.setData({giftConfig:config,giftConfigLoaded:true,giftConfigError:''});this.refreshGiftReferences()}catch(e){this.setData({giftConfigError:e.message||'赠送类别加载失败'});wx.showToast({title:'赠送类别加载失败',icon:'none'})}},
+  refreshGiftReferences(){const config=this.data.giftConfig;this.setData({giftItems:this.data.giftItems.map(g=>({...g,referenceName:(g.kind==='coupon'?(config.coupons||[]):(config.services||[])).find(r=>r.id===(g.couponId||g.serviceId))?.name||'请选择'}))})},
+  onGiftKind(e){const i=Number(e.currentTarget.dataset.i),n=Number(e.detail.value);this.setData({[`giftItems[${i}].legacyUntyped`]:false,[`giftItems[${i}].kindIndex`]:n,[`giftItems[${i}].kind`]:this.data.giftTypes[n].key,[`giftItems[${i}].referenceName`]:'请选择',[`giftItems[${i}].serviceId`]:'',[`giftItems[${i}].couponId`]:''})},
+  onGiftReference(e){const i=Number(e.currentTarget.dataset.i),g=this.data.giftItems[i],list=g.kind==='coupon'?this.data.giftConfig.coupons:this.data.giftConfig.services,pick=list[Number(e.detail.value)];if(!pick)return;this.setData({[`giftItems[${i}].${g.kind==='coupon'?'couponId':'serviceId'}`]:pick.id,[`giftItems[${i}].referenceName`]:pick.name,...(!g.name?{[`giftItems[${i}].name`]:pick.name}:{})})},
   showConflict(c){this.setData({conflict:c,conflictText:[c.name,'金额 '+c.priceCents/100,'赠送 '+c.bonusCents/100,'次数 '+(c.timesCount||'无'),'权益 '+(c.benefits||'无'),'赠品 '+(c.giftItems||[]).map(g=>g.name+' × '+g.quantity).join('、')].join('；')})},
   async reviewChanges(){if(this.data.saving||this.data.isNew)return;try{const r=await api.adminGet('/admin/packages'),c=(r.packages||[]).find(x=>x.id===this.data.id);if(!c)throw Error('套餐已被移除，请返回列表核对');this.setData({loadError:''});if(c.configRevision===this.data.configRevision){this.setData({configSyncChanged:false});wx.showToast({title:'该套餐没有变化',icon:'none'})}else this.showConflict(c)}catch(e){this.setData({loadError:e.message||'无法读取最新内容，当前输入已保留'})}},
   retryLoad(){this.load(this.data.id)},
   async useServer(){const r=await new Promise(resolve=>wx.showModal({title:'采用服务器内容',content:'将替换本页尚未保存的输入。',success:resolve,fail:e=>{console.error('确认窗口未打开',e.errMsg);this.setData({error:'确认窗口未打开，当前内容已保留，请重试。'});resolve({confirm:false})}}));if(r.confirm){this.setData({conflict:null,configSyncChanged:false});this.load(this.data.id)}},
   keepMine(){const c=this.data.conflict;if(!c)return;this.setData({configRevision:c.configRevision,discountRevision:c.defaultPersonalDiscount?.revision||this.data.discountRevision,conflict:null,configSyncChanged:false});wx.showToast({title:'已保留输入，请核对后再次保存',icon:'none'})},
   async save() {
-    if (this.data.saving || this.data.conflict || this.data.configSyncError || !this.data.loaded) return
+    if(this.data.giftEditIndex>=0){this.setData({giftEditError:'请先将当前权益加入套餐，或取消编辑'});return}
+    if (this.data.saving || !this.data.giftConfigLoaded || this.data.giftConfigError || this.data.conflict || this.data.configSyncError || !this.data.loaded) return
     const { id, isNew, kind, name, price, bonus, times, scope, benefits, active } = this.data
     if (!name.trim()) { wx.showToast({ title: '请输入名称', icon: 'none' }); return }
     const p = /^\d+(\.\d{1,2})?$/.test(String(price).trim()) ? Number(price) : NaN
@@ -81,10 +91,16 @@ Page({
       if (bonus && (!/^\d+(\.\d{1,2})?$/.test(String(bonus)) || !Number.isFinite(Number(bonus)))) { wx.showToast({ title: '赠送金额须为非负金额', icon: 'none' }); return }
       for (let i = 0; i < this.data.giftItems.length; i++) {
         const g = this.data.giftItems[i], n = g.name.trim(), q = String(g.quantity), v = String(g.value)
-        if (!n || n.length > 80 || !/^\d+$/.test(q) || +q < 1 || +q > 999 || !/^\d+(\.\d{1,2})?$/.test(v) || +v > 1000000) {
+        if (!n || n.length > 80 || !/^\d+$/.test(q) || +q < 1 || +q > 999 || (v && (!/^\d+(\.\d{1,2})?$/.test(v) || +v > 1000000))) {
           wx.showToast({ title: `请检查第${i + 1}行名称、整数数量和非负价值`, icon: 'none' }); return
         }
-        giftItems.push({ name: n, quantity: Number(q), unitValueCents: Math.round(Number(v) * 100) })
+        const item={name:n,quantity:Number(q),unitValueCents:v?Math.round(Number(v)*100):null}
+        if(this.data.giftConfig.enabled&&!g.legacyUntyped){
+          if(g.days&&(!/^\d+$/.test(g.days)||+g.days<1||+g.days>3650)){wx.showToast({title:'有效期须为1至3650天',icon:'none'});return}
+          Object.assign(item,{kind:g.kind,validDays:g.days?Number(g.days):null})
+          if(g.kind!=='physical'){const key=g.kind==='coupon'?'couponId':'serviceId';if(!g[key]){wx.showToast({title:'请选择对应服务或券模板',icon:'none'});return}item[key]=g[key]}
+        }
+        giftItems.push(item)
       }
     }
     if(kind==='times'&&!this.data.validityIndex){wx.showToast({title:'请明确选择有效期方式',icon:'none'});return}
@@ -94,7 +110,7 @@ Page({
       ...(isNew?{}:{expectedConfigRevision:this.data.configRevision}),
       validDays:valid?Number(valid):null,projectGroup:this.data.projectGroup.trim(),mallVisible:this.data.mallVisible,
       ...(kind==='recharge'?{defaultPersonalDiscount:{expectedRevision:this.data.discountRevision,rateBps:this.data.rateBps}}:{}),
-      kind, giftItems, name: name.trim(),
+      kind, giftItems, giftSchemaVersion:1, name: name.trim(),
       priceCents: Math.round(p * 100),
       bonusCents: kind === 'recharge' ? Math.round((Number(bonus) || 0) * 100) : 0,
       timesCount: kind === 'times' ? Math.round(Number(times) || 0) : 0,

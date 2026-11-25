@@ -25,3 +25,5 @@
   </block>
 </view>
 <snapshot-viewer open="{{snapViewer.open}}" items="{{snapViewer.items}}" index="{{snapViewer.index}}" bind:close="closeSnapViewer"></snapshot-viewer>
+
+<gift-entitlements wx:if="{{booking.userId}}" user-id="{{booking.userId}}" is-owner="{{isOwner}}" />

@@ -130,7 +130,7 @@
     "env-inventory": 9,
     "backup-wal": 31,
     "secret-output": 15,
-    "restore-fingerprint": 10,
+    "restore-fingerprint": 11,
     "signed-docs": 100,
     "mp-package-size": 21,
     "tenant-parent-scan": 8,
@@ -170,9 +170,9 @@
     "migration-balance-activation": 17,
     "migration-balance-mini": 6,
     "migration-refund-allocation": 7,
-    "migration-gifts": 19,
-    "migration-gift-mini": 6,
-    "migration-service-mini": 6,
+    "migration-gifts": 20,
+    "migration-gift-mini": 7,
+    "migration-service-mini": 7,
     "customer-migration-summary": 6,
     "migration-card-reconciliation": 10,
     "migration-reconciliation-mini": 5,
@@ -227,7 +227,10 @@
     "config-write-lock": 8,
     "consent-customer-20261119": 6,
     "ai-disclosure-20261120": 6,
-    "customer-binding-remarks": 30
+    "customer-binding-remarks": 30,
+    "gift-entitlements": 10,
+    "gift-entitlements-http": 16,
+    "gift-mini-client": 8
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

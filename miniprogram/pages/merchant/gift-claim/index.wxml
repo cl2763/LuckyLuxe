@@ -1,0 +1,2 @@
+<view wx:if="{{error}}" class="error">{{error}}<button bindtap="retry">重新读取</button></view>
+<gift-entitlements wx:elif="{{ready}}" page-mode="{{true}}" user-id="{{userId}}" customer-name="{{name}}" initial-grant="{{grantId}}" initial-event="{{eventId}}" is-owner="{{isOwner}}"/>

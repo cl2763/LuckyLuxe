@@ -1,0 +1,11 @@
+<view wx:if="{{review}}" class="review" catchtouchmove="noop">
+  <view class="heading"><text>确认充值与赠送权益</text><button class="close" bindtap="cancel">× 关闭</button></view>
+  <scroll-view scroll-y class="content">
+    <view class="card"><view class="title">{{review.name}} · 本次充值</view><view>{{review.packageName}}</view>
+      <view class="row"><text>充值本金</text><text>{{review.principalText}}</text></view><view class="row"><text>赠送卡金</text><text>{{review.bonusText}}</text></view><view class="row"><text>充值后个人折扣</text><text>{{review.discountText}}</text></view><view class="row"><text>付款方式</text><text>{{review.channel}}</text></view><view class="row"><text>经手技师</text><text>{{review.technician}}</text></view>
+    </view>
+    <view class="card"><view class="title">随本次充值发放</view><view wx:for="{{review.gifts}}" wx:key="index" class="row"><view>{{item.name}}<view class="hint">{{item.kindLabel}} · {{item.expiryText}}</view><view class="hint">{{item.unitValueText ? '单件参考价值 ' + item.unitValueText : '未填写参考价值'}}</view></view><text>{{item.quantity}}{{item.unitLabel||'份'}}</text></view><view wx:if="{{!review.gifts.length}}">本次无套餐赠送权益。</view></view>
+    <view class="card"><view class="title">发放与使用</view><view>充值到账后，赠送权益进入顾客卡包；此确认不代表实物已领取，也不代表赠送服务已核销。</view><view class="hint">随单充值需先签含充值的服务单，再签同行朋友的单。</view><view class="hint">本页为独立充值，确认后立即到账并发放权益，请先核实已收到款项。</view></view>
+  </scroll-view>
+  <view class="actions"><button bindtap="cancel">返回调整</button><button class="confirm" bindtap="confirm">确认到账并发放</button></view>
+</view>

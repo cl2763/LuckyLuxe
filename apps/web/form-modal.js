@@ -1,5 +1,5 @@
 window.FormModal=(()=>{
-function open({ title, hint, fields, saveText, onSave, mountContent, closeButtonOnly = false }, {escapeHtml,toast}) {
+function open({ title, hint, fields, saveText, onSave, onCancel, mountContent, closeButtonOnly = false }, {escapeHtml,toast}) {
   let busy=false
   document.querySelector('.form-modal-overlay')?.remove()
   const overlay = document.createElement('div')
@@ -40,11 +40,11 @@ function open({ title, hint, fields, saveText, onSave, mountContent, closeButton
   }
   overlay.addEventListener('change', applyVisibility)
   overlay.addEventListener('input', applyVisibility)
-  const close = () => { if(busy)return; overlay.remove(); document.removeEventListener('keydown', onKey) }
+  const close = (cancelled=false) => { if(busy)return;if(cancelled&&onCancel)onCancel(); overlay.remove(); document.removeEventListener('keydown', onKey) }
   const onKey = (e) => { if (e.key === 'Escape') e.preventDefault() }
   document.addEventListener('keydown', onKey)
   overlay.addEventListener('click', async (e) => {
-    if (e.target.closest('[data-fm-close]') || e.target.closest('[data-fm-cancel]')) { close(); return }
+    if (e.target.closest('[data-fm-close]') || e.target.closest('[data-fm-cancel]')) { close(true); return }
     if (e.target.closest('[data-fm-save]')) {
       if(busy)return;busy=true;const btn=overlay.querySelector('[data-fm-save]');btn.disabled=true
       try { const result=await onSave(readValues());busy=false;if(result!==false)close() } catch (error) { toast(error.message) } finally{busy=false;btn.disabled=false}

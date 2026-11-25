@@ -14,16 +14,24 @@
     </block>
 
     <view wx:if="{{kind==='recharge'}}" class="gifts">
-      <view class="gift-title">赠送物品 <text class="gift-hint">选填，可多件</text></view>
-      <view class="gift-row gift-head"><text>物品名称</text><text>数量</text><text>单件价值</text><text></text></view>
-      <view class="gift-row" wx:for="{{giftItems}}" wx:key="index">
-        <input value="{{item.name}}" maxlength="80" placeholder="物品名称" data-i="{{index}}" data-field="name" bindinput="onGift" />
-        <input value="{{item.quantity}}" type="number" placeholder="1" data-i="{{index}}" data-field="quantity" bindinput="onGift" />
-        <input value="{{item.value}}" type="digit" placeholder="{{currency}}" data-i="{{index}}" data-field="value" bindinput="onGift" />
-        <button class="gift-remove" data-i="{{index}}" bindtap="removeGift" aria-label="删除赠品">×</button>
+      <view class="gift-title">赠送权益 <text class="gift-hint">选填，可混合添加</text></view>
+      <view wx:if="{{giftConfigError}}" bindtap="loadGiftConfig">{{giftConfigError}} · 点此重试</view>
+      <view class="gift-type-actions" wx:if="{{giftConfig.enabled}}"><button wx:for="{{giftTypes}}" wx:key="key" class="gift-add" data-kind="{{item.key}}" bindtap="addGift">＋ {{item.name}}</button></view>
+      <view class="gift-hint" wx:if="{{giftEditError}}">{{giftEditError}}</view>
+      <view class="gift-item" wx:for="{{giftItems}}" wx:key="index">
+        <block wx:if="{{giftEditIndex !== index}}"><view class="gift-title">{{item.name}} × {{item.quantity}}</view><view class="gift-hint">{{item.legacyUntyped?'原有赠品说明（未分类）':giftTypes[item.kindIndex].name}} · {{item.days?item.days+' 天有效':item.kind==='coupon'?'有效期沿用券模板':'长期有效'}}</view><view class="gift-type-actions"><button class="gift-add" data-i="{{index}}" bindtap="editGift">编辑</button><button class="gift-add" data-i="{{index}}" bindtap="removeGift">移除</button></view></block>
+        <block wx:else>
+        <view class="frow" wx:if="{{giftConfig.enabled}}"><text>权益类别</text><picker range="{{giftTypes}}" range-key="name" value="{{item.kindIndex}}" data-i="{{index}}" bindchange="onGiftKind"><view>{{item.legacyUntyped?'原有赠品说明（请主动选择类别后启用发放）':giftTypes[item.kindIndex].name}} ›</view></picker></view>
+        <view class="frow"><text>名称</text><input class="in" value="{{item.name}}" maxlength="80" placeholder="例如：护手霜一支" data-i="{{index}}" data-field="name" bindinput="onGift" /></view>
+        <view class="frow" wx:if="{{giftConfig.enabled && item.kind!=='physical'}}"><text>对应服务 / 券模板</text><picker range="{{item.kind==='coupon'?giftConfig.coupons:giftConfig.services}}" range-key="name" data-i="{{index}}" bindchange="onGiftReference"><view>{{item.referenceName}} ›</view></picker></view>
+        <view class="frow"><text>数量 / 次数</text><input class="in" type="number" value="{{item.quantity}}" data-i="{{index}}" data-field="quantity" bindinput="onGift" /></view>
+        <view class="frow"><text>单件参考价值（选填）</text><input class="in" type="digit" value="{{item.value}}" placeholder="不明确可留空" data-i="{{index}}" data-field="value" bindinput="onGift" /></view>
+        <view class="frow" wx:if="{{giftConfig.enabled}}"><text>有效天数（选填）</text><input class="in" type="number" value="{{item.days}}" placeholder="实物/服务留空长期；券沿用模板" data-i="{{index}}" data-field="days" bindinput="onGift" /></view>
+        <view class="gift-hint">{{!giftConfig.enabled?'旧版赠项仅作说明，尚未启用自动发放核销。':item.kind==='physical'?'交付实物后由商家登记领取，顾客无需扫码或签字。':'充值生效后发放；在服务单中选择，签署成功后核销。'}}</view>
+        <view class="gift-type-actions"><button class="gift-add" bindtap="cancelGift">取消编辑</button><button class="gift-add" bindtap="commitGift">{{giftEditNew?"加入套餐":"保存本项"}}</button></view></block>
       </view>
-      <button class="gift-add" bindtap="addGift" disabled="{{giftItems.length >= 20}}">＋ 再加一行</button>
-      <view class="gift-hint">价值用于展示，不计入储值余额、营业收入或技师业绩。物品领取请联系门店，此清单不代表已领取。</view>
+      <button wx:if="{{!giftConfig.enabled}}" class="gift-add" bindtap="addGift" disabled="{{giftItems.length >= 20}}">＋ 添加赠送权益</button>
+      <view class="gift-hint">参考价值不计入余额、收入或技师业绩；权益发放不代表已领取。</view>
     </view>
     <view wx:if="{{kind==='recharge'}}" class="gifts"><view class="gift-title">充值后默认个人折扣</view><discount-wheel value="{{rateBps}}" bindchange="onRate"/><view class="gift-hint">作为充值时的默认选项，店员可在确认充值时调整。</view></view>
     <view wx:if="{{kind==='times'}}" class="frow"><text class="lb">适用项目组</text><picker class="in" range="{{groupNames}}" value="{{groupIndex}}" bindchange="onGroup"><view>{{groupNames[groupIndex]}}</view></picker></view>
@@ -35,7 +43,7 @@
   </view>
 
   <view wx:if="{{conflict}}" class="gifts"><view class="gift-title">套餐已在其他设备修改</view><view class="gift-hint">服务器最新：{{conflictText}}</view><view class="gift-hint">本页输入已保留。保留我的修改将以本页填写内容保存，请先核对。</view><button bindtap="useServer">采用已保存内容</button><button bindtap="keepMine">保留我的修改并复核</button></view>
-  <button class="btn" disabled="{{saving || conflict || configSyncError || !loaded}}" bindtap="save">{{saving?'保存中…':configSyncError?'等待核对后保存':'保存套餐'}}</button>
+  <button class="btn" disabled="{{saving || conflict || configSyncError || !loaded || !giftConfigLoaded || giftConfigError}}" bindtap="save">{{saving?'保存中…':configSyncError?'等待核对后保存':'保存套餐'}}</button>
   <view class="btn cancel" bindtap="cancel">取消</view>
   <view class="note">顾客可查看套餐权益；实际充值由门店确认办理。</view>
 </view>

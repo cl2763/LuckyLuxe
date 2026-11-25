@@ -1,3 +1,4 @@
+import {giftEntitlementsEnabled} from './gift-entitlements.mjs'
 import {beginWriteSavepoint} from './write-savepoint.mjs'
 import {assertRecordActive,activeRecords} from './record-lifecycle.mjs'
 // Merchant and platform configuration share these definition-only operations.
@@ -75,6 +76,7 @@ export function createMarketingDefinitions({db,apiError,readBody,json,currentTen
     const id = path.split('/')[3]
     const cur = db.prepare('SELECT * FROM coupons WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
     if (!cur) throw apiError(404, 'NOT_FOUND', 'Coupon not found.')
+    if(db.prepare("SELECT 1 FROM recharge_gift_grants WHERE tenant_id=? AND id||'_template'=?").get(currentTenantId(),id))throw apiError(409,'GIFT_TEMPLATE_IMMUTABLE','已发放的充值赠券保留原权益，不能修改其快照模板。')
     const body = input
     db.prepare(`UPDATE coupons SET name = ?, discount_type = ?, amount_cents = ?, percent_off = ?, min_spend_cents = ?, valid_days = ?, total_qty = ?, is_active = ? WHERE id = ?`).run(
       body.name === undefined ? cur.name : String(body.name).trim(),
@@ -94,6 +96,15 @@ export function createMarketingDefinitions({db,apiError,readBody,json,currentTen
   let output
   const reply=(_res,status,data)=>{output={status,data}}
   let scope
+  const recipient=body.recipientMode
+  if(path.startsWith('/admin/coupons')&&method!=='GET'&&recipient!==undefined){
+   if(!['any','friend_original'].includes(recipient))throw apiError(400,'INVALID_COUPON_RECIPIENT','请选择有效的用券对象。')
+   if(recipient==='friend_original'&&!giftEntitlementsEnabled(currentTenantId()))throw apiError(409,'GIFT_FEATURE_NOT_ENABLED','本店尚未启用同行券。')
+   if(method==='PATCH'){
+    const id=path.split('/')[3],cur=db.prepare('SELECT recipient_mode FROM coupons WHERE id=? AND tenant_id=?').get(id,currentTenantId())
+    if(cur&&cur.recipient_mode!==recipient&&db.prepare('SELECT 1 FROM coupon_grants WHERE tenant_id=? AND coupon_id=?').get(currentTenantId(),id))throw apiError(409,'COUPON_ALREADY_ISSUED','模板已有发放记录，请新建模板，不能改变顾客已有券的使用对象。')
+   }
+  }
   if(path.startsWith('/admin/coupons')&&method!=='GET'&&body.scopeCategoryIds!==undefined){
    if(!Array.isArray(body.scopeCategoryIds)||body.scopeCategoryIds.length>100||body.scopeCategoryIds.some(id=>typeof id!=='string'||!db.prepare('SELECT 1 FROM service_categories WHERE id=? AND tenant_id=?').get(id,currentTenantId())))throw apiError(400,'INVALID_COUPON_SCOPE','请选择本店有效的大类作为适用范围。')
    scope=[...new Set(body.scopeCategoryIds)].sort()
@@ -106,7 +117,14 @@ export function createMarketingDefinitions({db,apiError,readBody,json,currentTen
   if(method!=='GET')beginWriteSavepoint(db, 'marketing_definition', 'membership_packages')
   try{
    handle({method},null,{path,adminSession},body,reply)
+   if(recipient!==undefined&&output?.data?.coupon){
+    const c=output.data.coupon
+    if(recipient==='friend_original'&&(c.discountType!=='percent'||c.scopeCategoryIds.length))throw apiError(400,'FRIEND_COUPON_RULES','同行券须为整单服务折扣券，适用范围选择全部服务。')
+    db.prepare('UPDATE coupons SET recipient_mode=? WHERE id=? AND tenant_id=?').run(recipient,c.id,currentTenantId())
+    output.data.coupon=serializeCoupon(db.prepare('SELECT * FROM coupons WHERE id=? AND tenant_id=?').get(c.id,currentTenantId()))
+   }
    if(scope){db.prepare('UPDATE coupons SET scope_categories_json=? WHERE id=? AND tenant_id=?').run(JSON.stringify(scope),output.data.coupon.id,currentTenantId());output.data.coupon=serializeCoupon(db.prepare('SELECT * FROM coupons WHERE id=? AND tenant_id=?').get(output.data.coupon.id,currentTenantId()))}
+   if(method!=='GET'&&output?.data?.coupon?.recipientMode==='friend_original'&&(output.data.coupon.discountType!=='percent'||output.data.coupon.scopeCategoryIds.length))throw apiError(400,'FRIEND_COUPON_RULES','同行券须为整单服务折扣券，适用范围选择全部服务。')
    if(method!=='GET')db.exec('RELEASE marketing_definition')
   }catch(e){if(method!=='GET')db.exec('ROLLBACK TO marketing_definition; RELEASE marketing_definition');throw e}
   return output

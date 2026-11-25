@@ -13,7 +13,7 @@ Page({
   const seq=++this.sequence;this.setData({loading:true,saving:false,error:''})
   try{const info=await api.adminGet(this.base());if(!this.valid(seq))return
    const claims=info.events.filter(e=>e.kind==='claim'&&e.returnable>0).map(e=>({...e,label:e.created_at+' · 可退 '+e.returnable+' 件'}))
-   this.setData({info,claims,claimIndex:0,sourceText:JSON.stringify(info.sourceDetails,null,2),title:this.data.title||info.sourceTitle||'',operation:info.grant&&info.grant.status!=='available'?'return':'claim',valueText:info.grant?storeMoney(info.grant.unitValueCents,2):''})
+   this.setData({info,claims,claimIndex:0,sourceText:JSON.stringify(info.sourceDetails,null,2),title:this.data.title||info.sourceTitle||'',operation:info.grant&&info.grant.status!=='available'?'return':'claim',valueText:info.grant&&info.grant.unitValueCents!=null?storeMoney(info.grant.unitValueCents,2):''})
   }catch(e){if(this.valid(seq))this.setData({error:e.message||'读取失败，请重试'})}finally{if(this.valid(seq))this.setData({loading:false})}
  },
  clearExpiry(){if(!this.data.saving)this.setData({expiresOn:''})},
@@ -27,8 +27,8 @@ Page({
   if(!Number.isSafeInteger(quantity)||quantity<0||quantity>100000||(kind!=='activate'&&!quantity)||!d.reason.trim()){this.setData({error:'请填写整数件数及核对、收货或退回依据。领取和退回须大于零。'});return}
   const payload={quantity,reason:d.reason.trim()}
   if(kind==='activate'){
-   const unitValueCents=/^\d+(?:\.\d{1,2})?$/.test(d.unitValue.trim())?Math.round(Number(d.unitValue)*100):NaN
-   if(!d.title.trim()||!Number.isSafeInteger(unitValueCents)||!d.agreements.physicalGoodsConfirmed||!d.agreements.rulesConfirmed||!d.agreements.sourceUseStopped){this.setData({error:'请填写赠品名称、单件价值并确认三项规则。服务赠卡不能按实物领取。'});return}
+   const unitValueCents=!d.unitValue.trim()?null:/^\d+(?:\.\d{1,2})?$/.test(d.unitValue.trim())?Math.round(Number(d.unitValue)*100):NaN
+   if(!d.title.trim()||(unitValueCents!==null&&!Number.isSafeInteger(unitValueCents))||!d.agreements.physicalGoodsConfirmed||!d.agreements.rulesConfirmed||!d.agreements.sourceUseStopped){this.setData({error:'请填写赠品名称并确认三项规则。服务赠卡不能按实物领取。'});return}
    Object.assign(payload,{title:d.title.trim(),specification:d.specification,unitValueCents,expiresOn:d.expiresOn,...d.agreements,confirmVersion:d.info.version})
   }else if(kind==='return'){
    const claim=d.claims[d.claimIndex];if(!claim){this.setData({error:'没有可退回的原领取记录。'});return}payload.claimId=claim.id

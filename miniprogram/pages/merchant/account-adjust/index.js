@@ -53,19 +53,20 @@ Page({
     this.pendingDetails()
     try {
       const pricing=await api.adminGet('/admin/member-pricing/members/'+encodeURIComponent(this.data.userId));this._pricingRetry={};this.setData({pricing,rateBps:pricing.rateBps,discountConfirmed:false})
-      const [f, pack, lk, pkgs, techs] = await Promise.all([
+      const [f, pack, lk, pkgs, techs, giftConfig] = await Promise.all([
         api.adminGet(`/admin/account-adjust/facts?userId=${encodeURIComponent(this.data.userId)}`),
         api.adminGet(`/admin/customers/${encodeURIComponent(this.data.userId)}/timecards`).catch(() => ({ timecards: [] })),
         api.adminGet(`/admin/customers/lookup?userId=${encodeURIComponent(this.data.userId)}`).catch(() => null),
         api.adminGet('/admin/recharge-packages').catch(() => ({ packages: [] })),
-        api.adminGet('/admin/technicians?roster=1').catch(() => ({ technicians: [] }))
+        api.adminGet('/admin/technicians?roster=1').catch(() => ({ technicians: [] })),
+        api.adminGet('/admin/gift-entitlements/config')
       ])
       const roster = (techs.technicians || [])
       this.setData({
-        facts: f.facts,
+        facts: f.facts,giftEnabled:!!giftConfig.enabled,
         cards: (pack.timecards || []).filter((c) => c.remaining > 0),
         bound: lk && lk.hit ? lk.hit.bound !== false : true,
-        rvPkgs: (pkgs.packages || []).map((p) => ({ ...p, giftItems: (p.giftItems || []).map((g) => ({ ...g, unitValueText: storeMoney(g.unitValueCents, 2) })) })),
+        rvPkgs: (pkgs.packages || []).map((p) => ({ ...p, giftItems: (p.giftItems || []).map((g) => ({ ...g, unitValueText: g.unitValueCents==null?'':storeMoney(g.unitValueCents, 2) })) })),
         techNames: ['店里直收'].concat(roster.map((t) => t.name)),
         techIds: [''].concat(roster.map((t) => t.id))
       })
@@ -118,6 +119,11 @@ Page({
     if (this.data.busy) return
     this.setData({ busy: true })
     try {
+      if(this.data.giftEnabled){
+        const pkg=this.data.rvPkgs.find(p=>p.id===this.data.rvPkgId)
+        const confirmed=await this.selectComponent('#gift-recharge-review').ask({name:this.data.name,packageName:pkg?.label||pkg?.name||'手动充值',principalText:storeMoney(cents,2),bonusText:storeMoney(bonus,2),discountText:P.label(this.data.rateBps),channel:this.data.rvChannels[this.data.rvChannelIdx].label,technician:this.data.techNames[this.data.techIdx],gifts:pkg?.giftItems||[]})
+        if(!confirmed){this.setData({busy:false});return}
+      }
       await this.pricingMutation('/admin/stored-value/recharge', {
         ...this.pricingPayload({amountCents:cents,bonusCents:bonus,packageId:this.data.rvPkgId,payChannel:this.data.rvChannels[this.data.rvChannelIdx].id,technicianId:this.data.techIds[this.data.techIdx]}),
         userId: this.data.userId, amountCents: cents, bonusCents: bonus, packageId: this.data.rvPkgId || undefined,
@@ -204,7 +210,9 @@ Page({
           const url = kind === 'sv'
             ? `/admin/stored-value/txns/${encodeURIComponent(id)}/reverse`
             : `/admin/finance/transactions/${encodeURIComponent(id)}/reverse`
-          await this.pricingMutation(url, {reason:this.data.reason.trim(),...(kind==='sv'?this.pricingPayload({url}):{})})
+          const giftReview=kind==='sv'?await this.selectComponent('#gift-refund-review').ask(this.data.userId,id):{}
+          if(giftReview===null)return
+          await this.pricingMutation(url, {reason:this.data.reason.trim(),...(kind==='sv'?this.pricingPayload({url,...giftReview}):{}),...giftReview})
           committed=true
           wx.showToast({ title: '已冲销(红字反向记录已生成)', icon: 'none' })
           const f = await api.adminGet(`/admin/account-adjust/facts?userId=${encodeURIComponent(this.data.userId)}`)
@@ -269,8 +277,9 @@ Page({
     this.setData({ busy: true })
     try {
       this._rid = this._rid || `rf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+      const giftReview=await this.selectComponent('#gift-refund-review').ask(this.data.userId);if(giftReview===null){this.setData({busy:false});return}
       const r = await this.pricingMutation('/admin/stored-value/refund', {
-        ...this.pricingPayload({amountCents:cents,payChannel:this.data.channels[this.data.channelIdx].id,reason}),
+        ...this.pricingPayload({amountCents:cents,payChannel:this.data.channels[this.data.channelIdx].id,reason,...giftReview}),...giftReview,
         userId: this.data.userId, amountCents: cents,
         payChannel: this.data.channels[this.data.channelIdx].id, reason, requestId: this._rid
       })

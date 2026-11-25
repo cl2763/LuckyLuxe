@@ -16,7 +16,7 @@ Page({
     this.setData({ loading: true, error: '' })
     try {
       const [r] = await Promise.all([api.getMall(), refreshStoreCurrency()])
-      r.items = (r.items || []).map((it) => ({ ...it, giftItems: (it.giftItems || []).map((g) => ({ ...g, unitValueText: money(g.unitValueCents, 2) })) }))
+      r.items = (r.items || []).map((it) => ({ ...it, giftItems: (it.giftItems || []).map((g) => ({ ...g, unitValueText: g.unitValueCents==null?'':money(g.unitValueCents, 2) })) }))
       const filter = (r.filters || []).some(f => f.key === this.data.filter) ? this.data.filter : 'all'
       this.setData({ loading: false, mall: r, error: '', filter })
       this.renderGroups()

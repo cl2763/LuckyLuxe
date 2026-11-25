@@ -37,7 +37,7 @@
     </view>
     <block wx:for="{{rvPkgs}}" wx:for-item="pkg" wx:key="id">
       <view wx:if="{{rvPkgId === pkg.id && pkg.giftItems.length}}" class="fldem">
-        <view>套餐赠送物品</view><view wx:for="{{pkg.giftItems}}" wx:for-item="gift" wx:key="index">{{gift.name}} × {{gift.quantity}} · 单件价值 {{gift.unitValueText}}</view>
+        <view>随本次充值发放</view><view wx:for="{{pkg.giftItems}}" wx:for-item="gift" wx:key="index">{{gift.name}} × {{gift.quantity}}{{gift.unitLabel}}<text wx:if="{{gift.kindLabel}}"> · {{gift.kindLabel}} · {{gift.expiryText}}</text><text wx:if="{{gift.unitValueText}}"> · 单件参考价值 {{gift.unitValueText}}</text></view>
         <view>价值不计入储值余额；清单不代表已领取。修改金额后改为手动充值，不含套餐赠品。</view>
       </view>
     </block>
@@ -62,7 +62,7 @@
       </picker>
       <view class="fldem">这笔充值算谁促成,充值提成据此计算。</view>
     </view>
-    <view class="cta {{busy ? 'ing' : ''}}" bindtap="submitRecharge">{{busy ? '提交中…' : ('确认到账' + rvAmountText)}}</view>
+    <view class="cta {{busy ? 'ing' : ''}}" bindtap="submitRecharge">{{busy ? '提交中…' : ((giftEnabled?'核对充值与赠送权益':'确认到账') + rvAmountText)}}</view>
   </view>
 
   <!-- 冲销:内嵌(本月与这位顾客订单关联的账本流水;冲销=红字反向记录,原始保留) -->
@@ -146,4 +146,7 @@
       <view class="cta {{busy ? 'ing' : ''}}" bindtap="submitCardRefund">{{busy ? '提交中…' : '确认退卡'}}</view>
     </block>
   </view>
-</block></view>
+</block>
+<gift-refund-review id="gift-refund-review"/>
+<gift-recharge-review id="gift-recharge-review"/>
+</view>

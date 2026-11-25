@@ -6,7 +6,7 @@ import { normalizeGiftItems, ensureGiftSchema } from './gifts.mjs'
 
    🔴 口径不动(《财务记账总逻辑》):**充值 = 负债,耗卡才 = 确认收入**。
    所以充值与退卡都**不进财务账本**;进账本的是耗卡那一刻确认的收入。 */
-export function createStoredValue({ db, randomId, iso, currentTenantId, localParts, memberCodeForUserId, depositLiabilityCents }) {
+export function createStoredValue({ db, randomId, iso, currentTenantId, localParts, memberCodeForUserId, depositLiabilityCents, giftEntitlements }) {
   ensureGiftSchema(db)
   // A refund remains one ledger row; this append-only allocation preserves its
   // legacy/normal split without rewriting any historical ledger fields.
@@ -27,8 +27,8 @@ export function createStoredValue({ db, randomId, iso, currentTenantId, localPar
      08-26 沙箱真点撞出来的:先 INSERT 再 UPDATE 会被账本触发器打回
      (stored value ledger is append-only)—— 那道触发器是对的,只追加不许改。
      测试库的租户 kind='test' 被豁免,所以套件当时没红:**只有在真店口径上真点才撞得出**。 */
-  function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId(), technicianId = null, customerConfirmedAt = null, paidPartCents = null, bonusPartCents = null, requestId = null, reversalOf = null, giftItems = [], legacyRefundCents = 0 }) {
-    const id = randomId('sv')
+  function insertStoredValueTransaction({ plannedTxnId = null, userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId(), technicianId = null, customerConfirmedAt = null, paidPartCents = null, bonusPartCents = null, requestId = null, reversalOf = null, giftItems = [], legacyRefundCents = 0 }) {
+    const id = plannedTxnId || randomId('sv')
     // N-5:refund(退卡)与 consume 同族都是负数;两者的区别在**收入**上,不在符号上
     // 裁定2(08-30d):reversal=红字反向,符号由调用方给(冲充值=负,原样透传)
     const signed = type === 'recharge' ? Math.abs(amountCents)
@@ -40,6 +40,7 @@ export function createStoredValue({ db, randomId, iso, currentTenantId, localPar
       INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, technician_id, customer_confirmed_at, paid_part_cents, bonus_part_cents, request_id, reversal_of, gift_items_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, tenantId, userId, type, signed, payChannel, note, createdBy, createdAt || iso(new Date()), technicianId || null, customerConfirmedAt || null, paidPartCents, bonusPartCents, requestId, reversalOf, JSON.stringify(type === 'recharge' ? normalizeGiftItems(giftItems) : []))
+    if(type==='recharge'&&giftEntitlements)giftEntitlements.issue({tenantId,userId,sourceTxnId:id,giftItems,actor:createdBy,createdAt:createdAt||iso(new Date())})
     if (legacyRefundCents) db.prepare('INSERT INTO stored_value_refund_allocations(txn_id,tenant_id,user_id,legacy_cents) VALUES(?,?,?,?)').run(id,tenantId,userId,legacyRefundCents)
     db.exec('RELEASE stored_value_insert')
     return db.prepare('SELECT * FROM stored_value_transactions WHERE id = ?').get(id)

@@ -20,7 +20,7 @@ export function createMigrationGifts({db,apiError,randomId,iso,createHash,curren
  CREATE TRIGGER IF NOT EXISTS migration_asset_no_update BEFORE UPDATE ON migration_asset_activations BEGIN SELECT RAISE(ABORT,'activation is append-only');END;
  CREATE TRIGGER IF NOT EXISTS migration_asset_no_delete BEFORE DELETE ON migration_asset_activations BEGIN SELECT RAISE(ABORT,'activation is append-only');END;
  CREATE TRIGGER IF NOT EXISTS migration_gift_event_no_update BEFORE UPDATE ON migration_gift_events BEGIN SELECT RAISE(ABORT,'gift event is append-only');END;
- CREATE TRIGGER IF NOT EXISTS migration_gift_event_no_delete BEFORE DELETE ON migration_gift_events BEGIN SELECT RAISE(ABORT,'gift event is append-only');END;`)}
+ CREATE TRIGGER IF NOT EXISTS migration_gift_event_no_delete BEFORE DELETE ON migration_gift_events BEGIN SELECT RAISE(ABORT,'gift event is append-only');END;`);try{db.exec('ALTER TABLE migration_asset_activations ADD COLUMN reference_value_known INTEGER NOT NULL DEFAULT 1')}catch(e){if(!e.message.includes('duplicate column'))throw e}}
  function source(tid,uid,aid){
   const asset=db.prepare('SELECT * FROM customer_legacy_assets WHERE id=? AND tenant_id=? AND user_id=?').get(aid,tid,uid)
   if(!asset||!db.prepare('SELECT id FROM users WHERE id=? AND tenant_id=?').get(uid,tid))fail(404,'NOT_FOUND','没有这项旧赠品。')
@@ -30,7 +30,7 @@ export function createMigrationGifts({db,apiError,randomId,iso,createHash,curren
  }
  function grantOf(tid,uid,aid){return db.prepare("SELECT * FROM migration_asset_activations WHERE tenant_id=? AND user_id=? AND asset_id=?").get(tid,uid,aid)}
  function balance(tid,grant){if(grant.kind==='service'){const c=db.prepare('SELECT total_times,used_times,refunded_times FROM member_timecards WHERE id=? AND tenant_id=?').get(grant.id,tid);return c?c.total_times-c.used_times-(c.refunded_times||0):0}return grant.quantity+db.prepare('SELECT COALESCE(SUM(delta),0) n FROM migration_gift_events WHERE tenant_id=? AND grant_id=?').get(tid,grant.id).n}
- function summary(tid,g){const remaining=balance(tid,g),expired=!!g.expires_on&&g.expires_on<todayOf(tid);return {id:g.id,kind:g.kind,title:g.title,specification:g.specification,quantity:g.quantity,unitValueCents:g.unit_value_cents,expiresOn:g.expires_on,remaining,status:expired?'expired':remaining?'available':'exhausted'}}
+ function summary(tid,g){const remaining=balance(tid,g),expired=!!g.expires_on&&g.expires_on<todayOf(tid);return {id:g.id,kind:g.kind,title:g.title,specification:g.specification,quantity:g.quantity,unitValueCents:g.reference_value_known===0?null:g.unit_value_cents,expiresOn:g.expires_on,remaining,status:expired?'expired':remaining?'available':'exhausted'}}
  function preview(tid,uid,aid){const s=source(tid,uid,aid),g=grantOf(tid,uid,aid);return {assetId:aid,version:s.version,sourceTitle:s.asset.title,sourceDetails:JSON.parse(s.asset.raw_json),cutoff:s.cutoff,grant:g?summary(tid,g):null,
   events:g?db.prepare('SELECT id,kind,delta,parent_id,created_at FROM migration_gift_events WHERE tenant_id=? AND grant_id=? ORDER BY created_at DESC,id DESC LIMIT 100').all(tid,g.id).map(e=>({...e,returnable:e.kind==='claim'?Math.max(0,-e.delta-db.prepare("SELECT COALESCE(SUM(delta),0) n FROM migration_gift_events WHERE tenant_id=? AND parent_id=? AND kind='return'").get(tid,e.id).n):0})):[]}}
  function execute(tid,uid,aid,kind,body,actor){
@@ -44,7 +44,7 @@ export function createMigrationGifts({db,apiError,randomId,iso,createHash,curren
   if(kind==='activate'||kind==='activate-service'){
    const title=text(body.title,120),specification=text(body.specification,200),expiry=text(body.expiresOn,10),version=text(body.confirmVersion,64)
    if((kind==='activate'&&body.physicalGoodsConfirmed!==true)||body.sourceUseStopped!==true||body.rulesConfirmed!==true)fail(409,'RULES_NOT_CONFIRMED','请确认这是实物、原系统不再重复领取、现有规则能完整承接。服务赠卡不能当作实物领取。')
-   if(!title||!Number.isSafeInteger(body.unitValueCents)||body.unitValueCents<0||body.unitValueCents>100000000||!/^[a-f0-9]{64}$/.test(version))fail(400,'BAD_GIFT','请核对名称、单件价值及最新来源。')
+   if(!title||(body.unitValueCents!=null&&(!Number.isSafeInteger(body.unitValueCents)||body.unitValueCents<0||body.unitValueCents>100000000))||!/^[a-f0-9]{64}$/.test(version))fail(400,'BAD_GIFT','请核对名称、单件价值及最新来源。')
    if(body.noExpiry!==true){const time=Date.parse(expiry+'T00:00:00Z');if(!/^\d{4}-\d{2}-\d{2}$/.test(expiry)||!Number.isFinite(time)||new Date(time).toISOString().slice(0,10)!==expiry)fail(400,'EXPIRY_REQUIRED','请填写真实有效期，或明确选择无期限。')}
    else if(expiry)fail(400,'EXPIRY_CONFLICT','无期限与到期日期不能同时填写。')
    if(kind==='activate-service'){
@@ -54,7 +54,7 @@ export function createMigrationGifts({db,apiError,randomId,iso,createHash,curren
     if(!service)fail(400,'SERVICE_REQUIRED','请选择本店仍在售的具体服务。')
     Object.assign(payload,{serviceId,serviceGiftConfirmed:true,noCashBalance:true,oneUsePerService:true})
    }
-   Object.assign(payload,{title,specification,expiresOn:body.noExpiry===true?null:expiry,unitValueCents:body.unitValueCents,version,physicalGoodsConfirmed:kind==='activate',sourceUseStopped:true,rulesConfirmed:true})
+   Object.assign(payload,{title,specification,expiresOn:body.noExpiry===true?null:expiry,unitValueCents:body.unitValueCents??null,version,physicalGoodsConfirmed:kind==='activate',sourceUseStopped:true,rulesConfirmed:true})
   }else if(kind==='return')payload.parentId=text(body.claimId,160)
   else if(kind!=='claim')fail(400,'BAD_ACTION','操作无效。')
   const requestHash=hash(payload)
@@ -68,7 +68,7 @@ export function createMigrationGifts({db,apiError,randomId,iso,createHash,curren
     if(grant)fail(409,'ALREADY_ACTIVATED','这项旧赠品已启用，不能重复发放。')
     if(s.version!==payload.version)fail(409,'SOURCE_CHANGED','来源或迁移批次已变化，请重新核对。')
     const id=randomId('miggift')
-    db.prepare(`INSERT INTO migration_asset_activations(id,tenant_id,user_id,asset_id,kind,source_version,title,specification,quantity,unit_value_cents,expires_on,review_json,actor,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,tid,uid,aid,kind==='activate-service'?'service':'physical',payload.version,payload.title,payload.specification,qty,payload.unitValueCents,payload.expiresOn,JSON.stringify(payload),actor,now)
+    db.prepare(`INSERT INTO migration_asset_activations(id,tenant_id,user_id,asset_id,kind,source_version,title,specification,quantity,unit_value_cents,expires_on,review_json,actor,created_at,reference_value_known) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,tid,uid,aid,kind==='activate-service'?'service':'physical',payload.version,payload.title,payload.specification,qty,payload.unitValueCents??0,payload.expiresOn,JSON.stringify(payload),actor,now,payload.unitValueCents==null?0:1)
     if(kind==='activate-service'){
      // Gift reference value is not principal, cash, earned revenue or a refund allowance.
      db.prepare(`INSERT INTO member_timecards(id,tenant_id,user_id,package_id,name,total_times,used_times,price_cents,project_group,expires_at,source_settlement_id,created_at,card_source)

@@ -2,7 +2,7 @@ import {composerPreview} from './member-pricing-view.mjs'
 import {scopedCouponAmounts} from './member-pricing-coupons.mjs'
 import {PRICING_CONTEXT} from './member-pricing-policy.mjs'
 /** One server calculation for the two clients and for persisted person documents. */
-export function createMemberPricingPreview({db,policy,calculation,computeSettlement,buildPaymentLegs,couponOptionsFor,apiError}) {
+export function createMemberPricingPreview({giftEntitlements,db,policy,calculation,computeSettlement,buildPaymentLegs,couponOptionsFor,apiError}) {
   function prepare(tenantId,body,admin) {
     const userId=String(body.cardOwnerUserId||body.userId||'').trim()
     const prepared=calculation.prepare(tenantId,userId,body,admin),{context}=prepared
@@ -43,6 +43,8 @@ export function createMemberPricingPreview({db,policy,calculation,computeSettlem
       const {personalPricing,...publicComputed}=computed
       return {...publicComputed,beneficiaryKey:personKey,technicians:(sheet.technicians||[]).map(t=>({technicianId:t.technicianId,role:t.role||'main',itemNos:t.itemNos||[],name:db.prepare('SELECT name FROM technicians WHERE id=? AND tenant_id=?').get(t.technicianId,tenantId)?.name||''}))}
     })
+    const rechargeComponent=calculated.find(c=>c.recharge),plannedGifts=rechargeComponent?giftEntitlements?.planned(tenantId,userId,rechargeComponent.recharge.giftItems,rs.giftDraftKey):null
+    if(plannedGifts)rechargeComponent.recharge.sourceTxnId=plannedGifts.sourceTxnId
     const sum=(items,key)=>items.reduce((n,c)=>n+(c[key]||0),0)
     for(const person of people.values()) {
       const components=person.componentIndexes.map(i=>calculated[i]),lines=components.flatMap(c=>c.lines).filter(l=>l.kind!=='timecard')
@@ -54,7 +56,7 @@ export function createMemberPricingPreview({db,policy,calculation,computeSettlem
         const available=Math.max(0,chargeLines.reduce((n,l)=>n+l.amountCents,0)-c.depositDeductCents)
         return chargeLines.map(l=>({componentIndex:i,componentAvailableCents:available,amountCents:l.amountCents,categoryIds:l.serviceId?categoryOf(l):mainCategories}))
       })
-      const coupons=couponOptionsFor({tenantId,userId,readOnly:true,scopedLines,subtotalCents:eligible,maxDeductCents:Math.max(0,eligible-deposit),categoryIds,selectedGrantId:person.selectedGrantId,noEligibleReason:'没有可优惠的收费服务'})
+      const coupons=couponOptionsFor({tenantId,userId,pendingGrants:plannedGifts?.coupons||[],beneficiaryKey:person.beneficiaryKey,priceTypes:person.componentIndexes.map(i=>sheets[i].tierKey),readOnly:true,scopedLines,subtotalCents:eligible,maxDeductCents:Math.max(0,eligible-deposit),categoryIds,selectedGrantId:person.selectedGrantId,noEligibleReason:'没有可优惠的收费服务'})
       if(person.selectedGrantId&&!coupons.selectedGrantId) throw apiError(400,'COUPON_UNUSABLE',coupons.options.find(c=>c.grantId===person.selectedGrantId)?.reason||'这张券不可用于本单。')
       person.couponOptions=coupons.options.map(o=>({...o,deductText:o.discountText}));person.coupon=coupons.selected?{grantId:coupons.selected.grantId,couponId:coupons.selected.couponId,name:coupons.selected.name,discountCents:coupons.discountCents,grantKind:coupons.selected.grantKind}:null
       const scopedAmounts=scopedCouponAmounts(coupons.selected?.scopeCategoryIds||[],scopedLines)

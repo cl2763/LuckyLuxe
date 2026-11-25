@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 const root=new URL('../',import.meta.url)
 const read=p=>readFileSync(new URL(p,root))
 const hash=b=>createHash('sha256').update(b).digest('hex')
-const evidence=JSON.parse(read('handoff/feedback-20261117/native-layout.json'))
+const evidence=JSON.parse(read('handoff/gift-entitlements-20261121/native-layout.json'))
 assert.deepEqual(evidence.suites.map(s=>[s.suite,s.assertions,s.status]),[
   ['mp-placeholder-size',3,'passed'],['mp-overlap',4,'passed'],['mp-home-sections',9,'passed']])
 assert.ok(Object.keys(evidence.files).length>30)

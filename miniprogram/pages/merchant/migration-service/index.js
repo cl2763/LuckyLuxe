@@ -13,7 +13,7 @@ Page({
   const seq=++this.sequence;this.setData({loading:true,saving:false,error:''})
   try{const info=await api.adminGet(this.base());const catalog=await api.adminGet('/admin/pricing/items');if(!this.valid(seq))return
    this.setData({services:[{id:'',nameZh:'请选择具体服务'},...(catalog.items||[]).filter(i=>i.isActive!==false&&(i.itemKind||'main')==='main')]})
-   this.setData({info,sourceText:JSON.stringify(info.sourceDetails,null,2),title:this.data.title||info.sourceTitle||'',valueText:info.grant?storeMoney(info.grant.unitValueCents,2):''})
+   this.setData({info,sourceText:JSON.stringify(info.sourceDetails,null,2),title:this.data.title||info.sourceTitle||'',valueText:info.grant&&info.grant.unitValueCents!=null?storeMoney(info.grant.unitValueCents,2):''})
   }catch(e){if(this.valid(seq))this.setData({error:e.message||'读取失败，请重试'})}finally{if(this.valid(seq))this.setData({loading:false})}
  },
  clearExpiry(){if(!this.data.saving)this.setData({expiresOn:''})},
@@ -26,8 +26,8 @@ Page({
   if(!Number.isSafeInteger(quantity)||quantity<0||quantity>100000||!d.reason.trim()){this.setData({error:'请填写整数次数及核对依据，已耗尽可填 0。'});return}
   const payload={quantity,reason:d.reason.trim()}
   if(kind==='activate-service'){
-   const unitValueCents=/^\d+(?:\.\d{1,2})?$/.test(d.unitValue.trim())?Math.round(Number(d.unitValue)*100):NaN
-   if(!d.title.trim()||!Number.isSafeInteger(unitValueCents)||!d.agreements.serviceGiftConfirmed||!d.agreements.noCashBalance||!d.agreements.oneUsePerService||!d.agreements.rulesConfirmed||!d.agreements.sourceUseStopped||!d.services[d.serviceIndex]?.id){this.setData({error:'请填写赠卡名称、参考价值、具体服务并逐项确认规则。'});return}
+   const unitValueCents=!d.unitValue.trim()?null:/^\d+(?:\.\d{1,2})?$/.test(d.unitValue.trim())?Math.round(Number(d.unitValue)*100):NaN
+   if(!d.title.trim()||(unitValueCents!==null&&!Number.isSafeInteger(unitValueCents))||!d.agreements.serviceGiftConfirmed||!d.agreements.noCashBalance||!d.agreements.oneUsePerService||!d.agreements.rulesConfirmed||!d.agreements.sourceUseStopped||!d.services[d.serviceIndex]?.id){this.setData({error:'请填写赠卡名称、具体服务并逐项确认规则。'});return}
    Object.assign(payload,{title:d.title.trim(),serviceId:d.services[d.serviceIndex].id,unitValueCents,expiresOn:d.expiresOn,...d.agreements,confirmVersion:d.info.version})
   }
   const fingerprint=kind+JSON.stringify(payload)

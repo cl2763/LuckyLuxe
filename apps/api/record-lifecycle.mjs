@@ -59,6 +59,7 @@ export function createRecordLifecycle({db,apiError,json,readBody,currentTenantId
    block('待签服务单',count("SELECT count(*) n FROM settlements WHERE tenant_id=? AND user_id=? AND status='pending_sign'",tid,id)+count("SELECT count(*) n FROM member_service_documents WHERE tenant_id=? AND user_id=? AND status NOT IN ('signed','voided')",tid,id))
    block('尚有留存定金',count("SELECT count(*) n FROM deposit_retains WHERE tenant_id=? AND user_id=? AND status='active'",tid,id))
    block('导入余额待核对',count("SELECT count(*) n FROM migration_pending_balances WHERE tenant_id=? AND user_id=? AND status='pending'",tid,id))
+   if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='recharge_gift_grants'").get())block('充值赠品尚未领取',count("SELECT count(*) n FROM recharge_gift_grants g WHERE g.tenant_id=? AND g.user_id=? AND g.kind='physical' AND (g.expires_on IS NULL OR g.expires_on>=?) AND g.quantity+COALESCE((SELECT SUM(delta) FROM recharge_gift_events e WHERE e.grant_id=g.id),0)>0",tid,id,today))
    block('导入赠品尚有余量',count("SELECT count(*) n FROM migration_asset_activations a WHERE a.tenant_id=? AND a.user_id=? AND a.kind='physical' AND (a.expires_on IS NULL OR a.expires_on>=?) AND a.quantity+COALESCE((SELECT SUM(delta) FROM migration_gift_events e WHERE e.grant_id=a.id),0)>0",tid,id,today))
   }
   if(kind==='technicians'){

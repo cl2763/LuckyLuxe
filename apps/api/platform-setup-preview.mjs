@@ -5,7 +5,7 @@ import {randomBytes,createHash} from 'node:crypto'
 export const PREVIEW_READS=Object.freeze([
   '/admin/finance/recurring','/admin/staff-accounts','/admin/staff-accounts/suggest','/admin/schedule-week','/admin/schedule-settings','/admin/staff-visibility','/admin/perf-targets','/admin/segment-rules','/admin/salary-plans','/admin/salary-plans/effective','/admin/auth/me','/admin/store-clock','/admin/tenant/plan','/admin/tenant/entitlements','/admin/services','/admin/technicians',
   '/admin/business-hours','/admin/store-info','/admin/pricing/categories','/admin/pricing/items','/admin/pricing/rules',
-  '/admin/booking-addons','/admin/packages','/admin/coupons','/admin/points-prizes','/admin/timecard-settings','/admin/mall/self-purchase',
+  '/admin/gift-entitlements/config','/admin/booking-addons','/admin/packages','/admin/coupons','/admin/points-prizes','/admin/timecard-settings','/admin/mall/self-purchase',
   '/admin/membership/config','/admin/member-pricing/config','/admin/deposit-config','/admin/booking-rules',
   '/admin/store-guide','/admin/hero-slides','/admin/notify/rules','/admin/duty-setting','/admin/quote-settings','/admin/kb','/admin/notification-settings','/admin/message-templates'
 ])

@@ -8,5 +8,5 @@ export function composerPreview(view) {
   offlineDueCents:sum(pay,'offlineCents'),purchaseCents:view.totals.purchaseCents,rechargeCents:view.totals.rechargeCents,
   afterRechargeBalanceCents:recharge?(first.balance?.totalCents??first.balanceAvailableCents??0)+recharge.recharge.amountCents+recharge.recharge.bonusCents-sum(pay,'storedUsedCents'):null,
   pendingRechargeCents:recharge?recharge.recharge.amountCents+recharge.recharge.bonusCents:0}}
- return {...view,sheets:components.map((c,i)=>({...c,couponOptions:i===0?view.documents[0].couponOptions:[],couponUsableCount:i===0?view.documents[0].couponOptions.filter(o=>o.usable).length:0})),group}
+ return {...view,sheets:components.map((c,i)=>{const person=view.documents.find(p=>p.componentIndexes.includes(i)),first=person?.componentIndexes[0]===i;return {...c,couponOptions:first?person.couponOptions:[],couponUsableCount:first?person.couponOptions.filter(o=>o.usable).length:0}}),group}
 }

@@ -7985,3 +7985,37 @@ input[type="checkbox"], input[type="radio"] {
 
 /* AI output disclosures: fixed visible text, never color-only. */
 .ai-generated-label{display:block;color:var(--ink);background:var(--wall);border:1px solid var(--line);font-size:13px;font-weight:600;line-height:1.5;padding:6px 10px;margin:0 0 8px;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere}.dh-ai>.ai-generated-label{flex-shrink:0;margin:0}
+
+/* Gift entitlement records share the customer profile card gutters. */
+.customer-gifts-panel.card { padding: 16px 18px; }
+.customer-gifts-panel .section-row { gap: 16px; flex-wrap: wrap; }
+.customer-gifts-panel details { overflow-wrap: anywhere; }
+
+/* 退款权益：核对数量与处理选项同屏，小屏单列。 */
+.form-modal-panel.gift-refund-panel{max-width:960px;max-height:85vh;max-height:85dvh;box-sizing:border-box}
+.gift-refund-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+.gift-refund-summary h3{margin:0 0 12px}
+.gift-refund-summary article{padding:14px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.gift-refund-summary p{margin:8px 0 0}
+.gift-refund-layout .kb-facts-grid{grid-template-columns:minmax(0,1fr)}
+.gift-refund-panel>.action-row{position:sticky;bottom:-18px;background:var(--card);padding:14px 0;flex-wrap:wrap;border-top:1px solid var(--line)}
+@media(max-width:680px){.gift-refund-layout{grid-template-columns:minmax(0,1fr);gap:20px}}
+
+/* Gift coupon configuration: settings and the customer-facing rule preview. */
+.gift-coupon-panel.form-modal-panel{width:min(960px,calc(100vw - 32px));max-width:960px}.gift-coupon-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(240px,1fr);gap:24px;align-items:start}.gift-coupon-preview{padding:24px;background:var(--wall);border:1px solid var(--line);border-radius:8px;line-height:1.7;overflow-wrap:anywhere}.gift-coupon-preview h3{margin:0 0 16px}.gift-coupon-preview h3:not(:first-child){margin-top:28px}.gift-coupon-wheel{grid-column:1/-1}.gift-coupon-layout>.kb-facts-grid{min-width:0}@media(max-width:680px){.gift-coupon-layout{grid-template-columns:1fr}.gift-coupon-preview{padding:18px}}
+
+.gift-coupon-scope-hint{grid-column:1/-1;margin:0}.gift-coupon-panel>.action-row{position:sticky;bottom:-18px;background:var(--card);padding:14px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.gift-filter-bar{display:flex;flex-wrap:wrap;gap:10px;margin:24px 0}.customer-gifts-layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,1fr);gap:24px;align-items:start}.gift-list-record{padding:24px 0;border-top:1px solid var(--line)}.gift-list-record h3{margin:8px 0}.gift-event{padding:16px 0;border-top:1px solid var(--line)}.gift-claim-card{padding:24px;background:var(--paper);border:1px solid var(--line);border-radius:8px;overflow-wrap:anywhere}.gift-claim-card h3{margin:0 0 24px}.gift-claim-fact{display:flex;justify-content:space-between;gap:16px;padding:18px 0;border-bottom:1px solid var(--line)}.gift-claim-card label{display:flex;flex-direction:column;gap:12px;margin:24px 0 0}.gift-claim-card input:not([type=checkbox]),.gift-claim-card textarea{box-sizing:border-box;width:100%;min-width:0;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:14px;font:inherit}.gift-claim-card textarea{min-height:88px;resize:vertical}.gift-claim-card .gift-delivered{flex-direction:row;align-items:flex-start;line-height:1.6}.gift-delivered input{width:18px;height:18px;flex:none;margin-top:3px}.gift-claim-card [data-claim-error]{color:var(--bad);line-height:1.6}.gift-claim-card .action-row{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:12px}@media(max-width:900px){.customer-gifts-layout{grid-template-columns:1fr}.gift-claim-card{padding:20px}}
+
+/* W03: recharge and entitlement review, responsive two-column layout. */
+.gift-recharge-panel{width:min(1120px,calc(100vw - 32px));max-width:1120px;max-height:90vh;overflow:auto;padding:24px}
+.gift-recharge-panel>header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:20px}
+.gift-recharge-panel h2,.gift-recharge-panel h3{margin:0 0 16px}
+.gift-recharge-columns{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:24px;align-items:start}
+.gift-review-card{border:1px solid var(--line);border-radius:8px;padding:24px;margin-bottom:20px;min-width:0;overflow-wrap:anywhere}
+.gift-review-row{display:flex;justify-content:space-between;align-items:start;gap:20px;padding:16px 0;border-bottom:1px solid var(--line)}
+.gift-review-row>strong{flex-shrink:0}.gift-review-row p{margin:8px 0 0}.gift-review-notice{padding:16px;border:1px solid var(--line);border-radius:8px}
+.gift-review-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:12px;margin-top:24px}
+@media(max-width:700px){.gift-recharge-panel{padding:16px}.gift-recharge-columns{grid-template-columns:1fr;gap:0}.gift-review-card{padding:18px}.gift-review-actions{position:sticky;bottom:0;background:var(--card);padding:12px 0}.gift-review-actions button{flex:1}}
+
+.gift-refund-confirm{min-width:0}.gift-refund-confirm h3{margin:0 0 20px}.gift-refund-confirm>label{display:block;margin-bottom:20px}.gift-refund-confirm textarea{display:block;box-sizing:border-box;width:100%;padding:12px;margin-top:10px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px}.gift-refund-confirm .action-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}.gift-refund-confirm [role=alert]{color:var(--text);line-height:1.6}.gift-refund-confirm .fm-check{line-height:1.6;display:flex;align-items:flex-start;gap:10px}.gift-refund-confirm .fm-check input{width:auto;flex:none;margin-top:6px}.form-modal-panel.gift-refund-panel{max-width:1160px}

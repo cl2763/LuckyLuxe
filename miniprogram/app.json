@@ -49,6 +49,7 @@
         "finance-txns/index",
         "customers/index",
         "customer/index",
+        "gift-claim/index",
         "booking-detail/index",
         "account-adjust/index",
         "hours-setup/index",

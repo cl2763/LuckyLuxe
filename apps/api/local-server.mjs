@@ -1,3 +1,6 @@
+import {createGiftRefunds} from './gift-entitlement-refunds.mjs'
+import {createGiftRoutes} from './gift-entitlement-routes.mjs'
+import {createGiftEntitlements} from './gift-entitlements.mjs'
 import {createCustomerBindTicket} from './customer-bind-ticket.mjs'
 import {listAdminCustomers} from './customer-directory.mjs'
 import {nextSettlementCode} from './settlement-code.mjs'
@@ -18,7 +21,7 @@ import {discountLabel} from './member-discount-input.mjs'
 import {memberDiscountReceipt} from './member-discount-receipt.mjs'
 import {memberDocumentSummary,dailyMemberDocuments} from './member-document-summary.mjs'
 import {createServiceEditRoutes} from './service-edit-routes.mjs'
-import {scopedCouponContext} from './member-pricing-coupons.mjs'
+import {createCouponSelection} from './coupon-selection.mjs'
 import {createMemberPricingPresentation} from './member-pricing-presentation.mjs'
 import {ensureMemberDocumentSchema,createMemberServiceDocuments} from './member-service-documents.mjs'
 import {createMemberDocumentRoutes} from './member-document-routes.mjs'
@@ -43,7 +46,7 @@ import { bookingPublicCode } from './booking-code.mjs'
 import { createWorkShare } from './work-share.mjs'
 import { customerSpendCents, customerVisitDaysCount, lastCustomerVisitAt, bindingBadgeText } from './customer-facts.mjs'
 import { specialDateInput } from './schedule-input.mjs'
-import { ensureGiftSchema, normalizeGiftItems, readGiftItems, giftSnapshotOfPackage } from './gifts.mjs'
+import { ensureGiftSchema, normalizeGiftItems, readGiftItems, giftSnapshotOfPackage, presentGiftItems } from './gifts.mjs'
 import { createPackageWrite } from './package-write.mjs'
 import { createScheduleWrite } from './schedule-write.mjs'
 import { ensureCustomerCreateSchema, createCustomerCreator } from './customer-create.mjs'
@@ -6616,8 +6619,10 @@ platformAuth.bootstrapAndReport(console)   // D149 自举第一个平台账号�
 const platformSessions = createPlatformSessions({
   db, randomId, iso, sha256: (v) => createHash('sha256').update(String(v)).digest('hex')
 })
+const {couponOptionsFor}=createCouponSelection({db,iso,formatMoneyCents,couponScopeIds,couponRawDiscountCents,couponSubtitle})
+const giftEntitlements=createGiftEntitlements({db,todayOf:tid=>todayOf(tid),dateOf:(tid,value)=>localParts(value,tenantTimezone(tid)).date,timeText:(tid,value)=>{const p=localParts(value,tenantTimezone(tid));return p.date+' '+p.time}})
 const { storedValueBalanceCents, insertStoredValueTransaction, storedValueOverview, storedValueTypeText, storedValueBalanceDetail, isFirstRecharge } = createStoredValue({
-  db, randomId, iso, currentTenantId, localParts,
+  db, randomId, iso, currentTenantId, localParts, giftEntitlements,
   memberCodeForUserId: (id) => memberCodeForUserId(id),
   depositLiabilityCents: (tid) => depositLiabilityCents(tid)
 })
@@ -6669,7 +6674,7 @@ const memberPricing = createMemberPricingPolicy({db,apiError,isMemberOf,getMembe
 const memberPricingPresentation=createMemberPricingPresentation({db,policy:memberPricing})
 const memberPricingCalculation = createMemberPricingCalculation({db,policy:memberPricing,apiError,balanceOf:(u,t)=>storedValueBalanceDetail(u,t).totalCents})
 const pricingTransactions=createMemberPricingTransactions({db,policy:memberPricing,apiError})
-const memberPricingPreview=createMemberPricingPreview({db,policy:memberPricing,calculation:memberPricingCalculation,computeSettlement,buildPaymentLegs,couponOptionsFor,apiError})
+const memberPricingPreview=createMemberPricingPreview({giftEntitlements,db,policy:memberPricing,calculation:memberPricingCalculation,computeSettlement,buildPaymentLegs,couponOptionsFor,apiError})
 const memberPricingRoutes = createMemberPricingRoutes({db,policy:memberPricing,calculation:memberPricingCalculation,preview:memberPricingPreview.preview,computeSettlement,apiError,json,readBody,currentTenantId,isPlatformKey})
 const settlementRoutes = createSettlementRoutes({
   apiError, json, readBody, db, currentTenantId, tenantTimezone, localParts, formatMoneyCents, groupMainItemCount,
@@ -6693,7 +6698,7 @@ const { MESSAGE_TEMPLATE_SCENES, MESSAGE_TEMPLATE_SCENE_LABELS, serializeMessage
 const svReversal = createStoredValueReversal({
   db, apiError, rechargePairFor:pricingTransactions.rechargePairFor, insertStoredValueTransaction: (a) => insertStoredValueTransaction(a)
 })
-const refundRoutes = createRefundRoutes({
+const refundRoutes = createRefundRoutes({giftRefunds:createGiftRefunds({db,gifts:giftEntitlements}),
   apiError, json, readBody, refundApi, staffScope, db, pricingTransactions,
   usableTimecardsOf: (uid) => usableTimecardsOf(uid), svReversal
 })
@@ -7579,89 +7584,6 @@ function sourceLabelOf(kind) {
   return map[String(kind || '')] || ''
 }
 
-function evaluateCouponGrant(grant, ctx) {
-  const scope = couponScopeIds(grant)
-  const minSpend = Math.max(0, Number(grant.min_spend_cents) || 0)
-  const base = {
-    grantId: grant.id,
-    couponId: grant.coupon_id,
-    code: grant.code,
-    name: grant.name,
-    grantKind: grant.grant_kind || 'template',
-    grantReason: grant.grant_reason || '',
-    discountType: grant.discount_type,
-    amountCents: grant.amount_cents,
-    percentOff: grant.percent_off,
-    minSpendCents: minSpend,
-    scopeCategoryIds: scope,
-    scopeText: scope.length ? scope.map((id) => ctx.categoryNames[id] || id).join('、') : '全部大类',
-    expiresAt: grant.expires_at || null,
-    // 「满 ¥300 可用 · 2026-09-30 到期」这行小字由 couponSubtitle() 唯一持有(卡包/选券面板/签署页同一句)
-    subtitle: couponSubtitle(grant, ctx.tenantId),
-    usable: false,
-    reason: '',
-    discountCents: 0,
-    discountText: ''
-  }
-  if (grant.is_active === 0) return { ...base, reason: '不可用:该券已停用' }
-  if (grant.status === 'used') return { ...base, reason: `不可用:已核销${grant.settlement_code ? `(${grant.settlement_code})` : ''}` }
-  if (grant.status === 'revoked') return { ...base, reason: '不可用:已作废' }
-  if (grant.status === 'expired' || (grant.expires_at && String(grant.expires_at) < ctx.now)) return { ...base, reason: '不可用:已过期' }
-  if (grant.status !== 'active') return { ...base, reason: '不可用:该券当前不可使用' }
-  if (minSpend > 0 && ctx.subtotalCents < minSpend) {
-    return { ...base, reason: `不可用:未满 ${formatMoneyCents(minSpend, ctx.tenantId, 'auto')}` }
-  }
-  if (scope.length && !ctx.categoryIds.some((id) => scope.includes(id))) {
-    return { ...base, reason: `不可用:仅适用${base.scopeText}` }
-  }
-  const discount = Math.max(0, Math.min(couponRawDiscountCents(grant, ctx.subtotalCents), Math.max(0, ctx.maxDeductCents)))
-  // 拍板(店主 08-21 D55/D56 批):次卡=独立消费不叠优惠——纯次卡单可抵基数为 0 时出专句,不让店员猜
-  if (discount <= 0) return { ...base, reason: ctx.noEligibleReason || '不可用:本单已无可抵扣金额' }
-  return { ...base, usable: true, discountCents: discount, discountText: formatMoneyCents(discount, ctx.tenantId, 'auto') }
-}
-
-// 卡主券包里的全部券(可用在上、不可用在下并带原因),连同选中那张的抵扣额
-function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, categoryIds, selectedGrantId = '', excludeSettlementId = null, noEligibleReason = '', readOnly = false, scopedLines = null }) {
-  const out = { options: [], selectedGrantId: '', selected: null, discountCents: 0, usableCount: 0 }
-  if (!userId) return out
-  const now = iso(new Date())
-  // 到期的券顺手落地成 expired,和 /my/coupons 同一套口径
-  if(!readOnly) db.prepare("UPDATE coupon_grants SET status = 'expired' WHERE user_id = ? AND tenant_id = ? AND status = 'active' AND expires_at IS NOT NULL AND expires_at < ?")
-    .run(userId, tenantId, now)
-  const categoryNames = {}
-  for (const c of db.prepare('SELECT id, name FROM service_categories WHERE tenant_id = ?').all(tenantId)) categoryNames[c.id] = c.name
-  const rows = db.prepare(`SELECT g.*, c.name, c.discount_type, c.amount_cents, c.percent_off, c.min_spend_cents,
-      c.scope_categories_json, c.is_active
-    FROM coupon_grants g JOIN coupons c ON c.id = g.coupon_id
-    WHERE g.tenant_id = ? AND g.user_id = ? ORDER BY g.created_at DESC`).all(tenantId, userId)
-  /* 已经挂在别的单上的券(那张单还没签,所以券还是 active)也要置灰 ——
-     否则要等点下去才报「一单一张」,不如在面板上就说清楚。 */
-  const heldElsewhere = {}
-  for (const h of db.prepare('SELECT id, code, coupon_grant_id FROM settlements WHERE tenant_id = ? AND coupon_grant_id IS NOT NULL').all(tenantId)) {
-    if (h.id !== excludeSettlementId) heldElsewhere[h.coupon_grant_id] = h.code
-  }
-  const ctx = { tenantId, subtotalCents, maxDeductCents, categoryIds, categoryNames, now, noEligibleReason }
-  const evaluated = rows.map((r) => {
-    const one = evaluateCouponGrant(r, scopedLines?scopedCouponContext(couponScopeIds(r),ctx,scopedLines):ctx)
-    if (one.usable && heldElsewhere[r.id]) {
-      return { ...one, usable: false, discountCents: 0, discountText: '', reason: `不可用:已用在服务单 ${heldElsewhere[r.id]} 上(一单一张)` }
-    }
-    return one
-  })
-  // 已核销在别的单上的券不进券包列表(免得顾客以为还能选);本单选中的那张要留着
-  const visible = evaluated.filter((e) => e.usable || e.grantId === selectedGrantId
-    || !(rows.find((r) => r.id === e.grantId) || {}).settlement_id)
-  out.options = visible.sort((a, b) => (Number(b.usable) - Number(a.usable)) || (b.discountCents - a.discountCents))
-  out.usableCount = out.options.filter((o) => o.usable).length
-  const picked = selectedGrantId ? out.options.find((o) => o.grantId === selectedGrantId) : null
-  if (picked && picked.usable) {
-    out.selectedGrantId = picked.grantId
-    out.selected = picked
-    out.discountCents = picked.discountCents
-  }
-  return out
-}
-
 /* 支付构成的唯一实现:储值先烧迁移桶(不进本店收入)→ 再烧新桶 → 剩下的进线下腿。
    开单试算与「顾客改券后重算」共用这一份 —— 两处各写一遍迟早会算出两个数。 */
 function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent, storedExcludeCents = 0, pendingRechargeCents = 0, excludeNote = '', plannedStoredCents = 0, pendingAvailableInCents = 0 }) {
@@ -7923,6 +7845,7 @@ function computeSettlement(input = {}) {
     if (!tcSvc) throw apiError(400, 'TIMECARD_SERVICE_REQUIRED', '请从次卡关联项目组内选择本次核销的项目。')
     const migratedService = db.prepare("SELECT kind,review_json FROM migration_asset_activations WHERE id=? AND tenant_id=? AND kind IN ('service','paid_service')").get(tcCard.id,tenantId)
     if(migratedService && JSON.parse(migratedService.review_json).serviceId!==tcSvc.id) throw apiError(400,'TIMECARD_SERVICE_NOT_ALLOWED','这张迁入次卡只能用于核对时指定的具体服务。')
+    giftEntitlements.assertService(tenantId,tcCard.id,tcSvc.id)
     if (tcCard.project_group) {
       const catName = tcSvc.category_id
         ? String((db.prepare('SELECT name FROM service_categories WHERE id = ? AND tenant_id = ?').get(tcSvc.category_id, tenantId) || {}).name || '')
@@ -8235,6 +8158,7 @@ function createSettlementGroup(body = {}, adminSession = {}, options = {}) {
   const needInstant = sheets.some((sh) => !String(sh.bookingId || body.bookingId || '').trim())
   db.exec(options.documentMode?'SAVEPOINT create_settlement_group':'BEGIN IMMEDIATE')
   try {
+    for(const c of options.computedSheets||[]){const id=c.recharge?.sourceTxnId;if(id&&db.prepare("SELECT 1 FROM settlements WHERE tenant_id=? AND status<>'voided' AND json_extract(recharge_json,'$.sourceTxnId')=?").get(tenantId,id))throw apiError(409,'GIFT_DRAFT_USED','本次充值已生成待签服务单，请继续原单或撤回重开。')}
     if (needInstant) {
       // 与建组同事务:建组半途失败即回滚,不留孤儿「已完成」预约(幽灵订单卡)
       const fs = sheets.find((sh) => !String(sh.bookingId || body.bookingId || '').trim())
@@ -9601,7 +9525,7 @@ function renderSettlementSnapshotSvg(settlement, { strokes = [], signedAt = '' }
     }
     for (const gift of s.recharge.giftItems || []) {
       const chars=[...gift.name]; for(let at=0;at<chars.length;at+=28){y+=24;rows.push(`<text x="40" y="${y}" class="s">${escapeXml((at?'  ': '赠品：')+chars.slice(at,at+28).join(''))}</text>`)}
-      y+=24;rows.push(`<text x="40" y="${y}" class="s">${escapeXml(`数量 ${gift.quantity} · 单件价值 ${money(gift.unitValueCents)}`)}</text>`)
+      y+=24;rows.push(`<text x="40" y="${y}" class="s">${escapeXml(`数量 ${gift.quantity}${gift.unitValueCents==null?'':` · 单件参考价值 ${money(gift.unitValueCents)}`}`)}</text>`)
     }
     if(s.recharge.giftItems?.length){y+=24;rows.push(`<text x="40" y="${y}" class="s">物品领取请联系门店，此清单不代表已领取。</text>`)}
     // D64:组内还有待签单要烧这笔钱时,快照上把预告句一并冻结(签字瞬间语义)
@@ -9939,7 +9863,7 @@ const storeSetupDefinitions=createStoreSetupDefinitions({db,apiError,readBody,js
 const marketingDefinitions=createMarketingDefinitions({db,apiError,readBody,json,currentTenantId,randomId,iso,serializeCoupon,serializePrize,assertCouponValueOk})
 const recordLifecycle=createRecordLifecycle({db,apiError,json,readBody,currentTenantId,actorOf:a=>actorOf(a),customerNames:(...args)=>customerRemarks.trialNames(...args),todayOf:tid=>localParts(new Date(),tenantTimezone(tid)).date})
 const bookingAddons=createBookingAddons({db,apiError});const configRevision=createConfigRevision(db)
-const packageWrite=createPackageWrite({db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage,memberPricing})
+const packageWrite=createPackageWrite({giftEntitlements,db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage,memberPricing})
 const customerRemarks = createCustomerRemarks({db,apiError})
 const createCustomer = createCustomerCreator({db,apiError,randomId,maskPhone})
 const customerBindTicket=createCustomerBindTicket({db,apiError,currentTenantId,isUserBound,iso,randomBytes,publicAppUrl,sceneForToken,WECHAT_MINI_APPID,WECHAT_MINI_SECRET,json,requireActive:(tid,...args)=>{if(customerRemarks.trialEnabled(tid))recordLifecycle.requireActive(tid,...args)}})
@@ -9949,9 +9873,10 @@ const scanEntryRoute = createScanEntryRoute({db,apiError,json,readBody,
   verifiedCustomerForScan,appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET,scopeName:miniCodeScope(DATA_SCOPE_NAME)})
 const settlementAccess = createSettlementAccess({db,apiError,requireCustomer,guardRow:r=>memberDocuments.guardComponent(r),demoAllowed:()=>DEMO_LOGIN_ALLOWED})
 const settlementRead = createSettlementReadAccess({secret:WECHAT_MINI_TOKEN_SECRET,apiError,requireAdmin,writeAccess:settlementAccess,demoAllowed:()=>DEMO_LOGIN_ALLOWED})
-const {signLedger,signSettlement}=createSettlementSigner({db,apiError,iso,randomId,cosPutObject,storedValueBalanceDetail,insertFinanceTransaction,timecardExpired:(...a)=>timecardExpired(...a),timecardRemainingOf:(...a)=>timecardRemainingOf(...a),insertStoredValueTransaction,logCouponGrant,formatMoneyCents,settleDepositReceiptsOnSign,renderSettlementSnapshotSvg,serializeSettlement,todayOf,settlementRead})
+const {signLedger,signSettlement}=createSettlementSigner({giftEntitlements,db,apiError,iso,randomId,cosPutObject,storedValueBalanceDetail,insertFinanceTransaction,timecardExpired:(...a)=>timecardExpired(...a),timecardRemainingOf:(...a)=>timecardRemainingOf(...a),insertStoredValueTransaction,logCouponGrant,formatMoneyCents,settleDepositReceiptsOnSign,renderSettlementSnapshotSvg,serializeSettlement,todayOf,settlementRead})
 const storedValueRechargeRoutes=createStoredValueRechargeRoutes({db,apiError,readBody,json,currentTenantId,isUserBound,DATA_SCOPE_NAME,giftSnapshotOfPackage,actorOf:a=>actorOf(a),insertStoredValueTransaction,storedValueOverview,storedValueBalanceCents,pricingTransactions})
-const memberDocuments=createMemberServiceDocuments({db,policy:memberPricing,preview:memberPricingPreview,apiError,currentTenantId,createSettlementGroup,signLedger,
+const giftRoutes=createGiftRoutes({db,currentTenantId,giftEntitlements,apiError,json,readBody,actorOf,assertRecordActive})
+const memberDocuments=createMemberServiceDocuments({db,giftEntitlements,policy:memberPricing,preview:memberPricingPreview,apiError,currentTenantId,createSettlementGroup,signLedger,
   validateDeposit:s=>depositWorkflow.validate(s),balanceOf:storedValueBalanceDetail,getPricingRules,activeDepositReceipts,logCouponGrant,requireCustomer,amendSettlement:(id,b,a,o={})=>amendSettlement(id,b,a,{...o,personDocument:true}),amendmentShape,formatMoneyCents,formatSignedAt:(v,t)=>{const p=localParts(v,tenantTimezone(t));return `${p.date} ${p.time}（${tenantTimezone(t)}）`},assertStaff:(a,r)=>settlementAccess.assertStaff(a,r)})
 const memberDocumentRoutes=createMemberDocumentRoutes({db,policy:memberPricing,documents:memberDocuments,json,readBody,currentTenantId,apiError,requireCustomer,isUserBound,serializeSettlement,formatMoneyCents})
 
@@ -10653,7 +10578,7 @@ async function route(req, res) {
          充值套餐与次卡同屏可比(顾客心智:我要做美甲 → 这个项目买 10 次卡更划算)。
          分区键:次卡=它关联的项目组(=服务二级分类名);充值套餐=「充值套餐」区。 */
       const section = isTimes ? (r.project_group || '不限项目') : '充值套餐'
-      return { giftItems:giftSnapshotOfPackage(r),
+      return { giftItems:presentGiftItems(giftSnapshotOfPackage(r)),
         section,
         sectionKind: isTimes ? 'timecard' : 'recharge',
         id: r.id,
@@ -10803,9 +10728,9 @@ async function route(req, res) {
     return json(res, 200, {
       balanceCents: storedValueBalanceCents(customer.id, tid),
       pendingConfirm: txns.filter((t) => t.type === 'recharge' && !t.customer_confirmed_at)
-        .map((t) => ({ discountReceipt:memberDiscountReceipt(db,tid,customer.id,t.id,tenantTimezone(tid)),id: t.id, giftItems:readGiftItems(t), amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at })),
+        .map((t) => ({ discountReceipt:memberDiscountReceipt(db,tid,customer.id,t.id,tenantTimezone(tid)),id: t.id, giftItems:presentGiftItems(readGiftItems(t)), amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at })),
       txns: txns.map((t) => ({
-        discountReceipt:memberDiscountReceipt(db,tid,customer.id,t.id,tenantTimezone(tid)),id: t.id, giftItems:readGiftItems(t), type: t.type, amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at,
+        discountReceipt:memberDiscountReceipt(db,tid,customer.id,t.id,tenantTimezone(tid)),id: t.id, giftItems:presentGiftItems(readGiftItems(t)), type: t.type, amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at,
         // N-5:类型文案**后端唯一出口** —— 以前两端各存一份本地词典,新增 refund 类型时会显示空白
         typeText: storedValueTypeText(t.type),
         needsConfirm: t.type === 'recharge' && !t.customer_confirmed_at
@@ -11226,6 +11151,7 @@ async function route(req, res) {
     if (!row || (adminSession.role === 'staff' && row.technician_id !== adminSession.technicianId)) throw apiError(404,'NOT_FOUND','找不到这张订单。')
     return json(res,200,{booking:serializeBooking(row)})
   }
+  if(await giftRoutes.route({req,res,path,adminSession}))return
   if (await migrationGifts.route({req,res,path,adminSession,readBody,json})) return
   if (await migrationPaidTimecards.route({req,res,path,adminSession,readBody,json})) return
   if (await migrationCardReconciliation.route({req,res,path,adminSession,readBody,json})) return
@@ -11672,7 +11598,7 @@ async function route(req, res) {
     const rows = db.prepare("SELECT * FROM membership_packages WHERE tenant_id = ? AND kind IN ('recharge','stored_value') AND is_active = 1 ORDER BY sort_order ASC, created_at ASC").all(currentTenantId())
     return json(res, 200, {
       packages: rows.filter((r) => r.price_cents > 0).map((r) => ({
-        id: r.id, giftItems:giftSnapshotOfPackage(r), name: r.name, priceCents: r.price_cents, bonusCents: r.bonus_cents || 0,
+        id: r.id, giftItems:presentGiftItems(giftSnapshotOfPackage(r)), name: r.name, priceCents: r.price_cents, bonusCents: r.bonus_cents || 0,
         ...(memberPricing.config(r.tenant_id).active?{defaultPersonalDiscount:memberPricing.packageDiscount(r.tenant_id,r.id)}:{}),
         label: `${r.name} · 充 ${formatMoneyCents(r.price_cents, r.tenant_id, 'auto')}${r.bonus_cents ? ` 赠 ${formatMoneyCents(r.bonus_cents, r.tenant_id, 'auto')}` : ''}`
       }))
@@ -11787,8 +11713,9 @@ async function route(req, res) {
     const body = await readBody(req)
     const code = String(body.code || '').trim().toUpperCase()
     if (!code) throw apiError(400, 'BAD_REQUEST', '请输入券码。')
-    const grant = db.prepare('SELECT g.*, c.name AS coupon_name, c.discount_type, c.amount_cents, c.percent_off, c.min_spend_cents FROM coupon_grants g JOIN coupons c ON c.id = g.coupon_id WHERE g.code = ? AND g.tenant_id = ?').get(code, currentTenantId())
+    const grant = db.prepare('SELECT g.*, c.name AS coupon_name, c.discount_type, c.amount_cents, c.percent_off, c.min_spend_cents, c.recipient_mode FROM coupon_grants g JOIN coupons c ON c.id = g.coupon_id WHERE g.code = ? AND g.tenant_id = ?').get(code, currentTenantId())
     if (!grant) throw apiError(404, 'NOT_FOUND', '券码不存在(或不属于本店)。')
+    if(grant.recipient_mode==='friend_original')throw apiError(409,'COUPON_SETTLEMENT_REQUIRED','同行券请在朋友的原价服务单中选择，签署后核销。')
     if (grant.status === 'used') throw apiError(409, 'ALREADY_USED', `该券已于 ${String(grant.used_at || '').slice(0, 16).replace('T', ' ')} 核销过。`)
     if (grant.expires_at && grant.expires_at < iso(new Date())) {
       db.prepare("UPDATE coupon_grants SET status = 'expired' WHERE id = ?").run(grant.id)
@@ -15011,6 +14938,7 @@ migrationCenter.ensureSchema()
 migrationProfile.ensureSchema()
 migrationBalanceActivation.ensureSchema()
 migrationGifts.ensureSchema()
+giftEntitlements.ensureSchema()
 migrationPaidTimecards.ensureSchema()
 
 /* ===== 结算单用券(2026-08-09,设计图《结算单用券》v3)=====
@@ -15157,7 +15085,7 @@ function allowStoredPurchase(tenantId = currentTenantId()) {
 
 /* 裁决(店主 08-20):次卡「关联项目组」禁自由文本——新值必须是现有二级分类名(空串=不限)。
    只拦新写入;存量自由文本值不静默改(编辑页标红请商家改选)。 */
-const {timecardUnitCents,timecardExpired,timecardRemainingOf,serializeMemberTimecard}=createMemberTimecardView({db,todayOf})
+const {timecardUnitCents,timecardExpired,timecardRemainingOf,serializeMemberTimecard}=createMemberTimecardView({db,todayOf,giftEntitlements})
 
 /* 可用次卡的**唯一出口**(补件②,店主 08-23):三读方——①顾客端卡包 ②商家端客户档案
    ③开单结算页「次卡」大类——全部调这一个函数,剩余次数与可核销判定不许各算一份。
@@ -15202,8 +15130,11 @@ function cardPackOf(userId, tenantId = currentTenantId()) {
   }))
   const balanceCents = storedValueBalanceCents(userId, tenantId)
   const migration = customerMigrationSummary(db,tenantId,userId)
+  const {physical:giftItems,history:giftHistory}=giftEntitlements.customerPack(tenantId,userId)
+  const giftCount=giftItems.filter(g=>g.canClaim).length
   return {
     migration,
+    giftEntitlements: giftItems, giftHistory,
     timecards: cards,
     coupons,
     stored: {
@@ -15213,8 +15144,8 @@ function cardPackOf(userId, tenantId = currentTenantId()) {
       sourceLabel: ''
     },
     // 补件④:角标 = 卡包页内可用张数(次卡 + 券),与页内逐张同一份数据算出来
-    badgeCount: cards.length + coupons.length,
-    emptyText: !migration.hasPending && (cards.length + coupons.length) === 0 && balanceCents === 0 ? '还没有卡券' : ''
+    badgeCount: cards.length + coupons.length + giftCount,
+    emptyText: !migration.hasPending && (cards.length + coupons.length + giftItems.length + giftHistory.length) === 0 && balanceCents === 0 ? '还没有卡券' : ''
   }
 }
 
@@ -15237,6 +15168,7 @@ function serializeCoupon(row) {
     issuedQty: row.issued_qty,
     // 适用大类:空数组=全部大类(设计图 C3「适用范围」)
     scopeCategoryIds: couponScopeIds(row),
+    recipientMode: row.recipient_mode || 'any',
     isCustom: Boolean(row.is_custom),
     isActive: Boolean(row.is_active)
   }

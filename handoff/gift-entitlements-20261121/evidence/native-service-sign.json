@@ -1,0 +1,30 @@
+{
+  "environment": "gift-shop isolated sandbox",
+  "documentId": "c21139ec-440d-48ca-afc0-e6c5566003bb",
+  "status": "signed",
+  "signedAt": "2026-11-25T10:41:50.256Z",
+  "entitlementKind": "service_voucher",
+  "totalTimes": 1,
+  "usedTimes": 1,
+  "remainingTimes": 0,
+  "signedUseCount": 1,
+  "evidence": "user hand-drew test mark in native WeChat developer tool web-view; observed signed receipt via CUA; readonly sandbox ledger verification",
+  "repeatFiveNativeSignatures": false,
+  "balanceBeforeCents": 2023780,
+  "balanceAfterCents": 2023780,
+  "nativeCardPack": {
+    "used": 1,
+    "remaining": 0,
+    "records": 1,
+    "statusText": "已用完",
+    "renderedTextVerified": true,
+    "screenshot": "official capture failed; not counted as successful screenshot"
+  },
+  "webCardPack": {
+    "used": 1,
+    "remaining": 0,
+    "records": 1,
+    "statusText": "已用完",
+    "renderedTextVerified": true
+  }
+}

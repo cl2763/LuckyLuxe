@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "登记领取与记录",
+  "usingComponents": {
+    "gift-entitlements": "/pages/merchant/components/gift-entitlements/index"
+  }
+}

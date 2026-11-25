@@ -1,3 +1,4 @@
+import {presentGiftItems} from './gifts.mjs'
 import {discountLabel} from './member-discount-input.mjs'
 export function memberDocumentDisplay(quote,{money,customerName,storeName}) {
  const sum=(xs,key)=>xs.reduce((n,x)=>n+(x[key]??0),0),components=quote.components,rows=[];
@@ -13,5 +14,5 @@ export function memberDocumentDisplay(quote,{money,customerName,storeName}) {
  paymentRows.push(row('本单扣款后余额（预计）',quote.expectedBalanceAfterCents??(quote.personalDiscount.current.balanceCents+sum(recharges.map(c=>c.recharge),'amountCents')+sum(recharges.map(c=>c.recharge),'bonusCents')-sum(payments,'storedUsedCents'))));
  return {discountChangeText:recharges.length?discountLabel(quote.personalDiscount.current.rateBps)+' → '+discountLabel(quote.personalDiscount.proposedRateBps):'',storeName,customerName,beneficiaryName:quote.beneficiaryKey==='self'?customerName:quote.name,discountText:appliedDiscountText,
  lines:components.flatMap(c=>c.lines.map(l=>({name:l.name,technicians:c.technicians.map(t=>t.name).join(' / '),amountText:money(l.amountCents),listText:money(l.listAmountCents)}))),rows,paymentRows,
- gifts:recharges.flatMap(c=>(c.recharge.giftItems||[]).map(g=>({...g,valueText:money(g.unitValueCents)}))),note:recharges.length?'充值、赠送、新折扣及扣款将在本张签署成功后一起生效。':'请核对所有服务和支付明细。'}
+ gifts:recharges.flatMap(c=>presentGiftItems(c.recharge.giftItems||[]).map(g=>({...g,valueText:g.unitValueCents==null?'':money(g.unitValueCents)}))),note:recharges.length?'充值、赠送、新折扣及扣款将在本张签署成功后一起生效。':'请核对所有服务和支付明细。'}
 }
