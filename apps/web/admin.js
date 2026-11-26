@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261126-service1'
+const ADMIN_BUILD = '20261126-inline1'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -6816,7 +6816,7 @@ async function loadPricingPage() {
     request('/admin/services')
   ])
   pricingState.categories = c.categories || []
-  pricingState.items = i.items || []
+  pricingState.items = i.items || []; pricingState.catalogInteractionV2 = !!i.catalogInteractionV2
   pricingState.rules = r.rules || {}
   owner.services = sv.services || owner.services
   renderPricing()
@@ -6857,46 +6857,6 @@ function renderPricingCategories() {
         <button class="ghost slim" data-cat-delete="${cat.id}" type="button">${pzh() ? '删除' : 'Delete'}</button>
       </div>
     </div>`).join('') : `<div class="empty-state">${pzh() ? '还没有大类。先建「美甲单色 / 美睫 / 卸甲」这类大类,再往里放项目。' : 'No categories yet.'}</div>`
-}
-
-function renderPricingItems() {
-  if (!els.pricingItemList) return
-  const catName = (id) => pricingState.categories.find((c) => c.id === id)?.name || (pzh() ? '未分类' : 'Uncategorized')
-  const group = (kind) => pricingState.items.filter((i) => i.itemKind === kind)
-  /* S3(图=合同):价档 chips —— 挂了的实心展示;疗程价没挂=划线 na 态「未挂 · 开单时不出现」(不是置灰,开单时根本不存在)。 */
-  const tierChips = (item) => {
-    if(item.settlementPriceSummary)return item.settlementPriceSummary.map(p=>`<span class="tier-chip on">${escapeHtml(p.label)}${p.key==='member'?'':' '+escapeHtml(p.amountText)}</span>`).join('')
-    const chips = []
-    if (item.listPriceCents) chips.push(`<span class="tier-chip on">${pzh() ? '普通价' : 'List'} ${money(item.listPriceCents)}</span>`)
-    if (item.sharePriceCents) chips.push(`<span class="tier-chip on">${pzh() ? '分享价' : 'Share'} ${money(item.sharePriceCents)}</span>`)
-    if (item.memberPriceCents) chips.push(`<span class="tier-chip on">${pzh() ? '会员价' : 'Member'} ${money(item.memberPriceCents)}</span>`)
-    if (item.coursePriceCents) chips.push(`<span class="tier-chip on">${pzh() ? '疗程价' : 'Course'} ${money(item.coursePriceCents)}${item.courseTimes ? `/${item.courseTimes}${pzh() ? '次' : 'x'}` : (pzh() ? '/次' : '/x')}</span>`)
-    else chips.push(`<span class="tier-chip na">${pzh() ? '疗程价（未挂 · 开单时不出现）' : 'Course (not attached · hidden at checkout)'}</span>`)
-    return chips.join('')
-  }
-  const rowHtml = (item) => `
-    <div class="service-admin-item${item.isActive ? '' : ' inactive'}">
-      <div>
-        <strong>${escapeHtml(item.nameZh)}</strong>
-        <span class="subtle">${escapeHtml(catName(item.categoryId))}${item.unit === 'per_finger' ? (pzh() ? ' · 按指' : ' · per finger') : ''}${item.isActive ? '' : (pzh() ? ' · 已停用' : ' · hidden')}${item.itemKind === 'main' ? (item.storefront ? (pzh() ? ' · 橱窗已上架' : ' · listed') : (pzh() ? ' · 橱窗未上架' : ' · unlisted')) : ''}</span>
-        ${item.priceMode === 'quote' ? `<div class="subtle" style="margin-top:4px">${pzh() ? '需技师报价(AI 不报数)' : 'Quote on request'}</div>` : ''}${item.itemKind === 'main' ? `<div style="margin-top:4px">${tierChips(item)}</div>` : `<div class="subtle">${money(item.listPriceCents)}${item.priceRule === 'pct_of_tier_price' ? ` · ${pzh() ? '按主项目比例' : 'pct of main'} ${item.priceRuleValue || '默认'}%` : ''}</div>`}
-        <div class="subtle">${item.baseDurationMin ? `${item.baseDurationMin}min` : ''}</div>
-      </div>
-      <div class="row-actions">
-        <button class="ghost slim" data-item-edit="${item.id}" type="button">${item.itemKind === 'main' ? (pzh() ? '编辑价档' : 'Edit tiers') : (pzh() ? '编辑' : 'Edit')}</button>
-        <button class="ghost slim" data-item-toggle="${item.id}" type="button">${item.isActive ? (pzh() ? '停用' : 'Hide') : (pzh() ? '启用' : 'Show')}</button>
-        <button class="ghost slim" data-item-delete="${item.id}" type="button">${pzh() ? '删除' : 'Delete'}</button>
-      </div>
-    </div>`
-  const mains = group('main').filter((i) => !i.isTimecard)
-  const addons = group('addon')
-  els.pricingItemList.innerHTML = `
-    <h3 class="pricing-group-title">${pzh() ? `项目与价档(${mains.length})` : `Items & tiers (${mains.length})`}</h3>
-    ${mains.length ? mains.map(rowHtml).join('') : `<div class="empty-state">${pzh() ? '还没有主项目' : 'No main items'}</div>`}
-    <h3 class="pricing-group-title">${pzh() ? `加项(${addons.length})（只在开单时出现）` : `Add-ons (${addons.length}) — checkout only`}</h3>
-    ${addons.length ? addons.map(rowHtml).join('') : `<div class="empty-state">${pzh() ? '还没有加项(卸甲、贴片、单指补甲都算加项)' : 'No add-ons'}</div>`}`
-  renderPricingTimecards()
-  renderPricingItemEditor()
 }
 
 function renderPricingTimecards() {

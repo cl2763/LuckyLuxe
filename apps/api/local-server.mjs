@@ -1,3 +1,4 @@
+import {settlementUnitPrices} from './addon-policy.mjs'
 import {createGiftRefunds} from './gift-entitlement-refunds.mjs'
 import {createGiftRoutes} from './gift-entitlement-routes.mjs'
 import {createGiftEntitlements} from './gift-entitlements.mjs'
@@ -7801,16 +7802,7 @@ function computeSettlement(input = {}) {
     const count = unit === 'per_finger'
       ? Math.max(1, Math.round(Number(raw.fingers ?? raw.qty ?? 1) || 1))
       : Math.max(1, Math.round(Number(raw.qty ?? 1) || 1))
-    let tierUnit = priceOf(svc, tierKey).priceCents
-    let listUnit = priceOf(svc, 'list').priceCents
-    let ruleApplied = null
-    // 单指挂靠主项目按比例:两档都按各自档的主项目价算,否则原价合计会失真
-    if (unit === 'per_finger' && svc.price_rule === 'pct_of_tier_price' && rules.single_finger.isActive) {
-      const pct = Number(svc.price_rule_value) > 0 ? Number(svc.price_rule_value) : Number(rules.single_finger.config.pct || 10)
-      tierUnit = Math.round(mainTierCents * pct / 100)
-      listUnit = Math.round((mainRow ? priceOf(mainRow, 'list').priceCents : 0) * pct / 100)
-      ruleApplied = 'single_finger'
-    }
+    const {tierUnit,listUnit,ruleApplied}=settlementUnitPrices({svc,tierKey,mainRow,mainTierCents,rules,tenantId,priceOf,apiError})
     lines.push({
       itemNo: no,
       kind: (svc.item_kind || 'main') === 'addon' ? 'addon' : 'main',

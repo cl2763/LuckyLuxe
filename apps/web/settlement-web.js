@@ -348,7 +348,9 @@ window.SettlementWeb = (function () {
     if(state.pricingConfig?.active&&g.collapsed)return window.MemberPricingComposer.collapsed(state,g,gi,escapeHtml);
     const money = state._deps.money
     const mains = state.items.filter(function (i) { return (i.itemKind || 'main') === 'main' && (i.categoryId || '') === g.catId })
-    const addons = state.items.filter(function (i) { return i.itemKind === 'addon' })
+    const main = state.items.find(i=>i.id===g.mainId)
+    const addonGroups = state.pricingConfig?.catalogInteractionV2 ? window.AddonPolicy.groups(state.items,main,g.addonIds) : [{title:'',items:state.items.filter(i=>i.itemKind==='addon')}]
+    const addons = addonGroups.flatMap(group=>group.items)
     const isTc = g.catId === '__timecard'
     const decorateRow = function (it, on, qty) {
       if(state.pricingConfig?.active){const price=state.catalogPrices?.items.find(x=>x.id===it.id);if(!price)return '<span class="sw-pr">读取中…</span>';if(price.requiresQuote)return '<span class="sw-pr">需报价</span>';const amount=price.prices[isTc?'list':g.tierKey];return '<span class="sw-pr">'+(amount===undefined?'未配置':money(amount,2))+'</span>'}
@@ -426,19 +428,20 @@ window.SettlementWeb = (function () {
         ${state.pricingConfig?.active?window.MemberPricingComposer.quotes(state,g,gi,escapeHtml):''}
         ${/* 加项:列表行勾选;按指计价的用 stepper(− n指 ＋) */''}
         <div class="sw-sec" id="swAddonBlock">加项目录 <span class="sw-hint">按本组价格档计价</span></div>
-        ${addons.length ? addons.map(function (a) {
+        ${addons.length ? addonGroups.map(group=>(group.title?'<div class="sw-hint-line">'+escapeHtml(group.title)+'</div>':'')+group.items.map(function (a) {
           const qty = g.addonIds[a.id] || 0
           const on = Object.prototype.hasOwnProperty.call(g.addonIds, a.id)
+          const scopeHint=state.pricingConfig?.catalogInteractionV2&&!window.AddonPolicy.matches(a,main)?'（适用范围不符，请取消或更换主项目）':''
           if (a.unit === 'per_finger') {
-            return `<div class="sw-item"><span class="sw-iname wide">${escapeHtml(a.nameZh || a.name)}</span>
+            return `<div class="sw-item"><span class="sw-iname wide">${escapeHtml((a.nameZh || a.name)+scopeHint)}</span>
               <span class="sw-stepper"><button class="sw-sb" data-sw-step="${gi}" data-svc="${a.id}" data-d="-1" type="button">−</button><span class="sw-qn">${qty} 指</span><button class="sw-sb" data-sw-step="${gi}" data-svc="${a.id}" data-d="1" type="button">＋</button></span></div>`
           }
           return `<button class="sw-item" data-sw-addon="${gi}" data-svc="${a.id}" type="button">
             <span class="sw-ck ${on ? 'on' : ''}">${on ? '✓' : ''}</span>
-            <span class="sw-iname">${escapeHtml(a.nameZh || a.name)}</span>
+            <span class="sw-iname">${escapeHtml((a.nameZh || a.name)+scopeHint)}</span>
             ${decorateRow(a, on, qty)}
           </button>`
-        }).join('') : '<p class="sw-empty">本店没有加项。</p>'}
+        }).join('')).join('') : '<p class="sw-empty">暂无适用加项；设置了适用范围的加项需先选择主项目。</p>'}
 
         ${/* 自选填写行(小程序 inputline 同形) */''}
         <div class="sw-sec" id="swCustomBlock">自选填写行(本组) <span class="sw-hint">价目表外项目</span></div>

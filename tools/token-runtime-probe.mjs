@@ -48,7 +48,7 @@ const PAGES = [
   ['平台控制台', '/platform'],
   ['分享页', '/share'],
   ['微信模拟器', '/wechat-simulator'],
-  ['顾客签单页', SIGN ? `/sign/${SIGN}` : ''],
+  ['顾客签单页', process.env.TRP_SIGN_PATH || (SIGN ? `/sign/${SIGN}` : '')],
 ]
 
 const profile = `/private/tmp/ll-trp-profile-${process.pid}`
@@ -100,6 +100,7 @@ for (const [name, path] of PAGES) {
     let r = await ev(READ)
     for (let t = 0; t < 3 && !r; t += 1) { await sleep(1200); r = await ev(READ) }
     if (!r) { bad.push(`${name} · ${mode}:连取三次都什么都取不到,**没验成**(不是绿)`); continue }
+    if (path.includes('/member-sign.html') && !await ev("Boolean(document.querySelector('canvas#signature, canvas[data-signed]'))")) { bad.push(`${name} · ${mode}:服务单正文或签名区未载入`); continue }
     const empty = ['paper', 'ink', 'brand', 'hero'].filter((k) => !r[k])
     const transparent = /rgba\([^)]*,\s*0\s*\)|transparent/i.test(String(r.bodyBg || ''))
     const ok = empty.length === 0 && !transparent && r.textLen > 10

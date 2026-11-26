@@ -5,6 +5,7 @@
 
 
 const api = require('../../../utils/api')
+const AddonPolicy = require('../../../utils/addon-policy')
 const { formatMoney, displayOf } = require('../../../utils/money')
 const { storeMoney } = require('../../../utils/storeclock')
 const MemberPricingInput=require('../../../utils/member-pricing')
@@ -199,7 +200,7 @@ const definition={
     const decorate = (it) => {
       const p = priceOf(it)
       return {
-        id: it.id, name: it.nameZh, unit: it.unit,
+        id: it.id, name: it.nameZh+(this.data.pricingConfig?.catalogInteractionV2&&it.itemKind==='addon'&&!AddonPolicy.matches(it,(this.allItems||[]).find(x=>x.id===g.mainId))?'（适用范围不符，请取消或更换主项目）':''), unit: it.unit,
         priceText: p.cents === 0 ? '免收' : p.text,
         isFree: p.cents === 0,
         listText: listOf(it,p),
@@ -244,7 +245,7 @@ const definition={
       groupMap[key].items.push(decorate(i))
     })
     const sorted = order.filter((k) => k !== '其他加项').concat(order.includes('其他加项') ? ['其他加项'] : [])
-    g.addonGroups = sorted.map((k) => groupMap[k])
+    g.addonGroups = this.data.pricingConfig?.catalogInteractionV2 ? AddonPolicy.groups(all,main,g.addonIds).map(group=>({title:group.title,items:group.items.map(decorate)})) : sorted.map((k) => groupMap[k])
     g.mainName = main ? main.nameZh : (g.timecardId ? `次卡核销 · ${g.tcName}` : (g.purchasePackageId ? `现场购卡 · ${g.tcName}(当场核销第 1 次)` : ''))
 
     const techNames = g.selectedTechs.map((id) => ((this.data.roster.find((t) => t.id === id) || {}).name)).filter(Boolean)
@@ -336,6 +337,7 @@ const definition={
     this.setData({ groups }); this.renderAll(); this.refresh()
   },
   dropMismatchedAddons(grp) {
+    if(this.data.pricingConfig?.catalogInteractionV2)return [] // Keep selections visible; preview blocks invalid scope until explicitly corrected.
     const all = this.allItems || []
     const main = all.find((x) => x.id === grp.mainId)
     if (!main) return []

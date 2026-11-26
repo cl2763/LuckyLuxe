@@ -76,7 +76,7 @@
         <view wx:if="{{!grp.mainItems.length && grp.catId !== '__timecard'}}" class="empty">该大类下暂无在售项目</view>
         <view wx:if="{{grp.mainId && grp.mainName}}" class="grppicked">本组主项目:{{grp.mainName}}(点其他大类里的项目=替换)</view>
 
-        <view class="sec">加项目录(按本组主项目类别过滤) <text class="hint">按本组价格档计价</text></view>
+        <view class="sec">{{pricingConfig.catalogInteractionV2 ? '加项目录（按设置的适用范围）' : '加项目录(按本组主项目类别过滤)'}} <text class="hint">按本组价格档计价</text></view>
         <block wx:for="{{grp.addonGroups}}" wx:for-item="ag" wx:key="title">
           <view class="gh">{{ag.title}}</view>
           <view class="item" wx:for="{{ag.items}}" wx:for-item="it" wx:key="id"

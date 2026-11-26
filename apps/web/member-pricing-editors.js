@@ -10,6 +10,7 @@ function renderServiceEditor() {
         <h3>${owner.lang==='zh'?(service.mode==='create'?'新建上架服务':'修改上架服务 · '+escapeHtml(service.nameZh||'')):'Edit listed service'}</h3>
         <button class="ghost slim" data-cancel-service-editor type="button">${t('cancel')}</button>
       </div>
+      <p class="subtle">${pricingState.catalogInteractionV2 ? (owner.lang === 'zh' ? '开单类型：独立主项目。服务分类不会将它改为加项。' : 'Billing type: standalone service; category does not change this type.') : ''}</p>
       <div class="form-grid">
         <label><span>${owner.lang === 'zh' ? '平台大类(必挂)' : 'Category'}</span><select name="type">
           <option value="NAIL" ${service.type === 'NAIL' ? 'selected' : ''}>${owner.lang === 'zh' ? '美甲' : 'Nail'}</option>
@@ -90,6 +91,10 @@ async function saveServiceEditor(event) {
 function renderPricingItemEditor() {
   if (!els.pricingItemEditor) return
   const draft = pricingState.editing
+  const row = pricingState.catalogInteractionV2 && draft?.id && Array.from(els.pricingItemList.querySelectorAll('[data-pricing-item-row]'))
+    .find(el => el.dataset.pricingItemRow === draft.id)
+  if (row) row.after(els.pricingItemEditor)
+  else els.pricingItemList.before(els.pricingItemEditor)
   if (!draft) { els.pricingItemEditor.innerHTML = ''; return }
   const isAddon = draft.itemKind === 'addon'
   els.pricingItemEditor.innerHTML = `
@@ -119,7 +124,7 @@ function renderPricingItemEditor() {
         <label class="subtle"><input type="checkbox" id="piPctRule" ${draft.priceRule === 'pct_of_tier_price' ? 'checked' : ''}>
           ${pzh() ? '单指价按主项目该档价的百分比算(留空用规则默认 10%)' : 'Derive per-finger price from main item price'}</label>
         <input id="piPct" class="pricing-sort" inputmode="decimal" placeholder="%" value="${draft.priceRuleValue || ''}">
-        <div class="subtle" style="margin-top:8px">${pzh() ? '适用大类(这个加项能配在哪些大类的项目上)' : 'Applies to categories'}</div>
+        <div class="subtle" style="margin-top:8px">${pzh() ? (pricingState.catalogInteractionV2 ? '适用大类（可多选；不选则不限大类。与项目自身分类无关）' : '适用大类(可多选;不选则不限)') : 'Applies to categories'}</div>
         <div class="pricing-scope">
           ${pricingState.categories.map((c) => `<label class="subtle"><input type="checkbox" data-scope="${c.id}" ${(draft.addonScope || []).includes(c.id) ? 'checked' : ''}> ${escapeHtml(c.name)}</label>`).join('')}
         </div>

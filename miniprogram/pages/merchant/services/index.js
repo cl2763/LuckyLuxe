@@ -41,7 +41,7 @@ Page({
       }))
       const addons = items.filter((i) => i.itemKind === 'addon').map((i) => ({
         id: i.id,
-        label: `${i.nameZh} ${storeMoney(i.listPriceCents || 0)}`
+        label: `${i.nameZh} ${(r.catalogInteractionV2 ? i.settlementPriceSummary?.find(p => p.key === 'list')?.amountText : null) ?? storeMoney(i.listPriceCents || 0)}`
       }))
       const categoryOrder=new Map();shelf.forEach(s=>{if(!categoryOrder.has(s.category))categoryOrder.set(s.category,categoryOrder.size)});shelf.sort((a,b)=>categoryOrder.get(a.category)-categoryOrder.get(b.category));
       shelf.forEach((s,i)=>{s.categoryStart=!!s.category&&(i===0||shelf[i-1].category!==s.category);s.categoryCount=shelf.filter(x=>x.category===s.category).length});

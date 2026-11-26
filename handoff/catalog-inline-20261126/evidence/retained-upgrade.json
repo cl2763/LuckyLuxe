@@ -1,0 +1,21 @@
+{
+  "candidateSourceSha256": "e26102c7fddf02d912247110073a458efdcf4ba1f51c77b12e0017d6e7e406df",
+  "sourceFiles": 891,
+  "checkedAt": "2026-11-26T10:04:16.919Z",
+  "scope": "offline retained snapshot rehearsal; not a fresh production backup or a deployment",
+  "runtime": "v22.11.0",
+  "baselineCommit": "499f408e90eaf5825ce727dba5a76ca2bb6d0e40",
+  "snapshotSha256": "4b0a49a018a20d40c7ae063996e9108aae3d2a3e11fd72b16a4664d587a1b0a4",
+  "checks": [
+    "production-code control retains every original row and column; candidate seeded from verified control",
+    "candidate startup 1: all original columns match baseline control; original triggers retained",
+    "candidate startup 2: all original columns match baseline control; original triggers retained"
+  ],
+  "originalTables": 143,
+  "originalRows": 12973,
+  "originalTriggers": 59,
+  "baselineExistingStartupChanges": [],
+  "newTables": [],
+  "repeatStartupStable": true,
+  "sourceUnchanged": true
+}
