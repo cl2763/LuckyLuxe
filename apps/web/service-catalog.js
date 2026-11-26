@@ -6,7 +6,8 @@
 function renderServices() {
   /* S1 模块①(图=合同):上架服务=顾客橱窗。行=目录主项目(非次卡,单行自关联·假设③),
      开关=storefront 上架位(独立于 is_active);展示价=最低可用价档+「起」(规则⑤,后端算好下发)。 */
-  renderServiceEditor()
+  // Detach before replacing the list: retain the editor host and its listeners.
+  els.serviceAdminList?.before(els.serviceEditor)
   if (!els.serviceAdminList) return
   const zh = owner.lang === 'zh'
   /* 组合矩阵抓的口径:目录已停用(isActive=false)的项不进模块①——顾客端本来就看不见它,
@@ -84,7 +85,9 @@ function renderServices() {
       </div>
       ${list.map(rowHtml).join('')}
     </div>`).join('')
-  els.serviceAdminList.innerHTML = (rows.length
+  els.serviceAdminList.innerHTML = (owner.serviceEditor ? '' : pickerHtml) + (rows.length
     ? groupHtml
-    : `<div class="empty-state"><strong>${t('noServices')}</strong></div>`) + pickerHtml
+    : `<div class="empty-state"><strong>${t('noServices')}</strong></div>`)
+  if (owner.serviceEditor) els.serviceAdminList.prepend(els.serviceEditor)
+  renderServiceEditor()
 }
