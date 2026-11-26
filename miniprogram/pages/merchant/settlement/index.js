@@ -5,7 +5,7 @@
 
 
 const api = require('../../../utils/api')
-const AddonPolicy = require('../../../utils/addon-policy')
+const AddonPolicy = require('./addon-policy')
 const { formatMoney, displayOf } = require('../../../utils/money')
 const { storeMoney } = require('../../../utils/storeclock')
 const MemberPricingInput=require('../../../utils/member-pricing')

@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs'
 import vm from 'node:vm'
 import P from '../web/addon-policy.js'
 import {assertAddonScope,catalogInteractionEnabled,settlementUnitPrices} from './addon-policy.mjs'
-assert.equal(readFileSync(new URL('../web/addon-policy.js',import.meta.url),'utf8'),readFileSync(new URL('../../miniprogram/utils/addon-policy.js',import.meta.url),'utf8'))
+assert.equal(readFileSync(new URL('../web/addon-policy.js',import.meta.url),'utf8'),readFileSync(new URL('../../miniprogram/pages/merchant/settlement/addon-policy.js',import.meta.url),'utf8'))
 const main={id:'main',categoryId:'nail'},care={id:'care',categoryId:'care'},cross={id:'cross',nameZh:'护理分类美甲加项',itemKind:'addon',categoryId:'care',addonScope:['nail'],addonGroup:'修补'},legacy={id:'legacy',itemKind:'addon',categoryId:'lash',addonScope:[]}
 assert.equal(P.matches(cross,main),true);assert.equal(P.matches(cross,care),false);assert.equal(P.matches(cross,null),false)
 console.log('ok 1 - web and mini share exact category-ID policy, independent of item own category')

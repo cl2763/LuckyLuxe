@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-26T10:22:19.099Z",
+  "checkedAt": "2026-11-26T10:28:33.200Z",
   "scope": "官方 miniprogram-automator / 本机9435 / 隔离服务http://127.0.0.1:4442；三套真实原生布局检查，不代替全业务验收",
   "projectPath": "/Users/changliu/Desktop/有迹管家/Codex/隔离测试/目录编辑_20261126/miniprogram",
   "sourceComparison": {
@@ -409,7 +409,8 @@
     "miniprogram/pages/merchant/services/index.json": "06b5685a536f79c17807c1a43605968e022e8036e4a5dec58f7ceaae5eef6ad4",
     "miniprogram/pages/merchant/services/index.wxml": "d38ed727a199452b513b12079b8af8adb5874591d0294bfae8dab8833bc226e4",
     "miniprogram/pages/merchant/services/index.wxss": "b9c8b6e989b905adee2cdea48033fddfd1f0fca5ce46f72e9b85e7049f75ba92",
-    "miniprogram/pages/merchant/settlement/index.js": "ed573b9fbac8eaa3f0554e43fcccfa25dde4f2c3f98a294b075ce304250f4151",
+    "miniprogram/pages/merchant/settlement/addon-policy.js": "9f95245b87e5837c7680613f50b664c6697410a1cf62cf7ceb0652a7392e1395",
+    "miniprogram/pages/merchant/settlement/index.js": "df7cc48d92ee29387941e9f71ae01b457ed3f26807d4f141ef221d9142d86982",
     "miniprogram/pages/merchant/settlement/index.json": "dedb73eb3d0c7e28ee98a0affd4849c154803d56d9683a1a00825c6aa1d890f1",
     "miniprogram/pages/merchant/settlement/index.wxml": "cd9c0ce4dded59ffe76eee0dedde1a8e1c585fd5b1b71f8a091ff03b52c3d1ef",
     "miniprogram/pages/merchant/settlement/index.wxss": "ddd942ed0421fa54059d35cbf2e6df4731e261e81db231979a93cf34e6c73fba",
@@ -580,7 +581,6 @@
     "miniprogram/styles/tokens.wxss": "698a3adecc569d504f4b8f154bbace027e98b8b48603d23325663e46ef05ffa2",
     "miniprogram/templates/media-privacy.wxml": "b18352d5fe5f057c61491947c30ef3ab0dbe090b80308d83c9d4df1d3d44b1ef",
     "miniprogram/templates/media-privacy.wxss": "ed808098ebf78027768380b306fd8302dda3311e0df73f0387213b69d41cd31d",
-    "miniprogram/utils/addon-policy.js": "9f95245b87e5837c7680613f50b664c6697410a1cf62cf7ceb0652a7392e1395",
     "miniprogram/utils/api.js": "ee785a20d60e323848e671e8ac62dcd24638f2c52e8fe3d072bbdd8783e19b63",
     "miniprogram/utils/booking-lanes.js": "a7cb3d97dae2576c65f68a80e88769333bb47ca9acb7e118f6b1abcf8889eca8",
     "miniprogram/utils/booking-subscription.js": "1eae6ab438d10a3f5c070d0110f220041c83640d22e91c32183f3a2483eddc88",
@@ -600,7 +600,7 @@
     "miniprogram/utils/nav.js": "ced7db92bd86cf15748757ffaa50d80591ddf21ffe2a692cb244263fba30bd53",
     "miniprogram/utils/numfont.js": "c38d485504522bb6f0526fc0e67ab19dcbd060c7bad795a97edda3f0ea3fafe1",
     "miniprogram/utils/order-actions.js": "c5471cacc28d1d93b963c6c2fa2dc5a5e346b57205852934ab27d38b539d595d",
-    "miniprogram/utils/package-build.js": "01de25c2fc5be2f91e8347f98ec19d2c95578d4346189878fed6a095e1332923",
+    "miniprogram/utils/package-build.js": "e5d54e838e6673e24cb3a81f21a15243c1bcda4c5bfc3fd20c3a1fe241c81c06",
     "miniprogram/utils/phone-auth.js": "7e6c1f553766e7711d7d6a52a5e9ed8cd9f8d8857463544cbc8f6657d6aab3a4",
     "miniprogram/utils/placeholder-words.js": "6500286e9441ab47cd45ff4260a0e7439cc55987307a3f4b70dfa4fdd39f0561",
     "miniprogram/utils/privacy-policy.js": "4cf5e7e891380dd45959fdc97f51c5fdb0bb0c6eab4ca80f8ecea0cfde467fea",
