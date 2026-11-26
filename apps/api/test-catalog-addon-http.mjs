@@ -12,7 +12,7 @@ import {createAndLoginCustomerViaFrontDoor} from './customer-login-fixture.mjs'
 if(process.env.CATALOG_HTTP_CHILD!=='1'){
  const dir=mkdtempSync(join(tmpdir(),'ll-ci-data.catalog-http-')),probe=createServer()
  await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r))
- const env={...process.env,PORT:String(port),HOST:'127.0.0.1',DATA_DIR:dir,OWNER_TOKEN:'isolated-catalog-owner',ALLOW_DEMO_ADMIN_LOGIN:'true',MEMBER_PRICING_ALL_STORES:'1',CATALOG_INLINE_TENANTS:'*',NOTIFY_TICK:'off',NODE_OPTIONS:'--experimental-sqlite'}
+ const env={...process.env,PORT:String(port),HOST:'127.0.0.1',DATA_DIR:dir,OWNER_TOKEN:'isolated-catalog-owner',ALLOW_DEMO_ADMIN_LOGIN:process.env.ALLOW_DEMO_ADMIN_LOGIN||'true',MEMBER_PRICING_ALL_STORES:'1',CATALOG_INLINE_TENANTS:'*',NOTIFY_TICK:'off',NODE_OPTIONS:'--experimental-sqlite'}
  const server=spawn(process.execPath,['--experimental-sqlite',fileURLToPath(new URL('./local-server.mjs',import.meta.url))],{env,stdio:['ignore','ignore','pipe']});let logs='';server.stderr.on('data',b=>{logs+=b});const ended=new Promise(r=>server.once('exit',r))
  try{
   let ready=false;for(let i=0;i<120;i++){if(server.exitCode!==null)throw Error('Isolated server startup failed: '+logs);try{ready=(await fetch(`http://127.0.0.1:${port}/health`)).ok}catch{}if(ready)break;await new Promise(r=>setTimeout(r,100))}if(!ready)throw Error('Isolated server startup timed out')
