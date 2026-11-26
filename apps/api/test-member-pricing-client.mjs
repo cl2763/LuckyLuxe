@@ -315,3 +315,23 @@ await assert.rejects(()=>editorContext.saveServiceEditor(serviceEvent),/请选�
 editorInput.categoryId='nail';editorContext.request=async()=>{throw Error('模拟网络失败')}
 await assert.rejects(()=>editorContext.saveServiceEditor(serviceEvent),/模拟网络失败/);assert.equal(catalogOwner.serviceEditor.mode,'create');assert.equal(editorInput.nameZh,'保留输入')
 console.log('ok 33 - web service create/edit accepts Chinese-only names, preserves explicit English, blocks blank names/categories and retains failed drafts')
+
+// Add-on summaries must use the same authoritative settlement price on both clients.
+// Legacy columns can remain zero after a new independent price is saved.
+const addonFixture={id:'isolated-addon',nameZh:'护理加项',itemKind:'addon',categoryId:'care',isActive:true,listPriceCents:0,settlementPriceSummary:[{key:'list',label:'原价',amountText:'CNY ¥30.00'}]}
+let renderedCatalog=''
+const listHost={before(){},set innerHTML(value){renderedCatalog=value}}
+const addonWebContext={els:{pricingItemList:listHost,pricingItemEditor:{}},pricingState:{catalogInteractionV2:true,items:[addonFixture],categories:[{id:'care',name:'护理'}]},pzh:()=>true,escapeHtml:String,money:n=>'legacy '+n,renderPricingTimecards(){},renderPricingItemEditor(){}}
+const catalogSource=readFileSync(new URL('../web/service-catalog.js',import.meta.url),'utf8')
+vm.runInNewContext(catalogSource.slice(catalogSource.indexOf('function renderPricingItems()')),addonWebContext)
+addonWebContext.renderPricingItems();assert.match(renderedCatalog,/CNY ¥30\.00/);assert.doesNotMatch(renderedCatalog,/legacy 0/);assert.match(renderedCatalog,/护理/)
+addonWebContext.pricingState.items=[{...addonFixture,settlementPriceSummary:undefined,listPriceCents:3000}];addonWebContext.renderPricingItems();assert.match(renderedCatalog,/legacy 3000/)
+console.log('ok 34 - web add-on list uses saved settlement price, retaining legacy price fallback and independent category')
+let merchantServicesPage
+const servicesApi={adminGet:async()=>({catalogInteractionV2:true,items:[addonFixture]})}
+vm.runInNewContext(readFileSync(new URL('../../miniprogram/pages/merchant/services/index.js',import.meta.url),'utf8'),{Page:p=>merchantServicesPage=p,require:p=>p.includes('storeclock')?{storeMoney:n=>'legacy '+n}:servicesApi,wx:{showToast:()=>assert.fail('catalog failed to load')},console})
+let miniCatalog;await merchantServicesPage.load.call({setData:d=>miniCatalog=d})
+assert.equal(miniCatalog.addons[0].label,'护理加项 CNY ¥30.00');assert.equal(miniCatalog.mains.length,0)
+servicesApi.adminGet=async()=>({items:[{...addonFixture,itemKind:'main',storefront:true}]})
+await merchantServicesPage.load.call({setData:d=>miniCatalog=d});assert.equal(miniCatalog.addons.length,0);assert.equal(miniCatalog.mains.length,1)
+console.log('ok 35 - mini add-on amount matches web; care category never changes explicit main/add-on role')

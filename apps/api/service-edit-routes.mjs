@@ -1,3 +1,4 @@
+import {catalogInteractionEnabled} from './addon-policy.mjs'
 import {beginWriteSavepoint} from './write-savepoint.mjs'
 import {assertRecordActive,activeRecords} from './record-lifecycle.mjs'
 /** Existing service/catalog writes extracted as one atomic metadata + independent-price operation. */
@@ -49,7 +50,7 @@ export function createServiceEditRoutes({db,apiError,recordLifecycle,currentTena
     const itemId = path.split('/')[4] || null
     if (req.method === 'GET' && !itemId) {
       const rows = db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY item_kind ASC, sort_order ASC, rowid ASC').all(tid)
-      return json(res, 200, { items: activeRecords(db,tid,'services',rows).map(serializePricingItem) })
+      return json(res, 200, { catalogInteractionV2:catalogInteractionEnabled(tid), items: activeRecords(db,tid,'services',rows).map(serializePricingItem) })
     }
     if (req.method === 'POST' && !itemId) {
       const body = input

@@ -1,3 +1,4 @@
+import {catalogInteractionEnabled} from './addon-policy.mjs'
 import {giftEntitlementsEnabled} from './gift-entitlements.mjs'
 import {memberPricingReference} from './member-pricing-reference.mjs'
 import {memberPricingCatalog} from './member-pricing-catalog.mjs'
@@ -17,7 +18,7 @@ export function createMemberPricingRoutes({db,policy,calculation,preview,compute
     if(path==='/admin/member-pricing/preview'&&method==='POST') {json(res,200,preview(tid,await readInput(req),adminSession));return true}
     if(path==='/admin/member-pricing/discount-input'&&method==='GET'){json(res,200,memberDiscountInput());return true}
     if(path==='/admin/member-pricing/config') {
-      if(method==='GET'){json(res,200,{config:{...policy.config(tid),giftEntitlementsEnabled:giftEntitlementsEnabled(tid)}});return true}
+      if(method==='GET'){json(res,200,{config:{...policy.config(tid),catalogInteractionV2:catalogInteractionEnabled(tid),giftEntitlementsEnabled:giftEntitlementsEnabled(tid)}});return true}
       if(method==='PUT'){owner(adminSession);const input=await readInput(req);if(input.membershipEnabled!==undefined&&input.membershipEnabled!==policy.config(tid).membershipEnabled&&!isPlatformKey(req))throw apiError(403,'PLATFORM_MANAGED','会员制度开关由平台按门店配置。');json(res,200,{config:policy.setConfig(tid,input)});return true}
     }
     const receiptMatch=path.match(/^\/admin\/member-pricing\/operations\/([^/]+)$/)
