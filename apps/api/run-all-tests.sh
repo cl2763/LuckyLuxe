@@ -533,7 +533,7 @@ if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
       echo "   ✅ [门关] ${suite}"
     else
       echo "   🔴 [门关] ${suite} —— 红,原文如下(照实报,不许为了绿去松门槛):"
-      tail -n 12 "$SUITE_OUT" | sed 's/^/      | /'
+      cat "$SUITE_OUT" | sed 's/^/      | /'
       DEMO_GATE_RED=$(( DEMO_GATE_RED + 1 ))
     fi
   done
