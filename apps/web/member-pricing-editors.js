@@ -25,8 +25,8 @@ function renderServiceEditor() {
           <option value="">${owner.lang === 'zh' ? '— 请选一个大类 —' : '— pick one —'}</option>
           ${pricingState.categories.map((c) => `<option value="${c.id}" ${c.id === service.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
         </select></label>
-        <label><span>${t('nameZh')}</span><input name="nameZh" value="${escapeHtml(service.nameZh)}"></label>
-        <label><span>${t('nameEn')}</span><input name="nameEn" value="${escapeHtml(service.nameEn)}"></label>
+        <label><span>${t('nameZh')} · ${owner.lang === 'zh' ? '必填' : 'Required'}</span><input required name="nameZh" value="${escapeHtml(service.nameZh)}"></label>
+        <label><span>${t('nameEn')} · ${owner.lang === 'zh' ? '选填' : 'Optional'}</span><input name="nameEn" value="${escapeHtml(service.nameEn)}"><span class="subtle">${owner.lang === 'zh' ? '留空时，英文页面也使用中文名。' : 'If blank, the Chinese name is also used on English pages.'}</span></label>
       </div>
       <label><span>${t('descriptionZh')}</span><textarea name="descriptionZh" rows="2">${escapeHtml(service.descriptionZh)}</textarea></label>
       <label><span>${t('descriptionEn')}</span><textarea name="descriptionEn" rows="2">${escapeHtml(service.descriptionEn)}</textarea></label>
@@ -53,12 +53,16 @@ async function saveServiceEditor(event) {
   event.preventDefault()
   const form = new FormData(event.target)
   if (event.target.dataset.imageReading) throw Error('图片正在读取，请稍候'); const imageUrl = form.get('imageUrl')
+  const nameZh = String(form.get('nameZh') || '').trim()
+  const nameEn = String(form.get('nameEn') || '').trim()
+  if (!nameZh) { event.target.elements.nameZh.focus(); throw Error(owner.lang === 'zh' ? '请填写中文项目名称' : 'Please enter the Chinese service name') }
+  if (!form.get('categoryId')) { event.target.elements.categoryId.focus(); throw Error(owner.lang === 'zh' ? '请选择服务大类' : 'Please select a service category') }
   const body = {
     type: form.get('type'),
     // 分类唯一真相律:只送 categoryId,自由文本 category 不再送(后端也不再接受)
     categoryId: form.get('categoryId') || null,
-    nameZh: form.get('nameZh'),
-    nameEn: form.get('nameEn'),
+    nameZh,
+    nameEn: nameEn || nameZh,
     descriptionZh: form.get('descriptionZh'),
     descriptionEn: form.get('descriptionEn'),
     imageUrl, imageView: JSON.parse(form.get('imageView') || '{}'),

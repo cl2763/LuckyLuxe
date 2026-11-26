@@ -230,9 +230,9 @@ const catalogContext={pricingState:{items:[{id:'service',categoryId:'nail'}]},ce
 vm.runInNewContext(adminSource.slice(adminSource.indexOf('function editorFromService('),adminSource.indexOf('// ===== 周排班网格')),catalogContext)
 assert.equal(catalogContext.editorFromService({id:'service'}).categoryId,'nail');assert.equal(catalogContext.editorFromService({id:'service',categoryId:'lash'}).categoryId,'lash')
 let catalogListHtml='',catalogSaved=20000,catalogReloads=0
-const catalogList={set innerHTML(v){catalogListHtml=v}},catalogOwner={lang:'zh',services:[{id:'service',nameZh:'项目',priceCents:20000,durationMin:60}],serviceEditor:{id:'service',mode:'edit'}}
+const catalogList={before(){},after(){},set innerHTML(v){catalogListHtml=v}},catalogOwner={lang:'zh',services:[{id:'service',nameZh:'项目',priceCents:20000,durationMin:60}],serviceEditor:{id:'service',mode:'edit'}}
 const catalogState={items:[{id:'service',categoryId:'nail',displayReference:{prices:{list:{priceCents:20000}}}}],categories:[{id:'nail',name:'美甲'}]}
-const editorContext={owner:catalogOwner,pricingState:catalogState,els:{serviceAdminList:catalogList},window:{MemberPricingSettings:{read:()=>({prices:{list:{priceCents:21000}}})}},document:{querySelector:()=>({})},FormData:class{get(k){return {price:'200',duration:'60',deposit:'0',sortOrder:'1',categoryId:'nail'}[k]??''}},dollarsToCents:v=>Number(v)*100,toast(){},t:x=>x,escapeHtml:String,money:x=>String(x/100),request:async(path,options)=>{catalogSaved=JSON.parse(options.body).priceSystemUpdate.prices.list.priceCents},loadAll:async()=>{},loadPricingPage:async()=>{catalogReloads++;catalogState.items[0].displayReference.prices.list.priceCents=catalogSaved;editorContext.renderServices()}}
+const editorContext={owner:catalogOwner,pricingState:catalogState,els:{serviceAdminList:catalogList},window:{MemberPricingSettings:{read:()=>({prices:{list:{priceCents:21000}}})}},document:{querySelector:()=>({})},FormData:class{get(k){return {nameZh:'项目',nameEn:'Service',price:'200',duration:'60',deposit:'0',sortOrder:'1',categoryId:'nail'}[k]??''}},dollarsToCents:v=>Number(v)*100,toast(){},t:x=>x,escapeHtml:String,money:x=>String(x/100),request:async(path,options)=>{catalogSaved=JSON.parse(options.body).priceSystemUpdate.prices.list.priceCents},loadAll:async()=>{},loadPricingPage:async()=>{catalogReloads++;catalogState.items[0].displayReference.prices.list.priceCents=catalogSaved;editorContext.renderServices()}}
 vm.runInNewContext(editorSource,editorContext);vm.runInNewContext(readFileSync(new URL('../web/service-catalog.js',import.meta.url),'utf8'),editorContext);editorContext.renderServiceEditor=()=>{}
 await editorContext.saveServiceEditor({preventDefault(){},target:{dataset:{}}});assert.equal(catalogReloads,1);assert.match(catalogListHtml,/展示原价 210/);assert.doesNotMatch(catalogListHtml,/展示原价 200/)
 console.log('ok 26 - service editor preserves category and saved display price is reloaded into the list independently of legacy settlement price')
@@ -296,3 +296,22 @@ vm.runInNewContext(customerFunction('setView')+'\n'+customerFunction('showApp'),
 await draftContext.showApp();assert.deepEqual(draftEvents,['login']);assert.equal(draftState.cart[0].id,'draft');assert.equal(draftState.pendingAuth.view,'checkout')
 draftState.user={id:'signed-in'};draftEvents.length=0;await draftContext.showApp();assert.deepEqual(draftEvents,['refresh-user','preview','render']);assert.equal(draftState.cart[0].id,'draft')
 console.log('ok 32 - direct booking-draft entry preserves cart through login and loads authoritative deposit preview after authentication')
+
+// Regression: a Chinese-only service previously reached the server with an empty
+// English name and was rejected despite a visibly completed name field.
+let editorInput={nameZh:'  中文护理  ',nameEn:'  ',categoryId:'nail',price:'160',duration:'60',deposit:'0',sortOrder:'1'},submittedService=null,focusedServiceField=''
+editorContext.FormData=class{get(k){return editorInput[k]??''}}
+editorContext.request=async(path,options)=>{submittedService=JSON.parse(options.body)}
+const serviceEvent={preventDefault(){},target:{dataset:{},elements:{nameZh:{focus(){focusedServiceField='nameZh'}},categoryId:{focus(){focusedServiceField='categoryId'}}}}}
+for(const mode of ['create','edit']){
+ catalogOwner.serviceEditor={id:'service',mode};await editorContext.saveServiceEditor(serviceEvent)
+ assert.equal(submittedService.nameZh,'中文护理');assert.equal(submittedService.nameEn,'中文护理')
+ catalogOwner.serviceEditor={id:'service',mode};editorInput.nameEn=' Care ';await editorContext.saveServiceEditor(serviceEvent);assert.equal(submittedService.nameEn,'Care');editorInput.nameEn=' '
+}
+catalogOwner.serviceEditor={id:'service',mode:'create'};editorInput.nameZh='   ';submittedService=null
+await assert.rejects(()=>editorContext.saveServiceEditor(serviceEvent),/请填写中文项目名称/);assert.equal(submittedService,null);assert.equal(focusedServiceField,'nameZh');assert.equal(catalogOwner.serviceEditor.mode,'create')
+editorInput.nameZh='保留输入';editorInput.categoryId=''
+await assert.rejects(()=>editorContext.saveServiceEditor(serviceEvent),/请选择服务大类/);assert.equal(submittedService,null);assert.equal(focusedServiceField,'categoryId')
+editorInput.categoryId='nail';editorContext.request=async()=>{throw Error('模拟网络失败')}
+await assert.rejects(()=>editorContext.saveServiceEditor(serviceEvent),/模拟网络失败/);assert.equal(catalogOwner.serviceEditor.mode,'create');assert.equal(editorInput.nameZh,'保留输入')
+console.log('ok 33 - web service create/edit accepts Chinese-only names, preserves explicit English, blocks blank names/categories and retains failed drafts')
